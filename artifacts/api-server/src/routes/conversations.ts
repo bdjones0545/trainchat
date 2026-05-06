@@ -1399,12 +1399,18 @@ Keep it helpful and intelligent, never promotional.`;
 
     // Write pending clarification state so the next reply can resume the correct intent.
     // Always write here — we are inside case "ASK_CLARIFICATION" so the plan is always a question.
-    // Use execPlan.intentFamily when available (it carries the resolved intent from the planner);
-    // fall back to re-classifying the user's message only when the planner didn't resolve a family.
+    // FIX 1 (non-SSE): When execPlan.intentFamily is "clarification_required" (the fallback value),
+    // re-run normalizeToIntentFamily to recover the actual intent. Using the fallback value would
+    // store "clarification_required" in the DB, breaking resolveClarification on the next turn.
     {
+      const _rawFamily = execPlan.intentFamily as string | null;
       const familyForPending =
-        (execPlan.intentFamily as string | null) ??
-        normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode).family;
+        (_rawFamily && _rawFamily !== "clarification_required")
+          ? _rawFamily
+          : (() => {
+              const recovered = normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode);
+              return recovered.family !== "clarification_required" ? recovered.family : "clarification_required";
+            })();
 
       writePendingClarification({
         conversationId: params.data.id,
@@ -2615,7 +2621,8 @@ Keep it helpful and intelligent, never promotional.`;
             aiContent = `Good question. The program is structured to address your stated goal — the exercise selection, volume, and frequency are calibrated for that. If something doesn't seem right for your situation, tell me what specifically and I'll clarify or adjust.`;
           }
         } else {
-          aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+          // FIX 6: No false-success copy — tell the truth that nothing was changed yet
+          aiContent = `I didn't change your program yet. Tell me exactly what you want adjusted and I'll apply it directly.`;
         }
       }
     }
@@ -3622,7 +3629,34 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             decisionMetadata: { whyChanged, intentType: "CLARIFICATION_FOLLOWUP", intentFamily: pending.intentFamily, pendingAspect: pending.pendingAspect, originalRequest: pending.originalRequest, userReply: parsed.data.content, verification: { status: verification.status, verifiedCount: verification.verifiedChanges.length, missingCount: verification.missingChanges.length, requiresReview: verification.requiresReview ?? false } },
           });
 
-          const coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
+          let coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
+
+          // FIX 7: Run response alignment verifier on the coaching text before writing to DB.
+          // buildVibeEditCoachingResponse produces deterministic text from edit results, but
+          // the verifier catches any false-success claims that might slip through, and repairs
+          // them to truthful copy before the message is persisted.
+          try {
+            const _clariVerifyResult = verifyResponseAlignment({
+              action: "APPLY_MUTATION",
+              intentType: "CLARIFICATION_FOLLOWUP",
+              narrationCtx: _narrationCtx,
+              aiContent: coachingContent,
+              structuredData: null,
+              systemSaved: false,
+              outcomeType: "mutation_applied",
+              mutationApplied: true,
+              extractedConstraints: null,
+              hardConstraints: null,
+            });
+            if (!_clariVerifyResult.passed && _clariVerifyResult.repairedContent) {
+              logger.warn(
+                { violations: _clariVerifyResult.violations?.length ?? 0 },
+                "[ResponseVerifier/ClarificationFollowup] Coaching text repaired before DB write"
+              );
+              coachingContent = _clariVerifyResult.repairedContent;
+            }
+          } catch { /* non-fatal — use original coachingContent */ }
+
           const _sseClariFixFocusMode = ((clarificationSystem?.metadata as any)?.focusMode ?? "strength") as FocusMode;
           const systemEditData = {
             _type: "system_edit" as const, changeSummary: clarificationEditResult.changeSummary,
@@ -3642,12 +3676,28 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           await resolvePendingClarification(pending.id, "mutation_applied").catch(() => {});
           if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
 
+          // FIX 7: Build action contract and enforce it for audit receipt.
+          // Without this, clarification followup success turns have auditReceipt: null
+          // in the complete event, making the AgentTurnReport incomplete.
+          let _clariAuditReceipt: unknown = null;
+          try {
+            const _clariContract = buildActionContract(parsed.data.content, true, "CLARIFICATION_FOLLOWUP");
+            _clariAuditReceipt = enforceActionContract(_clariContract, {
+              mutationApplied: true,
+              constraintPersisted: false,
+              clarificationAsked: false,
+              programRebuilt: false,
+              verificationStatus: verification.status as "verified" | "partial" | "unclear" | "not_applicable",
+            });
+          } catch { /* non-fatal */ }
+
           done(buildCompleteEvent({
             userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
             intentResultVal: intentResult, systemSavedVal: false,
             systemIdVal: clarificationSystem.id, changeLogIdVal: changeLogId,
             systemEditVal: { applied: true },
             outcomeTypeVal: "mutation_applied",
+            auditReceiptVal: _clariAuditReceipt,
           }));
           return;
         }
@@ -3699,10 +3749,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     // Write pending clarification state so the next reply can resume the correct intent.
     // Always write here — we are inside case "ASK_CLARIFICATION" so the plan is always a question.
+    // FIX 1 (SSE): Same recovery as non-SSE path — if execPlan.intentFamily is
+    // "clarification_required" (fallback), re-classify to find the real family.
     {
+      const _rawFamilySSE = execPlan.intentFamily as string | null;
       const familyForPending =
-        (execPlan.intentFamily as string | null) ??
-        normalizeToIntentFamily(parsed.data.content, streamFocusMode).family;
+        (_rawFamilySSE && _rawFamilySSE !== "clarification_required")
+          ? _rawFamilySSE
+          : (() => {
+              const recovered = normalizeToIntentFamily(parsed.data.content, streamFocusMode);
+              return recovered.family !== "clarification_required" ? recovered.family : "clarification_required";
+            })();
 
       writePendingClarification({
         conversationId: params.data.id, userId,
@@ -4591,7 +4648,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             aiContent = `Good question. The program is structured to address your stated goal — the exercise selection, volume, and frequency are calibrated for that. If something doesn't seem right for your situation, tell me what specifically and I'll clarify or adjust.`;
           }
         } else {
-          aiContent = `I processed your request and applied the change. Check the Program tab to see what was updated.`;
+          // FIX 6: No false-success copy — tell the truth that nothing was changed yet
+          aiContent = `I didn't change your program yet. Tell me exactly what you want adjusted and I'll apply it directly.`;
         }
       }
     }

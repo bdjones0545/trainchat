@@ -1,0 +1,302 @@
+Implement the universal main-chat command mutation fix from the audit.
+
+Goal:
+Main chat commands must reliably mutate programs when the user gives a clear command, and clarification follow-ups must preserve the original command intent.
+
+Do not redesign the agent.
+Do not add new UX features.
+Fix the routing/clarification/mutation contract.
+
+====================================
+FIX 1 — pending clarification must store real intent family
+====================================
+
+Files:
+- conversations.ts non-SSE handler
+- conversations.ts SSE handler
+
+Problem:
+When execPlan.intentFamily === "clarification_required", the pending clarification stores "clarification_required" instead of the real original command family.
+
+Fix:
+When writing pending clarification:
+- If execPlan.intentFamily === "clarification_required":
+  - re-run normalizeToIntentFamily(originalRequest, focusMode)
+  - store that family if it is a real mutation family
+  - otherwise store clarification_required as fallback only
+- If execPlan.intentFamily is already a real family, keep it.
+
+Example:
+Original: "Make this program harder"
+Stored pending intentFamily should be:
+increase_difficulty
+not:
+clarification_required
+
+Acceptance:
+Pending records never store clarification_required when the original message clearly contains a mutation family.
+
+====================================
+FIX 2 — resolveClarification must recover real family
+====================================
+
+File:
+- execution-planner.ts
+
+Problem:
+If pendingClarification.intentFamily is clarification_required, resolveClarification carries that into mutation params:
+transformation: "clarification_required"
+
+Fix:
+Inside resolveClarification:
+- If pendingClarification.intentFamily === "clarification_required":
+  - re-run normalizeToIntentFamily(pendingClarification.originalRequest, focusMode)
+  - use recovered family if mutation-capable
+- Never emit mutation params with transformation: "clarification_required"
+
+Acceptance:
+Resolved mutation transformation is always meaningful:
+- increase_difficulty
+- reduce_time
+- power_explosive_focus
+- injury_modification
+- equipment_constraint
+etc.
+
+====================================
+FIX 3 — clarification follow-up action contract
+====================================
+
+File:
+- action-contract.ts
+
+Problem:
+buildActionContract sees raw follow-up text like "Day 1" and marks it NO_OP.
+
+Fix:
+When intentResult.type === "CLARIFICATION_FOLLOWUP" or intentFamily === "CLARIFICATION_FOLLOWUP" AND active program exists:
+- contract should represent the pipeline commitment, not the raw words
+- actionType = MUTATE_ACTIVE_PROGRAM
+- shouldMutate = true
+- persistenceType = program_mutation
+- confidence = medium/high depending pending context
+
+If pending context is missing:
+- actionType = ASK_CLARIFICATION or GUIDANCE
+- shouldMutate = false
+
+Acceptance:
+"Day 1" after an edit clarification does not produce NO_OP.
+
+====================================
+FIX 4 — broaden command pattern recognition
+====================================
+
+File:
+- intent-family-engine.ts
+
+Add/broaden patterns:
+
+A. Difficulty:
+Catch:
+- Make this program harder
+- Make my training harder
+- Make these sessions harder
+- Make the workout more challenging
+- Make this program tougher
+
+Suggested pattern:
+\bmake\s+(this|my|the|these)\s+(?:\w+\s+){0,4}(harder|tougher|more\s+(challenging|difficult|demanding|intense))\b
+
+B. Easier / lower intensity:
+Catch:
+- Make my training easier
+- Make the sessions easier
+- Make this program less intense
+- Lower the impact
+- Make it lower impact
+
+C. Negation / constraints:
+Catch:
+- No jumping
+- No machines
+- No barbell
+- No squats
+- Remove all barbell exercises
+- Remove all jumping
+- Remove all machine exercises
+
+Map:
+- no jumping → injury_modification or lower_impact
+- no machines/no barbell/dumbbells only/home gym → equipment_constraint
+- remove all X exercises → remove_exercise_family / equipment_constraint
+
+D. Structure:
+Add or verify:
+- Progress this for 4 weeks → progress_program
+- Make it 4 days → change_split / structural_rebuild
+- Change to upper/lower → change_split / structural_rebuild
+
+Acceptance:
+Direct commands no longer fall into clarification_required unless genuinely ambiguous.
+
+====================================
+FIX 5 — scope resolver should understand deictic scope
+====================================
+
+File:
+- execution-planner.ts resolveClarification
+
+Add handling for:
+- this session
+- this day
+- this workout
+- current session
+- today
+- the current day
+
+Expected:
+Resolve to session scope using current active session/day if available.
+If active day unavailable:
+ask clarification, not NO_OP.
+
+Acceptance:
+"this session" after an edit clarification resolves to session scope.
+
+====================================
+FIX 6 — remove forbidden hardcoded success fallback
+====================================
+
+File:
+- conversations.ts around hardcoded fallback:
+"I processed your request and applied the change. Check the Program tab to see what was updated."
+
+Replace with truth-safe copy:
+If mutation was not applied:
+"I didn’t change your program yet. Tell me exactly what you want adjusted."
+
+If mutation was applied:
+use verified mutation coaching response only.
+
+Do not use:
+- processed your request
+- applied the change
+- check the Program tab
+unless systemEdit.applied === true.
+
+Acceptance:
+No hardcoded false-success language exists.
+
+====================================
+FIX 7 — verify clarification follow-up success before return
+====================================
+
+File:
+- conversations.ts non-SSE and SSE clarification follow-up success path
+
+Problem:
+Successful clarification follow-up early returns before response alignment verification.
+
+Fix:
+Before returning:
+- run response alignment verifier
+- run action contract enforcement
+- if coaching response claims mutation but mutation did not apply, repair response
+- attach valid audit receipt
+
+Acceptance:
+CLARIFICATION_FOLLOWUP success path is verified like every other mutation path.
+
+====================================
+FIX 8 — response truth hard rule
+====================================
+
+Files:
+- response-alignment-verifier.ts
+- action-contract.ts if needed
+
+Hard rule:
+If:
+- actionType === NO_OP
+OR
+- shouldMutate === false
+OR
+- systemEdit.applied !== true
+
+Then response may NOT contain:
+- applied
+- updated
+- processed your request
+- changed your program
+- check the Program tab
+- what was updated
+
+If these appear:
+- repair response to:
+"I didn’t change your program yet. Tell me exactly what you want adjusted."
+
+Acceptance:
+False mutation success is impossible.
+
+====================================
+TEST MATRIX
+====================================
+
+Add tests for:
+
+Clarification follow-up:
+1. "Make this program harder" → "Day 1"
+Expected:
+- reconstructed request includes original intent + Day 1
+- action = APPLY_MUTATION
+- shouldMutate = true
+- mutation applied
+- no NO_OP
+
+2. "Make this easier" → "full program"
+Expected:
+- program/block-level easier mutation
+
+3. "Make this more explosive" → "Week 1"
+Expected:
+- week-level explosive refinement
+
+4. "Remove all barbell exercises" → "full program"
+Expected:
+- equipment/exercise-family mutation
+
+5. "Make this knee-friendly" → "Day 2"
+Expected:
+- session-scope pain/limitation mutation
+
+6. "Make this fit 45 minutes" → "all sessions"
+Expected:
+- program/session density adjustment
+
+Direct commands:
+7. "Make Day 2 shorter"
+8. "Add a core finisher"
+9. "Replace squats with knee-friendly options"
+10. "Progress this for 4 weeks"
+11. "Make it dumbbells only"
+12. "No jumping"
+13. "No machines"
+
+For each assert:
+- expected action
+- expected scope
+- shouldMutate
+- mutationType / intentFamily
+- no false success text
+
+====================================
+FINAL REPORT
+====================================
+
+Return:
+- files changed
+- pattern additions
+- clarification lifecycle result
+- test matrix PASS/FAIL
+- any commands still ambiguous
+- remaining risks

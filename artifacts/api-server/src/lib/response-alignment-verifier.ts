@@ -126,11 +126,20 @@ function containsSuccessBuildClaim(text: string): boolean {
 /**
  * Returns true when `text` contains language strongly implying that a specific
  * mutation (exercise change) was successfully applied.
+ *
+ * FIX 8: Broadened to catch common false-success phrases including the exact
+ * strings used in hardcoded fallbacks and AI-generated coaching text.
  */
 function containsMutationSuccessClaim(text: string): boolean {
   const patterns = [
     /\b(done[\.\s]|applied[\.\s]|(?:i(?:'ve)?|all) (?:removed|added|swapped|replaced|updated|changed) .{3,60}(?:\.|,))/i,
     /\b(?:that|the) (?:change|swap|update|edit|adjustment) (?:has been |is )?(?:applied|done|saved|made|set)\b/i,
+    // FIX 8: Catch broader false-success phrasing
+    /\b(i (?:processed|handled|completed) your request)\b/i,
+    /\b(applied the change|check the program tab|what was updated)\b/i,
+    /\b(your program (?:has been|is now) (?:updated|changed|modified|adjusted))\b/i,
+    /\bi(?:'ve)? (?:updated|changed|modified|adjusted) your program\b/i,
+    /\b(the (?:change|edit|update) (?:is|has been) (?:live|in your program|reflected))\b/i,
   ];
   return patterns.some((p) => p.test(text.trim()));
 }
@@ -362,9 +371,9 @@ function buildRepairContent(
   }
 
   if (critical.type === "mutation_claim_without_outcome") {
+    // FIX 8: Truth-safe copy — no false "applied" or "check the tab" language
     return (
-      `I processed your request but couldn't confirm the change was applied to your program. ` +
-      `Check the Program tab to see the current state, then try again if anything's missing.`
+      `I didn't change your program yet. Tell me exactly what you want adjusted and I'll apply it directly.`
     );
   }
 

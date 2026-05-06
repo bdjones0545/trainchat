@@ -692,6 +692,30 @@ function resolveClarification({
 }): ExecutionPlan {
   const lower = message.toLowerCase().trim();
 
+  // ── FIX 2: Recover real intent family if stored as fallback ─────────────────
+  // When the fallback ASK_CLARIFICATION fires (e.g. "Make this program harder"
+  // doesn't match any specific family pattern), pendingClarification.intentFamily
+  // is "clarification_required". Re-run normalizeToIntentFamily on the original
+  // request to recover the actual family before building the mutation plan.
+  // This prevents mutation params like { transformation: "clarification_required" }
+  // which are meaningless to the edit engine.
+  const rawStoredFamily = pendingClarification.intentFamily;
+  const effectiveFamily: IntentFamily = (() => {
+    if (rawStoredFamily && rawStoredFamily !== "clarification_required") {
+      return rawStoredFamily as IntentFamily;
+    }
+    const originalRequest = pendingClarification.originalRequest ?? "";
+    if (originalRequest) {
+      const recovered = normalizeToIntentFamily(originalRequest);
+      if (recovered.family !== "clarification_required") {
+        return recovered.family;
+      }
+    }
+    // Safe program-mutating fallback — edit engine treats this as a general
+    // difficulty/intensity edit, which is the most common unrecognized command type
+    return "increase_difficulty" as IntentFamily;
+  })();
+
   // Resolve pending scope clarification
   if (pendingClarification.pendingAspect === "scope") {
     const dayMatch = lower.match(/day\s*(\d+)/i);
@@ -699,7 +723,7 @@ function resolveClarification({
     if (dayMatch) {
       return {
         action: "APPLY_MUTATION",
-        intentFamily: pendingClarification.intentFamily as IntentFamily,
+        intentFamily: effectiveFamily,
         scope: {
           type: "session",
           dayIndex: Number(dayMatch[1]) - 1,
@@ -707,10 +731,31 @@ function resolveClarification({
         mutation: {
           type: "transform",
           params: {
-            transformation: pendingClarification.intentFamily,
+            transformation: effectiveFamily,
           },
         },
         reasoning: "Resolved scope clarification → day target identified",
+      };
+    }
+
+    // FIX 5: Deictic scope — "this session", "this day", "this workout",
+    // "current session", "today", "the current day", "right now"
+    // Resolves to session scope without a dayIndex — caller picks active session.
+    if (
+      /\b(this session|this day|this workout|current session|current day|today|the current day|right now|this one)\b/i.test(lower)
+    ) {
+      return {
+        action: "APPLY_MUTATION",
+        intentFamily: effectiveFamily,
+        scope: { type: "session" },
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: effectiveFamily,
+            scopeLabel: "this session",
+          },
+        },
+        reasoning: "Resolved scope clarification → deictic scope (this session/today)",
       };
     }
 
@@ -724,12 +769,12 @@ function resolveClarification({
     ) {
       return {
         action: "APPLY_MUTATION",
-        intentFamily: pendingClarification.intentFamily as IntentFamily,
+        intentFamily: effectiveFamily,
         scope: { type: "program" },
         mutation: {
           type: "transform",
           params: {
-            transformation: pendingClarification.intentFamily,
+            transformation: effectiveFamily,
           },
         },
         reasoning: "Resolved scope clarification → program-wide target",
@@ -741,12 +786,12 @@ function resolveClarification({
     if (weekMatch) {
       return {
         action: "APPLY_MUTATION",
-        intentFamily: pendingClarification.intentFamily as IntentFamily,
+        intentFamily: effectiveFamily,
         scope: { type: "program" },
         mutation: {
           type: "transform",
           params: {
-            transformation: pendingClarification.intentFamily,
+            transformation: effectiveFamily,
             weekNumber: Number(weekMatch[1]),
             scopeLabel: `week ${weekMatch[1]}`,
           },
@@ -761,7 +806,7 @@ function resolveClarification({
     const exerciseName = extractExerciseName(message) ?? message.trim();
     return {
       action: "APPLY_MUTATION",
-      intentFamily: pendingClarification.intentFamily as IntentFamily,
+      intentFamily: effectiveFamily,
       scope: { type: null, exerciseName },
       mutation: {
         type: "swap",

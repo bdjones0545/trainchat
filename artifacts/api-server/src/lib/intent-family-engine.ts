@@ -201,6 +201,12 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(start|create|build|make|generate)\s+(a\s+)?(new|fresh)\s+(program|plan|routine|split|workout|training)\b/i,
       // "start fresh" / "start over" / "build from scratch"
       /\b(start fresh|start over|build from scratch|create from scratch|new training program|new workout program|new strength program|new athletic program)\b/i,
+      // FIX 4D: Structural split changes — changing frequency or training split always needs a full rebuild
+      /\b(make it|change it to|switch to|change to|go to)\s+(upper.?lower|push.?pull.?legs?|full body|full.?body split|ppl)\b/i,
+      /\b(make it|change to|switch to)\s+(3|4|5|6)\s*days?\s*(a week|per week|per\s+week|weekly)?\b/i,
+      // "Progress this for 4 weeks" / "Plan out 6 weeks of progression"
+      /\bprogress\s+(this|the|my)\s*(?:program|training|plan)?\s+(?:for|over|across)\s+\d+\s+weeks?\b/i,
+      /\bplan\s+(?:out\s+)?\d+\s+weeks?\s+of\s+(?:progression|progressive|training|programming)\b/i,
     ],
   },
 
@@ -215,6 +221,8 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(avoid|no|can.t do)\s*(squats?|deadlifts?|pressing|running|jumping|overhead)\s*(because|due to|from|with)?\s*(pain|injury|knee|shoulder|back)\b/i,
       /\b(make this|modify|adjust).{0,20}(knee|shoulder|back|hip|ankle|wrist)\s*(friendly|safe)\b/i,
       /\btweak(ed|ing)?\s*(around|for|with)\s*(my|the|this)?\s*(knee|shoulder|back|hip|ankle|wrist|injury|pain)\b/i,
+      // FIX 4C: Negation commands for impact/plyometric avoidance → injury_modification
+      /\b(no jumping|avoid jumping|no plyometrics?|no high.?impact|avoid high.?impact|without jumping|jump.?free|plyometric.?free)\b/i,
     ],
   },
 
@@ -262,6 +270,9 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\bno\s+belt.?squat\s+machine\b/i,
       /\bwithout\s+(a\s+)?belt.?squat\b/i,
       /\bcan.?t\s+(do|use|access)\s+(a\s+)?belt.?squat\b/i,
+      // FIX 4C: "No machines", machine-free, remove-all-equipment-class patterns
+      /\b(no machines?|machine.?free|machines?.?free|no cable machines?)\b/i,
+      /\b(remove all|take out all|no more)\s+(?:barbell|machine|cable|dumbbell)\s+(?:exercises?|work|movements?)\b/i,
     ],
   },
 
@@ -299,6 +310,8 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(only|just).{0,15}have.{0,15}(15|20|25|30|35|40|45)\s*(min|minutes?)\b/i,
       /\b(30|35|40|45|20|25|15)\s*(min|minutes?).{0,20}(session|max|cap|limit|workout)\b/i,
       /\b(make.{0,15}more efficient|streamline|cut.{0,10}down)\b/i,
+      // FIX 4D: "Make Day 2 shorter" / "Make these sessions shorter" — day-referenced time reduction
+      /\bmake\s+(?:day\s*\d+|this\s+day|session\s*\d+|these\s+sessions?|the\s+sessions?)\s+(?:\w+\s+)?shorter\b/i,
     ],
   },
 
@@ -742,6 +755,9 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(harder please|step it up|crank it up|increase (the )?difficulty|up the difficulty)\b/i,
       /\b(more challenging|tougher program|more intense(ly)?|raise the bar)\b/i,
       /\b(make this tougher|push (the|this) program harder|harder version of this)\b/i,
+      // FIX 4A: Catch "Make this program harder", "Make my training harder", "Make the sessions more challenging"
+      // Uses a lookahead pattern that allows 0–4 noun words between the subject and the difficulty modifier
+      /\bmake\s+(this|my|the|these)\s+(?:\w+\s+){0,4}(harder|tougher|more\s+(?:challenging|difficult|demanding|intense))\b/i,
     ],
   },
 
@@ -754,6 +770,9 @@ const FAMILY_PATTERNS: FamilyPattern[] = [
       /\b(less intense|dial (it|this) back|scale (it|this) (back|down)|tone (it|this) down)\b/i,
       /\b(easier program|beginner friendly|more accessible|less demanding)\b/i,
       /\b(this is too much|can.t keep up|overwhelming|struggling with the volume)\b/i,
+      // FIX 4B: Catch "Make my training easier", "Make the sessions less intense", "Lower the impact"
+      /\bmake\s+(this|my|the|these)\s+(?:\w+\s+){0,4}(easier|lighter|less\s+(?:demanding|intense|challenging|difficult))\b/i,
+      /\b(lower the impact|lower impact|make it lower impact|less overall impact|reduce the impact)\b/i,
     ],
   },
 

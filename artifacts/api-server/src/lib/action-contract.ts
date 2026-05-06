@@ -299,6 +299,39 @@ export function buildActionContract(
   const reasons: string[] = [];
   const lower = userMessage.toLowerCase().trim();
 
+  // ── FIX 3: CLARIFICATION_FOLLOWUP override ───────────────────────────────────
+  // When intentFamily is "CLARIFICATION_FOLLOWUP", this turn is completing a
+  // pending mutation from a prior turn. The contract must reflect the pipeline
+  // commitment (MUTATE_ACTIVE_PROGRAM) rather than the raw followup words
+  // (e.g. "Day 1" has no mutation signal and would produce NO_OP without this).
+  if (intentFamily === "CLARIFICATION_FOLLOWUP" && hasActiveProgram) {
+    logger.info(
+      { userMessage: userMessage.slice(0, 80), hasActiveProgram },
+      "[ActionContract] CLARIFICATION_FOLLOWUP override → MUTATE_ACTIVE_PROGRAM"
+    );
+    return {
+      userMessage,
+      detectedIntentFamily: "CLARIFICATION_FOLLOWUP",
+      actionType: "MUTATE_ACTIVE_PROGRAM",
+      targetScope: "unknown",
+      confidence: "medium",
+      shouldMutate: true,
+      shouldPersistConstraint: false,
+      shouldAskClarification: false,
+      shouldRebuild: false,
+      shouldRespondGuidanceOnly: false,
+      safetyMode: false,
+      requiredVerification: true,
+      expectedStateChange: "Pending mutation applied with resolved scope from user's clarification answer",
+      forbiddenResponseTypes: FORBIDDEN_BY_ACTION["MUTATE_ACTIVE_PROGRAM"] ?? [],
+      allowedResponseTypes: ALLOWED_RESPONSE_TYPES["MUTATE_ACTIVE_PROGRAM"] ?? ["change_confirmed"],
+      contractReasons: [
+        "[ClarificationFollowup] Contract reflects pipeline commitment, not raw message content",
+        "shouldMutate=true: the planner will reconstruct the original request and apply the edit",
+      ],
+    };
+  }
+
   // ── Signal Detection ────────────────────────────────────────────────────────
   const isTodayScoped = detectTemporalToday(lower);
   const isPreference = detectPreference(lower);
