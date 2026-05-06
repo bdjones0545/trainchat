@@ -87,6 +87,16 @@ import {
   type SessionContext,
 } from "../lib/architect-patch-generator";
 import { finalizeMutationOutcome, type MutationOutcomeResult } from "../lib/mutation-outcome-finalizer";
+import {
+  resolveContextualMessage,
+  tickConversationTurn,
+  clearConversationContext,
+  storeExerciseReference,
+  storeSessionReference,
+  storeMutationReference,
+  inferExerciseReferenceFromMutation,
+  inferSessionReferenceFromMutation,
+} from "../lib/conversation-context-resolver";
 
 const router: IRouter = Router();
 
@@ -3116,6 +3126,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       { conversationId: params.data.id },
       "[SSE/NewBuild] Fresh build session detected — DB system excluded from intent classification and uiContext stripped from AI prompt"
     );
+    // Clear conversation context on new build so stale exercise/session/mutation refs
+    // from a previous program do not leak into a fresh session.
+    clearConversationContext(String(params.data.id));
   }
 
   // ── SSE setup ─────────────────────────────────────────────────────────────
@@ -3172,6 +3185,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     .insert(messagesTable)
     .values({ conversationId: params.data.id, role: "user", content: parsed.data.content })
     .returning();
+
+  // Tick the conversation context turn counter so stale references expire correctly.
+  // Must be called after the message is saved but before resolution runs.
+  tickConversationTurn(String(params.data.id));
 
   // Auto-title on first message
   const existingMessages = await db
@@ -3431,9 +3448,54 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     );
   }
 
+  // ── Conversation Context Resolution — deictic follow-up rewriting ────────
+  // Attempt to rewrite vague references like "that exercise", "do the same for Day 2",
+  // "undo that" into fully-specified equivalents before the execution planner runs.
+  // The original parsed.data.content is preserved as-is for DB storage and user display.
+  const _ctxResolution = resolveContextualMessage(
+    String(params.data.id),
+    parsed.data.content,
+    activeSystem?.id ?? null
+  );
+
+  // The effective message drives routing + edit pipeline. Falls back to original if no resolution.
+  const effectiveMessage = _ctxResolution.resolved
+    ? _ctxResolution.resolvedMessage
+    : parsed.data.content;
+
+  if (_ctxResolution.resolved) {
+    logger.info(
+      {
+        conversationId: params.data.id,
+        original: parsed.data.content.slice(0, 100),
+        resolved: _ctxResolution.resolvedMessage.slice(0, 100),
+        resolution: _ctxResolution.resolution,
+      },
+      "[ConversationContext] resolved — rewriting message for execution planner"
+    );
+  } else if ("ambiguous" in _ctxResolution && _ctxResolution.ambiguous) {
+    // Ambiguous deictic reference — short-circuit with a clarification question
+    logger.info(
+      { conversationId: params.data.id, resolution: _ctxResolution.resolution },
+      "[ConversationContext] ambiguous — short-circuiting with clarification question"
+    );
+    const [_ctxClarMsg] = await db.insert(messagesTable).values({
+      conversationId: params.data.id,
+      role: "assistant",
+      content: _ctxResolution.clarificationQuestion,
+      structuredData: null,
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+      stripeStorage.incrementMessageCount(userId).catch(() => {});
+    }
+    done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: _ctxClarMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
+    return;
+  }
+
   // ── EXECUTION PLANNER (SSE path) — Central single-brain routing decision ──
   const execPlan: ExecutionPlan = await buildExecutionPlan({
-    message: parsed.data.content,
+    message: effectiveMessage,
     userId: String(userId),
     conversationId: String(params.data.id),
     program: latestStructuredProgram,
@@ -3762,6 +3824,28 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           await resolvePendingClarification(pending.id, "mutation_applied").catch(() => {});
           if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
 
+          // ── Store conversation context for follow-up resolution (clarification path) ──
+          try {
+            storeMutationReference(String(params.data.id), {
+              mutationType: clarificationEditPlan.intent,
+              intentFamily: pending.intentFamily ?? null,
+              scope: clarificationEditPlan.scope ?? "exercise",
+              affectedExerciseIds: clarificationEditResult.changedIds?.exercises ?? [],
+              affectedSessionIds: clarificationEditResult.changedIds?.sessions ?? [],
+              changeLogId: changeLogId ?? null,
+              userRequest: pending.originalRequest,
+              changeSummary: clarificationEditResult.changeSummary,
+            });
+            inferExerciseReferenceFromMutation({
+              conversationId: String(params.data.id),
+              userRequest: pending.originalRequest,
+              changeTargets: clarificationEditResult.changeTargets ?? [],
+              intentFamily: pending.intentFamily ?? null,
+            });
+          } catch (ctxClariErr) {
+            logger.warn({ ctxClariErr }, "[ConversationContext] Failed to store refs after clarification followup — non-fatal");
+          }
+
           // FIX 7: Build action contract and enforce it for audit receipt.
           // Without this, clarification followup success turns have auditReceipt: null
           // in the complete event, making the AgentTurnReport incomplete.
@@ -4089,7 +4173,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         const streamHierarchicalResult = await applyHierarchicalRefinement({
           systemId: resolvedSystem.id,
           userId,
-          userMessage: parsed.data.content,
+          userMessage: effectiveMessage,
           scopeResolution: streamScopeResolution,
         });
         logger.info(
@@ -4175,7 +4259,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
 
       const streamTarget = resolveTargetFromRequest(
-        parsed.data.content,
+        effectiveMessage,
         streamFullSystem,
         ((req.body as unknown as Record<string, unknown>)?.uiContext ?? null) as Record<string, unknown> | null
       );
@@ -4184,7 +4268,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       // "this day" / "this session" / "today" — user clearly means one session
       // but without a UIContext selectedSessionId we cannot tell which one.
       // Ask for clarification instead of silently mutating the whole program.
-      if (!streamTarget && hasDeiticSessionReference(parsed.data.content)) {
+      // Note: check effectiveMessage (already context-resolved) to avoid double-asking.
+      if (!streamTarget && hasDeiticSessionReference(effectiveMessage)) {
         const clarContent = `Which session did you have in mind? You can say something like "day 3", "the upper body session", or "week 2". Or open the session from your program view and tap the quick-edit button for precise targeting.`;
         const [clarMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: clarContent, structuredData: null,
@@ -4232,7 +4317,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       );
 
       const streamEditPlan = await interpretEditRequest(
-        parsed.data.content,
+        effectiveMessage,
         streamFullSystem,
         streamTarget,
         adaptationCtx || undefined,
@@ -4477,6 +4562,43 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
         stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+
+      // ── Store conversation context for follow-up resolution ────────────────
+      // Mutation reference: enables "do the same for Day 2", "undo that", etc.
+      try {
+        storeMutationReference(String(params.data.id), {
+          mutationType: execPlan.mutation?.type ?? streamEditPlan.intent,
+          intentFamily: execPlan.intentFamily ?? null,
+          scope: streamEditPlan.scope ?? "exercise",
+          affectedExerciseIds: streamEditResult.changedIds?.exercises ?? [],
+          affectedSessionIds: streamEditResult.changedIds?.sessions ?? [],
+          changeLogId: changeLogId ?? null,
+          userRequest: parsed.data.content,
+          changeSummary: streamEditResult.changeSummary,
+        });
+        // Exercise reference: enables "change that exercise", "swap it"
+        inferExerciseReferenceFromMutation({
+          conversationId: String(params.data.id),
+          userRequest: parsed.data.content,
+          changeTargets: streamEditResult.changeTargets ?? [],
+          intentFamily: execPlan.intentFamily ?? null,
+        });
+        // Session reference: enables "make that day shorter", "apply to this session"
+        if (streamTarget) {
+          const _tgt = streamTarget as any;
+          if (_tgt.sessionId) {
+            inferSessionReferenceFromMutation({
+              conversationId: String(params.data.id),
+              sessionId: _tgt.sessionId ?? null,
+              dayIndex: execPlan.scope.dayIndex ?? null,
+              sessionLabel: _tgt.sessionLabel ?? (_tgt.dayIndex != null ? `Day ${_tgt.dayIndex + 1}` : "current session"),
+              weekNumber: _tgt.weekNumber ?? null,
+            });
+          }
+        }
+      } catch (ctxErr) {
+        logger.warn({ ctxErr }, "[ConversationContext] Failed to store references after direct edit — non-fatal");
       }
 
       const _sseSuccessOutcome = finalizeMutationOutcome({
