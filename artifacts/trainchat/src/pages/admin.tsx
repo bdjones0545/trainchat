@@ -587,7 +587,557 @@ const WARNING_FLAG_LABELS: Record<string, string> = {
   unknown_source: "Unknown Source",
 };
 
+// ─── Discovery Pipeline Types ─────────────────────────────────────────────────
+
+interface DiscoveryRun {
+  id: number;
+  startedAt: string;
+  completedAt: string | null;
+  status: "running" | "completed" | "failed";
+  source: string | null;
+  querySet: string[];
+  candidatesFound: number;
+  candidatesStored: number;
+  duplicatesSkipped: number;
+  librarianReviewed: number;
+  approvedSuggested: number;
+  needsReview: number;
+  rejected: number;
+  errors: string[];
+}
+
+interface PaperCandidate {
+  id: number;
+  title: string;
+  authors: string | null;
+  year: number | null;
+  journal: string | null;
+  doi: string | null;
+  pubmedId: string | null;
+  semanticScholarId: string | null;
+  abstract: string | null;
+  sourceUrl: string | null;
+  sourceApi: string | null;
+  category: string;
+  discoveryQuery: string | null;
+  citationCount: number | null;
+  publicationTypes: string[];
+  discoveredAt: string;
+  status: "discovered" | "librarian_reviewed" | "pending_admin" | "rejected" | "approved";
+  librarianRecommendation: "approve" | "reject" | "needs_review" | null;
+  trustLevel: string | null;
+  confidence: string | null;
+  warningFlags: string[] | null;
+  librarianNotes: string | null;
+}
+
+const CANDIDATE_STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  discovered: { bg: "hsl(222 47% 14%)", text: "hsl(0 0% 55%)" },
+  librarian_reviewed: { bg: "hsl(270 50% 14%)", text: "hsl(270 60% 65%)" },
+  pending_admin: { bg: "hsl(40 80% 12%)", text: "hsl(40 90% 60%)" },
+  rejected: { bg: "hsl(0 50% 12%)", text: "hsl(0 60% 60%)" },
+  approved: { bg: "hsl(142 50% 12%)", text: "hsl(142 60% 55%)" },
+};
+
+const SOURCE_API_LABELS: Record<string, string> = {
+  pubmed: "PubMed",
+  semantic_scholar: "Semantic Scholar",
+};
+
+// ─── Discovery Panel Component ────────────────────────────────────────────────
+
+function DiscoveryPanel() {
+  const [runs, setRuns] = useState<DiscoveryRun[]>([]);
+  const [candidates, setCandidates] = useState<PaperCandidate[]>([]);
+  const [candidateStats, setCandidateStats] = useState<{ status: string; count: number }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [actionLoading, setActionLoading] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [runResult, setRunResult] = useState<{ stats: DiscoveryRun; durationMs: number } | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+
+  // Filters
+  const [filterStatus, setFilterStatus] = useState<string>("pending_admin");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterRecommendation, setFilterRecommendation] = useState<string>("all");
+
+  const fieldStyle = {
+    background: "hsl(222 47% 9%)",
+    border: "1px solid hsl(222 47% 22%)",
+    color: "#fff",
+    borderRadius: "8px",
+    padding: "6px 10px",
+    fontSize: "13px",
+    outline: "none",
+  };
+
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterStatus !== "all") params.set("status", filterStatus);
+      if (filterCategory !== "all") params.set("category", filterCategory);
+      if (filterRecommendation !== "all") params.set("recommendation", filterRecommendation);
+      params.set("limit", "100");
+
+      const [runsData, candidatesData] = await Promise.all([
+        apiFetch<{ runs: DiscoveryRun[] }>("/api/admin/research/discovery/runs"),
+        apiFetch<{ candidates: PaperCandidate[]; byStatus: { status: string; count: number }[] }>(
+          `/api/admin/research/candidates?${params}`
+        ),
+      ]);
+      setRuns(runsData.runs);
+      setCandidates(candidatesData.candidates);
+      setCandidateStats(candidatesData.byStatus);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadAll(); }, [filterStatus, filterCategory, filterRecommendation]);
+
+  async function handleRunDiscovery() {
+    setRunning(true);
+    setError(null);
+    setRunResult(null);
+    try {
+      const result = await apiFetch<{
+        ok: boolean;
+        runId: number;
+        status: string;
+        durationMs: number;
+        stats: DiscoveryRun;
+      }>("/api/admin/research/discovery/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      setRunResult({ stats: result.stats, durationMs: result.durationMs });
+      await loadAll();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  async function handleApprove(id: number) {
+    setActionLoading(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/admin/research/candidates/${id}/approve`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleReject(id: number) {
+    setActionLoading(id);
+    setError(null);
+    try {
+      await apiFetch(`/api/admin/research/candidates/${id}/reject`, { method: "POST" });
+      await loadAll();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  const lastRun = runs[0] ?? null;
+  const pendingAdminCount = candidateStats.find((s) => s.status === "pending_admin")?.count ?? 0;
+  const totalCandidates = candidateStats.reduce((sum, s) => sum + Number(s.count), 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-base font-semibold text-white">Research Discovery Pipeline</h2>
+          <p className="text-zinc-500 text-xs mt-0.5">
+            Automated PubMed + Semantic Scholar search → Librarian evaluation → Admin approval
+          </p>
+          <p className="text-zinc-600 text-xs mt-1">
+            No paper becomes retrievable by the Coach without Librarian evaluation + admin approval.
+          </p>
+        </div>
+        <button
+          onClick={handleRunDiscovery}
+          disabled={running}
+          className="px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-40 shrink-0"
+          style={{ background: "hsl(199 89% 48%)", color: "#fff" }}
+        >
+          {running ? "Running Discovery…" : "Run Discovery Now"}
+        </button>
+      </div>
+
+      {/* Running indicator */}
+      {running && (
+        <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: "hsl(199 89% 8%)", border: "1px solid hsl(199 89% 20%)" }}>
+          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: "hsl(199 89% 48%)" }} />
+          <div>
+            <p className="text-sm font-medium" style={{ color: "hsl(199 89% 60%)" }}>Discovery running…</p>
+            <p className="text-xs text-zinc-500 mt-0.5">Searching PubMed and Semantic Scholar across 21 query categories. Librarian review follows. This may take 3–8 minutes.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Run result */}
+      {runResult && (
+        <div className="rounded-xl p-4 space-y-3" style={{ background: "hsl(142 50% 8%)", border: "1px solid hsl(142 50% 18%)" }}>
+          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "hsl(142 60% 55%)" }}>
+            Discovery Complete — {(runResult.durationMs / 1000).toFixed(0)}s
+          </p>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            {[
+              { label: "Found", value: (runResult.stats as any).candidatesFound ?? 0 },
+              { label: "Stored", value: (runResult.stats as any).candidatesStored ?? 0 },
+              { label: "Duplicates", value: (runResult.stats as any).duplicatesSkipped ?? 0 },
+              { label: "Librarian", value: (runResult.stats as any).librarianReviewed ?? 0 },
+              { label: "Suggested", value: (runResult.stats as any).approvedSuggested ?? 0 },
+              { label: "Rejected", value: (runResult.stats as any).rejected ?? 0 },
+            ].map(({ label, value }) => (
+              <div key={label} className="text-center">
+                <p className="text-lg font-bold text-white">{value}</p>
+                <p className="text-zinc-500 text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Last run summary */}
+      {lastRun && !runResult && (
+        <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 10%)", border: "1px solid hsl(222 47% 18%)" }}>
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs font-bold uppercase tracking-widest text-zinc-400">Last Run</span>
+            <span
+              className="text-xs px-1.5 py-0.5 rounded font-medium"
+              style={{
+                background: lastRun.status === "completed" ? "hsl(142 50% 12%)" : lastRun.status === "failed" ? "hsl(0 50% 12%)" : "hsl(222 47% 14%)",
+                color: lastRun.status === "completed" ? "hsl(142 60% 55%)" : lastRun.status === "failed" ? "hsl(0 60% 60%)" : "hsl(0 0% 60%)",
+              }}
+            >
+              {lastRun.status}
+            </span>
+            <span className="text-zinc-600 text-xs ml-auto">
+              {new Date(lastRun.startedAt).toLocaleString()}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            {[
+              { label: "Found", value: lastRun.candidatesFound },
+              { label: "Stored", value: lastRun.candidatesStored },
+              { label: "Dupes Skipped", value: lastRun.duplicatesSkipped },
+              { label: "Librarian", value: lastRun.librarianReviewed },
+              { label: "Suggested Approve", value: lastRun.approvedSuggested },
+              { label: "Rejected", value: lastRun.rejected },
+            ].map(({ label, value }) => (
+              <div key={label}>
+                <p className="text-sm font-bold text-white">{value}</p>
+                <p className="text-zinc-500 text-xs">{label}</p>
+              </div>
+            ))}
+          </div>
+          {lastRun.errors.length > 0 && (
+            <div className="mt-2 pt-2" style={{ borderTop: "1px solid hsl(222 47% 16%)" }}>
+              <p className="text-xs text-zinc-600">Errors: {lastRun.errors.slice(0, 3).join("; ")}{lastRun.errors.length > 3 ? ` +${lastRun.errors.length - 3} more` : ""}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stats row */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+          <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Total Candidates</p>
+          <p className="text-2xl font-bold text-white">{totalCandidates}</p>
+        </div>
+        <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(40 80% 20%)" }}>
+          <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Pending Admin</p>
+          <p className="text-2xl font-bold" style={{ color: "hsl(40 90% 60%)" }}>{pendingAdminCount}</p>
+        </div>
+        <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(142 50% 16%)" }}>
+          <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Approved</p>
+          <p className="text-2xl font-bold" style={{ color: "hsl(142 60% 55%)" }}>
+            {candidateStats.find((s) => s.status === "approved")?.count ?? 0}
+          </p>
+        </div>
+        <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(0 50% 16%)" }}>
+          <p className="text-zinc-500 text-xs uppercase tracking-wide mb-1">Rejected</p>
+          <p className="text-2xl font-bold" style={{ color: "hsl(0 60% 60%)" }}>
+            {candidateStats.find((s) => s.status === "rejected")?.count ?? 0}
+          </p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-3 flex-wrap">
+        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={{ ...fieldStyle, paddingRight: "28px" }}>
+          <option value="all">All statuses</option>
+          <option value="discovered">Discovered</option>
+          <option value="librarian_reviewed">Librarian Reviewed</option>
+          <option value="pending_admin">Pending Admin</option>
+          <option value="rejected">Rejected</option>
+          <option value="approved">Approved</option>
+        </select>
+        <select value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)} style={{ ...fieldStyle, paddingRight: "28px" }}>
+          <option value="all">All categories</option>
+          {Object.entries(CATEGORY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <select value={filterRecommendation} onChange={(e) => setFilterRecommendation(e.target.value)} style={{ ...fieldStyle, paddingRight: "28px" }}>
+          <option value="all">All recommendations</option>
+          <option value="approve">Librarian: Approve</option>
+          <option value="needs_review">Librarian: Needs Review</option>
+          <option value="reject">Librarian: Reject</option>
+        </select>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div className="p-3 rounded-lg text-red-400 text-sm" style={{ background: "hsl(0 50% 10%)", border: "1px solid hsl(0 50% 20%)" }}>
+          {error}
+        </div>
+      )}
+
+      {/* Candidate list */}
+      {loading ? (
+        <div className="text-zinc-500 text-sm py-8 text-center">Loading candidates…</div>
+      ) : candidates.length === 0 ? (
+        <div className="py-10 text-center">
+          <p className="text-zinc-400 text-sm mb-2">No candidates found.</p>
+          <p className="text-zinc-600 text-xs">Click "Run Discovery Now" to search PubMed and Semantic Scholar for new papers.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {candidates.map((c) => {
+            const statusStyle = CANDIDATE_STATUS_COLORS[c.status] ?? CANDIDATE_STATUS_COLORS.discovered;
+            const isExpanded = expandedId === c.id;
+            const isWorking = actionLoading === c.id;
+            const canAct = c.status === "pending_admin" || c.status === "discovered" || c.status === "librarian_reviewed";
+
+            return (
+              <div
+                key={c.id}
+                className="rounded-xl"
+                style={{
+                  background: "hsl(222 47% 10%)",
+                  border: `1px solid ${c.status === "rejected" ? "hsl(222 47% 13%)" : c.status === "approved" ? "hsl(142 50% 16%)" : "hsl(222 47% 18%)"}`,
+                  opacity: c.status === "rejected" ? 0.5 : 1,
+                }}
+              >
+                <div className="p-4 flex items-start gap-3">
+                  <div className="flex-1 min-w-0">
+                    {/* Badges */}
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <span
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                        style={{ background: statusStyle.bg, color: statusStyle.text, border: `1px solid ${statusStyle.text}33` }}
+                      >
+                        {c.status.replace(/_/g, " ")}
+                      </span>
+                      {c.librarianRecommendation && (() => {
+                        const rc = RECOMMENDATION_COLORS[c.librarianRecommendation];
+                        return rc ? (
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: rc.bg, color: rc.text, border: `1px solid ${rc.text}33` }}>
+                            AI: {rc.label}
+                          </span>
+                        ) : null;
+                      })()}
+                      {c.trustLevel && c.trustLevel !== "reject" && (
+                        <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: TRUST_COLORS[c.trustLevel] ?? "#fff", background: (TRUST_COLORS[c.trustLevel] ?? "#fff") + "18" }}>
+                          {c.trustLevel} trust
+                        </span>
+                      )}
+                      {c.confidence && (
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: CONFIDENCE_COLORS[c.confidence] ?? "#aaa", background: (CONFIDENCE_COLORS[c.confidence] ?? "#888") + "22" }}>
+                          {c.confidence}
+                        </span>
+                      )}
+                      {c.sourceApi && (
+                        <span className="text-xs px-1.5 py-0.5 rounded text-zinc-500" style={{ background: "hsl(222 47% 14%)" }}>
+                          {SOURCE_API_LABELS[c.sourceApi] ?? c.sourceApi}
+                        </span>
+                      )}
+                      {c.citationCount != null && c.citationCount > 0 && (
+                        <span className="text-xs text-zinc-600">↗ {c.citationCount} citations</span>
+                      )}
+                    </div>
+
+                    {/* Warning flags */}
+                    {c.warningFlags && c.warningFlags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-1">
+                        {c.warningFlags.map((f) => (
+                          <span key={f} className="text-xs px-1 py-0.5 rounded" style={{ background: "hsl(40 80% 10%)", color: "hsl(40 90% 55%)" }}>
+                            {WARNING_FLAG_LABELS[f] ?? f}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-zinc-100 text-sm font-medium leading-snug">{c.title}</p>
+                    <p className="text-zinc-500 text-xs mt-0.5">
+                      {c.authors}{c.year ? ` (${c.year})` : ""}
+                      {c.journal ? ` — ${c.journal}` : ""}
+                      {c.doi ? ` · DOI: ${c.doi}` : ""}
+                    </p>
+
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "hsl(199 89% 12%)", color: "hsl(199 89% 60%)" }}>
+                        {CATEGORY_LABELS[c.category] ?? c.category}
+                      </span>
+                      {(c.publicationTypes ?? []).slice(0, 2).map((pt) => (
+                        <span key={pt} className="text-xs px-1.5 py-0.5 rounded text-zinc-500" style={{ background: "hsl(222 47% 16%)" }}>
+                          {pt}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="shrink-0 flex items-center gap-1.5 flex-wrap justify-end">
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : c.id)}
+                      className="text-xs px-2 py-1 rounded transition-all"
+                      style={{ background: "hsl(222 47% 16%)", color: "hsl(0 0% 60%)" }}
+                    >
+                      {isExpanded ? "Hide" : "View"}
+                    </button>
+                    {canAct && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(c.id)}
+                          disabled={isWorking}
+                          className="text-xs px-2 py-1 rounded font-medium transition-all disabled:opacity-40"
+                          style={{ background: "hsl(142 50% 12%)", color: "hsl(142 60% 55%)" }}
+                        >
+                          {isWorking ? "…" : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => handleReject(c.id)}
+                          disabled={isWorking}
+                          className="text-xs px-2 py-1 rounded font-medium transition-all disabled:opacity-40"
+                          style={{ background: "hsl(0 50% 12%)", color: "hsl(0 60% 60%)" }}
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded details */}
+                {isExpanded && (
+                  <div className="px-4 pb-4 space-y-3" style={{ borderTop: "1px solid hsl(222 47% 15%)" }}>
+                    <div className="pt-3 space-y-3">
+                      {c.abstract && (
+                        <div>
+                          <p className="text-xs font-medium text-zinc-400 uppercase tracking-wide mb-1">Abstract</p>
+                          <p className="text-zinc-300 text-sm leading-relaxed">{c.abstract}</p>
+                        </div>
+                      )}
+                      {c.librarianNotes && (
+                        <div className="rounded-lg p-3 space-y-1" style={{ background: "hsl(270 30% 9%)", border: "1px solid hsl(270 50% 18%)" }}>
+                          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: "hsl(270 60% 65%)" }}>Librarian Notes</p>
+                          <p className="text-zinc-300 text-xs leading-relaxed italic">{c.librarianNotes}</p>
+                        </div>
+                      )}
+                      {c.sourceUrl && (
+                        <p className="text-xs text-zinc-600">
+                          Source: <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-400 transition-colors">{c.sourceUrl}</a>
+                        </p>
+                      )}
+                      {c.discoveryQuery && (
+                        <p className="text-xs text-zinc-700">Query: {c.discoveryQuery}</p>
+                      )}
+                      {canAct && (
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => handleApprove(c.id)}
+                            disabled={isWorking}
+                            className="text-xs px-3 py-1.5 rounded font-medium transition-all disabled:opacity-40"
+                            style={{ background: "hsl(142 50% 12%)", color: "hsl(142 60% 55%)", border: "1px solid hsl(142 50% 20%)" }}
+                          >
+                            {isWorking ? "…" : "Approve for Coach Agent"}
+                          </button>
+                          <button
+                            onClick={() => handleReject(c.id)}
+                            disabled={isWorking}
+                            className="text-xs px-3 py-1.5 rounded font-medium transition-all disabled:opacity-40"
+                            style={{ background: "hsl(0 50% 12%)", color: "hsl(0 60% 60%)", border: "1px solid hsl(0 50% 20%)" }}
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Safety reminder */}
+      <div className="rounded-xl p-4" style={{ background: "hsl(222 47% 8%)", border: "1px solid hsl(222 47% 14%)" }}>
+        <p className="text-xs font-bold uppercase tracking-widest text-zinc-600 mb-1">Safety Rule</p>
+        <p className="text-zinc-600 text-xs leading-relaxed">
+          No auto-discovered paper enters Coach retrieval without Librarian evaluation + admin approval.
+          The pipeline creates candidates only. "Approve" creates the research document and activates it.
+          "Reject" permanently discards the candidate without creating any document.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ResearchDashboard() {
+  const [subTab, setSubTab] = useState<"library" | "discovery">("library");
+
+  const subTabStyle = (tab: "library" | "discovery") => ({
+    padding: "5px 14px",
+    borderRadius: "6px",
+    fontSize: "12px",
+    fontWeight: 500,
+    cursor: "pointer" as const,
+    background: subTab === tab ? "hsl(199 89% 48%)" : "transparent",
+    color: subTab === tab ? "#fff" : "hsl(0 0% 55%)",
+    border: "none",
+    transition: "all 0.15s",
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Sub-tab bar */}
+      <div className="flex items-center gap-3">
+        <div className="flex gap-1 rounded-lg p-1" style={{ background: "hsl(222 47% 11%)", border: "1px solid hsl(222 47% 18%)" }}>
+          <button style={subTabStyle("library")} onClick={() => setSubTab("library")}>Research Library</button>
+          <button style={subTabStyle("discovery")} onClick={() => setSubTab("discovery")}>Discovery Pipeline</button>
+        </div>
+        {subTab === "discovery" && (
+          <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ background: "hsl(199 89% 12%)", color: "hsl(199 89% 60%)" }}>
+            PubMed · Semantic Scholar · Crossref
+          </span>
+        )}
+      </div>
+
+      {subTab === "discovery" ? (
+        <DiscoveryPanel />
+      ) : (
+        <ResearchLibraryPanel />
+      )}
+    </div>
+  );
+}
+
+function ResearchLibraryPanel() {
   const [docs, setDocs] = useState<ResearchDoc[]>([]);
   const [stats, setStats] = useState<ResearchStats | null>(null);
   const [loading, setLoading] = useState(true);

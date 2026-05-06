@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable, coachingKnowledgeTable, researchDocumentsTable, researchChunksTable } from "@workspace/db";
+import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable, coachingKnowledgeTable, researchDocumentsTable, researchChunksTable, researchDiscoveryRunsTable, researchPaperCandidatesTable } from "@workspace/db";
 import { eq, count, sql, gte, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { getFunnelMetrics, getRecentEvents } from "../lib/analyticsService";
@@ -32,6 +32,11 @@ import { seedResearchLibrary, isResearchLibraryEmpty } from "../research/researc
 import { seedSpeedMobilityResearch, hasSpeedMobilityResearch } from "../research/research-speed-mobility-seeder";
 import { seedStrengthResearch, hasStrengthResearch } from "../research/research-strength-seeder";
 import { seedWeeklyUpdateWeek1, hasWeeklyUpdateWeek1Research } from "../research/research-weekly-update-seeder";
+import {
+  runDiscovery,
+  approveCandidateAsDocument,
+  rejectCandidate,
+} from "../research/research-discovery-service";
 
 const router: IRouter = Router();
 
@@ -988,6 +993,154 @@ router.post("/admin/research/librarian/review-unreviewed", requireAuth, requireA
         "Review their warningFlags via GET /api/admin/research?status=pending, " +
         "then approve via POST /api/admin/research/:id/approve if acceptable.",
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Research Discovery Pipeline ──────────────────────────────────────────────
+
+/**
+ * POST /api/admin/research/discovery/run
+ * Manually trigger a full discovery run (searches PubMed + Semantic Scholar,
+ * stores candidates, runs Librarian evaluation). Long-running — may take
+ * several minutes. Response is sent only when complete.
+ */
+router.post("/admin/research/discovery/run", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const skipLibrarian = req.body?.skipLibrarian === true;
+  try {
+    const result = await runDiscovery({ skipLibrarian });
+    res.json({
+      ok: true,
+      runId: result.runId,
+      status: result.status,
+      durationMs: result.duration,
+      stats: result.stats,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/research/discovery/runs
+ * List recent discovery run history.
+ */
+router.get("/admin/research/discovery/runs", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const limit = Math.min(parseInt((req.query.limit as string) ?? "20", 10) || 20, 100);
+  try {
+    const runs = await db
+      .select()
+      .from(researchDiscoveryRunsTable)
+      .orderBy(desc(researchDiscoveryRunsTable.startedAt))
+      .limit(limit);
+    res.json({ runs });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/admin/research/candidates
+ * List paper candidates with optional filters.
+ * Query params: status, category, recommendation, limit
+ */
+router.get("/admin/research/candidates", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const limit = Math.min(parseInt((req.query.limit as string) ?? "50", 10) || 50, 200);
+  const statusFilter = req.query.status as string | undefined;
+  const categoryFilter = req.query.category as string | undefined;
+  const recommendationFilter = req.query.recommendation as string | undefined;
+
+  try {
+    const conditions = [];
+    const statusVal = Array.isArray(statusFilter) ? statusFilter[0] : statusFilter;
+    const categoryVal = Array.isArray(categoryFilter) ? categoryFilter[0] : categoryFilter;
+    const recommendationVal = Array.isArray(recommendationFilter) ? recommendationFilter[0] : recommendationFilter;
+
+    if (statusVal && statusVal !== "all") {
+      conditions.push(eq(researchPaperCandidatesTable.status, statusVal as any));
+    }
+    if (categoryVal && categoryVal !== "all") {
+      conditions.push(eq(researchPaperCandidatesTable.category, categoryVal as any));
+    }
+    if (recommendationVal && recommendationVal !== "all") {
+      conditions.push(eq(researchPaperCandidatesTable.librarianRecommendation, recommendationVal as any));
+    }
+
+    const candidates = await db
+      .select()
+      .from(researchPaperCandidatesTable)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(researchPaperCandidatesTable.discoveredAt))
+      .limit(limit);
+
+    const total = await db
+      .select({ count: count() })
+      .from(researchPaperCandidatesTable);
+
+    const byStatus = await db
+      .select({
+        status: researchPaperCandidatesTable.status,
+        count: count(),
+      })
+      .from(researchPaperCandidatesTable)
+      .groupBy(researchPaperCandidatesTable.status);
+
+    res.json({
+      candidates,
+      total: total[0]?.count ?? 0,
+      byStatus,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/candidates/:id/approve
+ * Approve a candidate: creates a research_documents row (is_active = true)
+ * and optionally runs the Librarian to generate retrieval chunks.
+ */
+router.post("/admin/research/candidates/:id/approve", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const candidateId = parseInt(String(req.params.id), 10);
+  if (isNaN(candidateId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  try {
+    const approveResult = await approveCandidateAsDocument(candidateId);
+    if (!approveResult.ok) {
+      res.status(400).json({ error: approveResult.error });
+      return;
+    }
+
+    // Optionally run Librarian to generate retrieval chunks on the new doc
+    if (approveResult.documentId) {
+      analyzeResearchDocument(approveResult.documentId).catch((err: Error) => {
+        req.log.warn({ err: err.message, documentId: approveResult.documentId }, "Post-approval Librarian chunk generation failed (non-fatal)");
+      });
+    }
+
+    res.json({
+      ok: true,
+      documentId: approveResult.documentId,
+      note: "Research document created and active. Librarian chunk generation running in background.",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/admin/research/candidates/:id/reject
+ * Reject a candidate — no research document is created.
+ */
+router.post("/admin/research/candidates/:id/reject", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const candidateId = parseInt(String(req.params.id), 10);
+  if (isNaN(candidateId)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  try {
+    const result = await rejectCandidate(candidateId);
+    if (!result.ok) { res.status(400).json({ error: result.error }); return; }
+    res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
