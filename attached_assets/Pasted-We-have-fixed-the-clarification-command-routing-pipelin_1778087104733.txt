@@ -1,0 +1,154 @@
+We have fixed the clarification + command routing pipeline.
+
+The remaining issue is now deeper:
+Commands are correctly recognized as mutations, but applyEditPlan() is failing to produce/apply edits for some valid requests.
+
+Goal:
+Trace why valid edit requests are reaching the edit layer but returning appliedCount = 0 or failing verification.
+
+DO NOT redesign the architecture.
+DO NOT add more intent families.
+This is now an edit-engine execution debugging pass.
+
+====================================
+STEP 1 — Add Full Edit Execution Trace
+====================================
+
+Files:
+- conversations.ts
+- edit-engine.ts
+- training-system-edit.ts
+- execution-planner.ts
+
+For every APPLY_MUTATION request, log:
+
+1. originalUserMessage
+2. reconstructedRequest (if clarification flow)
+3. intentFamily
+4. mutationType
+5. targetScope
+6. editPlan produced
+7. edit operations count
+8. exercises targeted
+9. beforeSnapshot summary
+10. afterSnapshot summary
+11. appliedCount
+12. verificationStatus
+13. rollback reason if reverted
+14. final response path chosen
+
+Use structured logs:
+[MutationTrace]
+
+====================================
+STEP 2 — Trace Failure Cause
+====================================
+
+Specifically identify which layer fails:
+
+A. interpretEditRequest()
+- failing to infer mutation intent?
+
+B. buildEditPlan()
+- returning empty operations?
+
+C. applyOperations()
+- operations generated but no matching exercises found?
+
+D. verification layer
+- edits applied then reverted?
+
+E. response alignment layer
+- mutation succeeded but response path marked failure?
+
+We need exact failure classification.
+
+====================================
+STEP 3 — Instrument appliedCount=0
+====================================
+
+Anywhere appliedCount === 0:
+log:
+
+{
+  reasonCategory:
+    "NO_MATCHING_TARGET"
+    | "EMPTY_EDIT_PLAN"
+    | "VERIFICATION_FAILED"
+    | "ROLLBACK"
+    | "UNSUPPORTED_MUTATION"
+    | "SCOPE_RESOLUTION_FAILED"
+    | "UNKNOWN",
+
+  mutationType,
+  scope,
+  reconstructedRequest,
+  operationsGenerated,
+  targetedExercises,
+}
+
+====================================
+STEP 4 — Validate Common Mutations
+====================================
+
+Run live/manual traces for:
+
+1. Make Day 1 harder
+2. Make this more athletic
+3. Replace squats with knee-friendly options
+4. Make this fit 45 minutes
+5. No jumping
+6. Remove all barbell exercises
+
+For each:
+- show edit plan
+- show operations
+- show whether exercises matched
+- show final mutation result
+
+====================================
+STEP 5 — Detect Verification Rollbacks
+====================================
+
+I suspect some edits ARE applying but failing downstream verification.
+
+Log explicitly:
+- preVerificationAppliedCount
+- postVerificationAppliedCount
+- verificationFailureReasons
+
+If rollback occurs:
+log exact rule triggered.
+
+====================================
+STEP 6 — Detect Scope Drift
+====================================
+
+Check whether:
+scope.type=session
+dayIndex=0
+
+actually maps to a real session in the active program.
+
+Possible hidden failure:
+scope resolves correctly logically but no session is found in the live program state.
+
+Log:
+resolvedSessionId
+resolvedSessionName
+exerciseCountFound
+
+====================================
+STEP 7 — Final Report
+====================================
+
+Return:
+
+1. Exact layer failing most often
+2. Top 5 mutation failure reasons
+3. Which commands fully succeed
+4. Which commands generate empty edit plans
+5. Which commands fail verification
+6. Whether edits are being silently rolled back
+7. Whether active program state is stale/desynced
+8. Recommended minimal fix
