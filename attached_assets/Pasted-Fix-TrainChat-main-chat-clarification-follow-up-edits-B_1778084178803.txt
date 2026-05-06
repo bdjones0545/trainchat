@@ -1,0 +1,144 @@
+Fix TrainChat main chat clarification follow-up edits.
+
+Bug:
+When user says:
+“Make this program harder”
+
+The agent correctly asks:
+“Do you want this applied to a specific day, or across the full program?”
+
+But when user replies:
+“The full program”
+
+The app returns:
+“I hit a problem — try again.”
+
+Expected:
+The follow-up should resolve the pending clarification and apply the original edit request across the full program/week/block.
+
+Root cause likely:
+The clarification follow-up pipeline is treating “The full program” as a standalone edit instead of combining it with the pending original request: “Make this program harder.”
+
+Required fix:
+
+1. Persist pending clarification context
+
+When the agent asks a clarification for an edit, store:
+- originalMessage: "Make this program harder"
+- originalIntent: harder / increase_difficulty
+- originalTarget: program
+- clarificationQuestion
+- possibleScopes: day | week | full_program
+- createdAt
+
+2. Resolve follow-up answers
+
+If pending clarification exists and user replies with:
+- “full program”
+- “the full program”
+- “whole program”
+- “all of it”
+- “everything”
+- “entire program”
+- “across the program”
+- “all days”
+- “all sessions”
+
+Then resolve:
+scope = program OR block/week depending current architecture
+intent = original pending intent
+messageForExecution = originalMessage + " across the full program"
+
+Do NOT run the follow-up text alone through normal edit interpretation.
+
+3. Specific mappings
+
+For original:
+“Make this program harder”
+
+Follow-up:
+“The full program”
+
+Should become:
+intent: increase_difficulty / harder
+scope: program or current block
+target: all sessions
+route: APPLY_MUTATION
+
+Apply role-aware progression:
+- primary lifts: increase difficulty/intensity appropriately
+- accessories: supportive progression, not all 3–6 reps
+- core/trunk: stay trunk-appropriate
+- mobility/prep: preserve or modestly progress only if appropriate
+
+4. Add deterministic fallback
+
+If pending clarification has:
+originalIntent = harder / increase_difficulty
+and resolvedScope = full_program
+
+Then bypass fragile LLM edit planning and route to deterministic hierarchical refinement:
+transformation = increase_difficulty or strength_focus
+scope = block or program
+weekNumber = currentWeek ?? 1
+applyToAllSessions = true
+
+5. Error handling
+
+If clarification resolution fails:
+- do not show generic “I hit a problem”
+- show:
+“I understood you want the full program adjusted, but I couldn’t safely apply the edit. Your program was left unchanged.”
+
+6. Add logs
+
+Add structured logs:
+[ClarificationFollowup] pending context found
+[ClarificationFollowup] resolved scope full_program
+[ClarificationFollowup] executing original intent
+[ClarificationFollowup] mutation applied
+[ClarificationFollowup] mutation failed
+
+Include:
+- originalMessage
+- followupMessage
+- resolvedScope
+- resolvedIntent
+- trainingSystemId
+
+7. Acceptance tests
+
+Test A:
+User: “Make this program harder”
+Agent: asks day or full program
+User: “The full program”
+Expected:
+- mutation applies
+- no error toast
+- program changes
+- change log scope = block/program/week
+- coach response explains what changed
+
+Test B:
+User: “Make this program harder”
+User follow-up: “Day 2”
+Expected:
+- only Day 2 changes
+- scope = session
+
+Test C:
+User: “Make this program easier”
+User follow-up: “All days”
+Expected:
+- full program regression/lower impact applies
+
+Test D:
+User: “Make this more explosive”
+User follow-up: “Week 1”
+Expected:
+- Week 1 power/explosive refinement applies
+
+Important:
+Chat is the CEO.
+Clarification follow-ups must carry the original request forward.
+Never interpret “the full program” alone as the edit.
