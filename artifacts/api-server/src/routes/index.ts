@@ -31,6 +31,7 @@ import systemAdjustmentsRouter from "./system-adjustments";
 import clearMemoryRouter from "./clear-memory";
 import mutationAuditReceiptsRouter from "./mutation-audit-receipts";
 import trainingSystemMutateRouter from "./training-system-mutate";
+import billingRouter from "./billing";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -76,5 +77,6 @@ router.use(systemAdjustmentsRouter);
 router.use(clearMemoryRouter);
 router.use(mutationAuditReceiptsRouter);
 router.use(trainingSystemMutateRouter);
+router.use(billingRouter);
 
 export default router;

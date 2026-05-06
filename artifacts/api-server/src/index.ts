@@ -30,7 +30,7 @@ if (Number.isNaN(port) || port <= 0) {
 try {
   validateBillingConfig();
 } catch (err: any) {
-  logger.error({ err }, "[Startup] Billing configuration is invalid — refusing to start");
+  logger.error({ err }, "[Startup] Billing configuration is invalid — STRIPE_SECRET_KEY is required");
   process.exit(1);
 }
 

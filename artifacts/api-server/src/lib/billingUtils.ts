@@ -31,18 +31,23 @@ export const PLAN_PRICE_MAP = {
   elite:   { monthly: PRICE_IDS.ELITE_MONTHLY,   yearly: PRICE_IDS.ELITE_YEARLY },
 } as const;
 
-// ─── TASK 3: Startup validation ───────────────────────────────────────────────
+// ─── Startup validation ────────────────────────────────────────────────────────
 //
-// Call this at server startup. Throws if any required Stripe env var is absent.
-// This prevents the app from running with missing billing configuration,
-// which would cause silent plan mismatches or checkout failures.
+// STRIPE_SECRET_KEY is required — without it, no Stripe calls can be made.
+//
+// STRIPE_PRICE_* env vars are OPTIONAL. They provide a local fallback for
+// webhook plan detection, but the primary mechanism is price lookup_keys set
+// by the stripe:setup-products script. The app starts and operates correctly
+// without them as long as prices have lookup_keys.
+//
+// To set env vars, run: pnpm --filter @workspace/scripts run stripe:setup-products
+// and copy the STRIPE_PRICE_* lines printed at the end into Replit Secrets.
 
-// Note: STRIPE_WEBHOOK_SECRET is intentionally excluded — it is managed
-// internally by the stripe-replit-sync library (via findOrCreateManagedWebhook).
-// If you are using a custom webhook endpoint outside of stripe-replit-sync,
-// add STRIPE_WEBHOOK_SECRET back to this list.
 const REQUIRED_STRIPE_ENV_VARS: string[] = [
   "STRIPE_SECRET_KEY",
+];
+
+const OPTIONAL_STRIPE_ENV_VARS: string[] = [
   "STRIPE_PUBLISHABLE_KEY",
   "STRIPE_PRICE_STARTER_MONTHLY",
   "STRIPE_PRICE_STARTER_YEARLY",
@@ -53,21 +58,29 @@ const REQUIRED_STRIPE_ENV_VARS: string[] = [
 ];
 
 export function validateBillingConfig(): void {
-  const missing = REQUIRED_STRIPE_ENV_VARS.filter(
-    (key) => !process.env[key]
-  );
+  const missing = REQUIRED_STRIPE_ENV_VARS.filter((key) => !process.env[key]);
 
   if (missing.length > 0) {
     const message =
       `[BillingConfig] FATAL: Missing required Stripe environment variables:\n` +
       missing.map((k) => `  - ${k}`).join("\n") +
-      `\nSet these in the Secrets panel before starting the server. ` +
-      `The server will NOT start with missing billing configuration.`;
+      `\nSet these in the Secrets panel before starting the server.`;
     logger.error({ missing }, message);
     throw new Error(message);
   }
 
-  logger.info("[BillingConfig] All required Stripe environment variables are present");
+  // Warn about missing optional price ID env vars (not fatal)
+  const missingOptional = OPTIONAL_STRIPE_ENV_VARS.filter((key) => !process.env[key]);
+  if (missingOptional.length > 0) {
+    logger.warn(
+      { missingOptional },
+      "[BillingConfig] Optional Stripe price ID env vars not set. " +
+      "Webhook plan detection will rely on price lookup_keys. " +
+      "Run stripe:setup-products and copy the STRIPE_PRICE_* lines to Replit Secrets to add the fallback."
+    );
+  } else {
+    logger.info("[BillingConfig] All Stripe environment variables are present");
+  }
 }
 
 // ─── TASK 4: detectPlanInterval — fail loudly on unknown price IDs ─────────────

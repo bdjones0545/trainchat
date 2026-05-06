@@ -216,12 +216,6 @@ async function postSessionLog(data: any) {
   });
 }
 
-async function postCheckout(priceId: string) {
-  return await customFetch<any>("/api/subscription/checkout", {
-    method: "POST",
-    body: JSON.stringify({ priceId }),
-  });
-}
 
 export default function Chat() {
   const [, setLocation] = useLocation();
@@ -286,7 +280,7 @@ export default function Chat() {
   }>>([]);
   const [showProgramLibrary, setShowProgramLibrary] = useState(false);
   const [isSwitchingProgram, setIsSwitchingProgram] = useState(false);
-  const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
+  const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; billingInterval: "monthly" | "yearly" } | null>(null);
   const [showSaveAccountModal, setShowSaveAccountModal] = useState(false);
   const [trySayingIndex, setTrySayingIndex] = useState(0);
   const trySayingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2044,25 +2038,32 @@ export default function Chat() {
     }
   }
 
-  async function handleSelectPlan(planId: string, priceId?: string) {
+  async function handleSelectPlan(planId: string, billingInterval?: string) {
     setShowPricing(false);
 
-    if (!priceId) {
-      alert("Stripe products are not yet configured. Please connect your Stripe account and create products first.");
-      return;
-    }
+    const interval = (billingInterval === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
 
     // Anonymous users must create an account before checkout
     if (isAnonymousUser) {
-      setAnonymousUpgradePlan({ planId, priceId });
+      setAnonymousUpgradePlan({ planId, billingInterval: interval });
       return;
     }
 
     try {
-      const { url } = await postCheckout(priceId);
-      if (url) window.location.href = url;
+      const r = await fetch("/api/billing/create-checkout-session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planId, billingInterval: interval }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok || !data.url) {
+        console.error("[Chat] Checkout error:", data.error);
+        return;
+      }
+      window.location.href = data.url;
     } catch {
-      alert("Failed to start checkout. Please try again.");
+      console.error("[Chat] Failed to start checkout");
     }
   }
 
@@ -2685,7 +2686,7 @@ export default function Chat() {
       {anonymousUpgradePlan && (
         <AnonymousUpgradeModal
           planId={anonymousUpgradePlan.planId}
-          priceId={anonymousUpgradePlan.priceId}
+          billingInterval={anonymousUpgradePlan.billingInterval}
           onClose={() => setAnonymousUpgradePlan(null)}
         />
       )}

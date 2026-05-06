@@ -23,7 +23,7 @@ type FormData = z.infer<typeof schema>;
 
 interface Props {
   planId: string;
-  priceId: string;
+  billingInterval: "monthly" | "yearly";
   onClose: () => void;
 }
 
@@ -33,7 +33,7 @@ function PlanIcon({ planId }: { planId: string }) {
   return <Zap className="w-6 h-6 text-primary" />;
 }
 
-export default function AnonymousUpgradeModal({ planId, priceId, onClose }: Props) {
+export default function AnonymousUpgradeModal({ planId, billingInterval, onClose }: Props) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"form" | "loading">("form");
   const [error, setError] = useState<string | null>(null);
@@ -69,15 +69,14 @@ export default function AnonymousUpgradeModal({ planId, priceId, onClose }: Prop
       const { user } = await regRes.json();
       // Immediately update the React Query cache so the app sees the new registered user
       queryClient.setQueryData(getGetMeQueryKey(), user);
-      // Invalidate so fresh data is loaded after checkout return
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
 
-      // Step 2: Start Stripe checkout for the selected plan
-      const checkoutRes = await fetch("/api/subscription/checkout", {
+      // Step 2: Start Stripe checkout using lookup-key based endpoint
+      const checkoutRes = await fetch("/api/billing/create-checkout-session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId }),
+        body: JSON.stringify({ tier: planId, billingInterval }),
       });
 
       if (!checkoutRes.ok) {
@@ -150,7 +149,7 @@ export default function AnonymousUpgradeModal({ planId, priceId, onClose }: Prop
                   Create your account to unlock {planName}
                 </h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  We'll save your current system and attach {planName} to your account.
+                  We'll save your current system and attach {planName} ({billingInterval}) to your account.
                 </p>
               </div>
 

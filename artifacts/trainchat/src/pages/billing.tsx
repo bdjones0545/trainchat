@@ -567,7 +567,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const [showPricing, setShowPricing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; priceId: string } | null>(null);
+  const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; billingInterval: "monthly" | "yearly" } | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -709,21 +709,30 @@ export default function SettingsPage() {
     },
   });
 
-  async function handleSelectPlan(planId: string, priceId?: string) {
+  async function handleSelectPlan(planId: string, billingInterval?: string) {
     setShowPricing(false);
-    if (!priceId) {
-      setError("Price ID not available. Please try again.");
-      return;
-    }
+    const interval = (billingInterval === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
+
     if (isAnonymousUser) {
-      setAnonymousUpgradePlan({ planId, priceId });
+      setAnonymousUpgradePlan({ planId, billingInterval: interval });
       return;
     }
+
     try {
-      const url = await startCheckout(priceId);
-      if (url) window.location.href = url;
+      const r = await fetch("/api/billing/create-checkout-session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: planId, billingInterval: interval }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setError(data.error ?? "Failed to start checkout. Please try again.");
+        return;
+      }
+      if (data.url) window.location.href = data.url;
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message ?? "Failed to start checkout.");
     }
   }
 
@@ -1219,7 +1228,7 @@ export default function SettingsPage() {
       {anonymousUpgradePlan && (
         <AnonymousUpgradeModal
           planId={anonymousUpgradePlan.planId}
-          priceId={anonymousUpgradePlan.priceId}
+          billingInterval={anonymousUpgradePlan.billingInterval}
           onClose={() => setAnonymousUpgradePlan(null)}
         />
       )}

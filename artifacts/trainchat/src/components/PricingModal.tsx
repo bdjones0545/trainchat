@@ -1,5 +1,5 @@
-import { X, Zap, Check, Star, Crown } from "lucide-react";
-import { useState, useEffect } from "react";
+import { X, Zap, Check, Star, Crown, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 interface Plan {
   id: string;
@@ -10,7 +10,6 @@ interface Plan {
   badgeColor?: string;
   description: string;
   features: string[];
-  priceId?: string;
   highlighted?: boolean;
 }
 
@@ -67,38 +66,56 @@ const PLANS: Plan[] = [
 
 interface Props {
   onClose: () => void;
-  onSelectPlan: (planId: string, priceId?: string) => void;
+  onSelectPlan?: (planId: string, priceId?: string) => void;
   currentPlan?: string;
 }
 
 export default function PricingModal({ onClose, onSelectPlan, currentPlan = "free" }: Props) {
   const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
-  const [plans, setPlans] = useState<Plan[]>(PLANS);
-
-  useEffect(() => {
-    fetch("/api/subscription/products", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: any) => {
-        if (!data?.products?.length) return;
-        setPlans((prev) =>
-          prev.map((plan) => {
-            const match = data.products.find((p: any) =>
-              p.name?.toLowerCase().includes(plan.id)
-            );
-            if (!match?.prices?.length) return plan;
-            const price = match.prices.find((pr: any) =>
-              billing === "monthly"
-                ? pr.recurring?.interval === "month"
-                : pr.recurring?.interval === "year"
-            ) ?? match.prices[0];
-            return { ...plan, priceId: price?.id };
-          })
-        );
-      })
-      .catch(() => {});
-  }, [billing]);
+  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const yearlyDiscount = Math.round((1 - (182 / (19 * 12))) * 100);
+
+  async function handleSelectPlan(plan: Plan) {
+    if (plan.id === currentPlan) return;
+    setErrorMsg(null);
+
+    // If a parent handler is provided, delegate to it.
+    // Pass billingInterval as the second arg so callers can forward it to the API.
+    if (onSelectPlan) {
+      onSelectPlan(plan.id, billing);
+      return;
+    }
+
+    setLoadingPlan(plan.id);
+    try {
+      const r = await fetch("/api/billing/create-checkout-session", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier: plan.id, billingInterval: billing }),
+      });
+
+      const data = await r.json().catch(() => ({}));
+
+      if (!r.ok) {
+        setErrorMsg(data.error ?? "Failed to start checkout. Please try again.");
+        setLoadingPlan(null);
+        return;
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setErrorMsg("Checkout session URL not returned. Please try again.");
+        setLoadingPlan(null);
+      }
+    } catch {
+      setErrorMsg("Unable to reach payment service. Please try again.");
+      setLoadingPlan(null);
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -156,11 +173,19 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
             </button>
           </div>
 
+          {/* Error message */}
+          {errorMsg && (
+            <div className="mb-4 px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/5 text-sm text-red-400 text-center">
+              {errorMsg}
+            </div>
+          )}
+
           {/* Plans grid */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {plans.map((plan) => {
+            {PLANS.map((plan) => {
               const price = billing === "monthly" ? plan.monthlyPrice : Math.round(plan.yearlyPrice / 12);
               const isCurrentPlan = plan.id === currentPlan;
+              const isLoading = loadingPlan === plan.id;
 
               return (
                 <div
@@ -203,17 +228,26 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
                   </ul>
 
                   <button
-                    onClick={() => onSelectPlan(plan.id, plan.priceId)}
-                    disabled={isCurrentPlan}
-                    className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 ${
+                    onClick={() => handleSelectPlan(plan)}
+                    disabled={isCurrentPlan || isLoading || loadingPlan !== null}
+                    className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 flex items-center justify-center gap-2 ${
                       isCurrentPlan
                         ? "bg-accent/40 text-muted-foreground cursor-default border border-border"
                         : plan.highlighted
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98]"
-                        : "bg-card border border-border text-foreground hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98]"
+                        ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60"
+                        : "bg-card border border-border text-foreground hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98] disabled:opacity-60"
                     }`}
                   >
-                    {isCurrentPlan ? "Current Plan" : `Get ${plan.name}`}
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Redirecting…
+                      </>
+                    ) : isCurrentPlan ? (
+                      "Current Plan"
+                    ) : (
+                      `Get ${plan.name}`
+                    )}
                   </button>
                 </div>
               );

@@ -19,8 +19,18 @@ import { stripeStorage, type SubscriptionSyncPayload } from "./stripeStorage";
 import { logger } from "./logger";
 import type { PlanTier, BillingInterval } from "@workspace/db";
 
-// ─── Plan detection from Stripe price / product metadata ─────────────────────
+// ─── Plan detection from Stripe price lookup_key or price ID ──────────────────
+//
+// Primary path: parse the lookup_key field on the Stripe price object.
+//   Format: trainchat_{tier}_{interval}  e.g. trainchat_starter_monthly
+//
+// Fallback: match against STRIPE_PRICE_* environment variables.
+//   This allows continued operation when prices predate lookup_key adoption.
+//
+// Both paths are tried before throwing, so the setup script and env vars are
+// independently sufficient.
 
+// Env-var fallback map (populated at startup; missing vars are safely skipped)
 const PLAN_PRICE_MAP: Record<string, PlanTier> = {
   [process.env.STRIPE_PRICE_STARTER_MONTHLY ?? ""]: "starter",
   [process.env.STRIPE_PRICE_PRO_MONTHLY ?? ""]: "pro",
@@ -29,8 +39,6 @@ const PLAN_PRICE_MAP: Record<string, PlanTier> = {
   [process.env.STRIPE_PRICE_PRO_YEARLY ?? ""]: "pro",
   [process.env.STRIPE_PRICE_ELITE_YEARLY ?? ""]: "elite",
 };
-
-// Remove the empty-string key so missing env vars don't match anything
 delete (PLAN_PRICE_MAP as Record<string, PlanTier>)[""];
 
 const YEARLY_PRICE_IDS = new Set([
@@ -39,28 +47,47 @@ const YEARLY_PRICE_IDS = new Set([
   process.env.STRIPE_PRICE_ELITE_YEARLY ?? "",
 ].filter(Boolean));
 
-// ─── TASK 4: Fail loudly on unknown price IDs ─────────────────────────────────
-//
-// If a price ID is not in the configured map, we throw rather than silently
-// provisioning a wrong plan. This surfaces misconfiguration immediately.
+// TRAINCHAT_LOOKUP_KEY_RE matches: trainchat_(starter|pro|elite)_(monthly|yearly)
+const LOOKUP_KEY_RE = /^trainchat_(starter|pro|elite)_(monthly|yearly)$/;
 
-export function detectPlanFromPriceId(priceId: string): PlanTier {
-  const plan = PLAN_PRICE_MAP[priceId];
-  if (!plan) {
-    logger.error(
-      { priceId, knownPriceIds: Object.keys(PLAN_PRICE_MAP) },
-      "[WebhookHandlers] UNKNOWN PRICE ID — cannot determine plan tier. " +
-      "Check STRIPE_PRICE_* env vars. This event will not be processed."
-    );
-    throw new Error(
-      `Unknown Stripe price ID: "${priceId}". ` +
-      "Set the correct STRIPE_PRICE_* environment variables."
-    );
-  }
-  return plan;
+export function detectPlanFromLookupKey(
+  lookupKey: string | null | undefined
+): { plan: PlanTier; billingInterval: BillingInterval } | null {
+  if (!lookupKey) return null;
+  const m = lookupKey.match(LOOKUP_KEY_RE);
+  if (!m) return null;
+  return {
+    plan: m[1] as PlanTier,
+    billingInterval: m[2] as BillingInterval,
+  };
 }
 
-export function detectIntervalFromPriceId(priceId: string): BillingInterval {
+export function detectPlanFromPriceId(priceId: string, lookupKey?: string | null): PlanTier {
+  // Try lookup_key first (preferred — no env vars required)
+  const fromKey = detectPlanFromLookupKey(lookupKey);
+  if (fromKey) return fromKey.plan;
+
+  // Fallback: env-var price ID map
+  const plan = PLAN_PRICE_MAP[priceId];
+  if (plan) return plan;
+
+  logger.error(
+    { priceId, lookupKey, knownPriceIds: Object.keys(PLAN_PRICE_MAP) },
+    "[WebhookHandlers] UNKNOWN PRICE — cannot determine plan tier. " +
+    "Either run stripe:setup-products (adds lookup_key) or set STRIPE_PRICE_* env vars."
+  );
+  throw new Error(
+    `Unknown Stripe price ID: "${priceId}" (lookup_key: ${lookupKey ?? "none"}). ` +
+    "Run stripe:setup-products or set STRIPE_PRICE_* environment variables."
+  );
+}
+
+export function detectIntervalFromPriceId(priceId: string, lookupKey?: string | null): BillingInterval {
+  // Try lookup_key first
+  const fromKey = detectPlanFromLookupKey(lookupKey);
+  if (fromKey) return fromKey.billingInterval;
+
+  // Fallback: env-var yearly set
   return YEARLY_PRICE_IDS.has(priceId) ? "yearly" : "monthly";
 }
 
@@ -97,6 +124,7 @@ export function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
   try {
     const item = sub.items?.data?.[0];
     const priceId: string = item?.price?.id ?? "";
+    const lookupKey: string | null = item?.price?.lookup_key ?? null;
     const customerId: string =
       typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
 
@@ -113,8 +141,13 @@ export function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
       ? new Date(sub.trial_end * 1000)
       : null;
 
-    // detectPlanFromPriceId will throw on unknown price — bubble up to caller
-    const plan = detectPlanFromPriceId(priceId);
+    // detectPlanFromPriceId tries lookup_key first, then env-var map
+    const plan = detectPlanFromPriceId(priceId, lookupKey);
+
+    logger.debug(
+      { priceId, lookupKey, plan },
+      "[WebhookHandlers] Plan detected from price"
+    );
 
     return {
       stripeSubscriptionId: sub.id,
@@ -122,7 +155,7 @@ export function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
       stripePriceId: priceId,
       plan,
       planStatus: normalizePlanStatus(sub.status),
-      billingInterval: detectIntervalFromPriceId(priceId),
+      billingInterval: detectIntervalFromPriceId(priceId, lookupKey),
       currentPeriodEnd: periodEnd,
       cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
       trialEnd,
@@ -318,6 +351,78 @@ async function handleInvoicePaid(event: any): Promise<void> {
     },
     "[WebhookHandlers] invoice.paid — full subscription sync complete"
   );
+
+  // ── Payment receipt email ──────────────────────────────────────────────────
+  //
+  // Stripe automatically sends receipt emails to the customer when:
+  //   - The Stripe Customer has an email address (we ensure this during checkout)
+  //   - "Successful payments" emails are enabled in Stripe Dashboard → Settings → Emails
+  //
+  // App-side email fallback: if SendGrid is configured, send a confirmation email.
+  // If no email provider is configured, log and continue — never block webhook success.
+
+  const sendgridKey = process.env.SENDGRID_API_KEY;
+  if (!sendgridKey) {
+    logger.info(
+      { userId: user.id, invoiceId: invoice.id },
+      "[BillingEmail] No SENDGRID_API_KEY configured — relying on Stripe built-in receipt emails"
+    );
+    return;
+  }
+
+  try {
+    const PLAN_NAMES: Record<string, string> = { starter: "Starter", pro: "Pro", elite: "Elite" };
+    const planName = PLAN_NAMES[payload.plan] ?? payload.plan;
+    const intervalLabel = payload.billingInterval === "yearly" ? "yearly" : "monthly";
+    const amountPaid = invoice.amount_paid ? `$${(invoice.amount_paid / 100).toFixed(2)}` : "";
+    const receiptUrl: string = invoice.hosted_invoice_url ?? invoice.receipt_url ?? "";
+
+    const emailBody = [
+      `Hi,`,
+      ``,
+      `Your TrainChat ${planName} (${intervalLabel}) payment has been confirmed.`,
+      amountPaid ? `Amount: ${amountPaid}` : "",
+      receiptUrl ? `View receipt: ${receiptUrl}` : "",
+      ``,
+      `Your subscription is active and your AI coaching continues.`,
+      ``,
+      `— TrainChat`,
+    ].filter((l) => l !== undefined).join("\n");
+
+    const customerEmail = typeof invoice.customer_email === "string"
+      ? invoice.customer_email
+      : user.email ?? null;
+
+    if (!customerEmail) {
+      logger.warn({ userId: user.id }, "[BillingEmail] No customer email — skipping receipt");
+      return;
+    }
+
+    await fetch("https://api.sendgrid.com/v3/mail/send", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${sendgridKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        personalizations: [{ to: [{ email: customerEmail }] }],
+        from: { email: process.env.SENDGRID_FROM_EMAIL ?? "noreply@trainchat.app", name: "TrainChat" },
+        subject: `TrainChat payment confirmed — ${planName} plan`,
+        content: [{ type: "text/plain", value: emailBody }],
+      }),
+    });
+
+    logger.info(
+      { userId: user.id, email: customerEmail, plan: payload.plan },
+      "[BillingEmail] Payment confirmation email sent via SendGrid"
+    );
+  } catch (emailErr) {
+    // Email failure must never block webhook success
+    logger.warn(
+      { err: emailErr, userId: user.id },
+      "[BillingEmail] Failed to send payment confirmation email — webhook continues"
+    );
+  }
 }
 
 // ─── Handler: invoice.payment_failed ─────────────────────────────────────────

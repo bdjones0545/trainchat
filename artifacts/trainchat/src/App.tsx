@@ -13,6 +13,8 @@ import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
+import BillingSuccess from "@/pages/billing-success";
+import BillingCancelled from "@/pages/billing-cancelled";
 import PrivacyPage from "@/pages/privacy";
 import TermsPage from "@/pages/terms";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
@@ -262,6 +264,8 @@ function Router() {
           </AuthGuard>
         )}
       </Route>
+      <Route path="/billing/success" component={BillingSuccess} />
+      <Route path="/billing/cancelled" component={BillingCancelled} />
       <Route path="/system">
         {() => (
           <AuthGuard>

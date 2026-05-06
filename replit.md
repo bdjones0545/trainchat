@@ -43,14 +43,23 @@ The user interface features a dark theme with electric blue accents and the Inte
 ## External Dependencies
 - **OpenAI**: Core AI capabilities using GPT-4o.
 - **PostgreSQL**: Primary relational database.
-- **Stripe**: Payment gateway for subscriptions.
-- **SendGrid**: Transactional email delivery.
+- **Stripe**: Payment gateway for subscriptions (Starter $19/mo, Pro $39/mo, Elite $79/mo + yearly variants).
+- **SendGrid**: Transactional email delivery (optional; falls back to Stripe's built-in receipts).
 - **Drizzle ORM**: ORM for PostgreSQL.
 - **Zod**: Schema validation.
 - **Vite**: Frontend build tool.
 - **Tailwind CSS**: Frontend styling framework.
 - **Orval**: API client and Zod schema generation.
 - **html-to-image**: PNG export of share cards.
+
+## Stripe Subscription Setup (May 2026)
+- **Lookup-key-based pricing**: Prices identified by `trainchat_{tier}_{billingInterval}` (e.g. `trainchat_pro_monthly`). No price IDs needed in env vars.
+- **Setup script**: `pnpm --filter @workspace/scripts run stripe:setup-products` — idempotent, creates all 3 products × 2 intervals = 6 prices with lookup keys. Re-run safely at any time.
+- **Billing routes** (`artifacts/api-server/src/routes/billing.ts`): `POST /api/billing/create-checkout-session` (tier+billingInterval), `GET /api/billing/subscription`, `POST /api/billing/create-portal-session`, `GET /api/billing/checkout-session/:sessionId`.
+- **Webhook handler**: `webhookHandlers.ts` detects plan from `item.price.lookup_key` first; falls back to `STRIPE_PRICE_*` env vars; sends SendGrid email on `invoice.paid` if `SENDGRID_API_KEY` is set.
+- **Post-checkout pages**: `/billing/success` and `/billing/cancelled` — both exist as frontend routes.
+- **Required env vars**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. Optional: `STRIPE_PRICE_*` (set as fast fallback), `CLIENT_URL`, `SENDGRID_API_KEY`.
+- **Webhook endpoint to register in Stripe Dashboard**: `POST /api/stripe/webhook` with events: `checkout.session.completed`, `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`.
 
 ## UX Clarity Pass (May 2026)
 - **Summary card**: Compact identity card above the tab bar when a system is active — shows program name, focus badge, week number, last-updated time, and latest change summary.
