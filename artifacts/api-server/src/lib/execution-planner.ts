@@ -715,7 +715,13 @@ function resolveClarification({
     }
 
     // Whole-program resolution
-    if (/\b(whole|entire|all|everything|program.?wide|every day)\b/.test(lower)) {
+    // Matches: "whole program", "entire program", "full program", "the full program",
+    //          "all of it", "all sessions", "every day", "everything", "program-wide",
+    //          "across the program", "all days", "across all"
+    if (
+      /\b(whole|entire|full|all|everything|program.?wide|every day|all days?|across (all|the)|across the program)\b/.test(lower) ||
+      /\b(the full program|the whole program|the entire program)\b/.test(lower)
+    ) {
       return {
         action: "APPLY_MUTATION",
         intentFamily: pendingClarification.intentFamily as IntentFamily,
@@ -727,6 +733,25 @@ function resolveClarification({
           },
         },
         reasoning: "Resolved scope clarification → program-wide target",
+      };
+    }
+
+    // Week-level resolution (e.g. "Week 1", "week 2")
+    const weekMatch = lower.match(/\bweek\s*(\d+)\b/i);
+    if (weekMatch) {
+      return {
+        action: "APPLY_MUTATION",
+        intentFamily: pendingClarification.intentFamily as IntentFamily,
+        scope: { type: "program" },
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: pendingClarification.intentFamily,
+            weekNumber: Number(weekMatch[1]),
+            scopeLabel: `week ${weekMatch[1]}`,
+          },
+        },
+        reasoning: `Resolved scope clarification → week ${weekMatch[1]} target`,
       };
     }
   }

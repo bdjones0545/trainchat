@@ -774,21 +774,24 @@ Keep it helpful and intelligent, never promotional.`;
         { pendingId: activePendingClarification.id, newIntent: intentResult.type },
         "[PendingClarification] Strong new intent detected — clearing active pending clarification"
       );
-    } else if (
-      intentResult.type === "GENERAL_COACHING_QUESTION" &&
-      looksLikeClarificationAnswer(parsed.data.content)
-    ) {
-      // Short answer that looks like a clarification resolution — override intent
+    } else if (looksLikeClarificationAnswer(parsed.data.content)) {
+      // Any message (not just GENERAL_COACHING_QUESTION) that looks like an answer
+      // to a clarification question should resume the pending mutation.
+      // Widened from "GENERAL_COACHING_QUESTION only" to cover EDIT_PROGRAM etc.
+      // because responses like "the full program" can be misclassified.
+      const _priorIntentType = intentResult.type;
       intentResult = { type: "CLARIFICATION_FOLLOWUP", confidence: "high" };
       logger.info(
         {
           pendingId: activePendingClarification.id,
-          userMessage: parsed.data.content.slice(0, 80),
-          originalRequest: activePendingClarification.originalRequest.slice(0, 80),
+          originalMessage: activePendingClarification.originalRequest.slice(0, 80),
+          followupMessage: parsed.data.content.slice(0, 80),
           intentFamily: activePendingClarification.intentFamily,
           pendingAspect: activePendingClarification.pendingAspect,
+          priorIntentType: _priorIntentType,
+          trainingSystemId: activePendingClarification.targetProgramId ?? null,
         },
-        "[PendingClarification] Classified as CLARIFICATION_FOLLOWUP — resuming pending mutation"
+        "[ClarificationFollowup] pending context found — overriding intent to CLARIFICATION_FOLLOWUP"
       );
     }
   }
@@ -1088,16 +1091,29 @@ Keep it helpful and intelligent, never promotional.`;
   if (intentResult.type === "CLARIFICATION_FOLLOWUP" && activePendingClarification) {
     const pending = activePendingClarification;
 
+    // Derive resolved scope label for logging
+    const _followupLower = parsed.data.content.toLowerCase().trim();
+    const _resolvedScope =
+      /\b(full program|whole program|entire program|all sessions?|all days?|everything|program.?wide|across)\b/i.test(_followupLower)
+        ? "full_program"
+        : /\bweek\s*\d+\b/i.test(_followupLower)
+        ? "week"
+        : /\bday\s*\d+\b/i.test(_followupLower)
+        ? "day"
+        : "unknown";
+
     logger.info(
       {
         pendingId: pending.id,
+        originalMessage: pending.originalRequest.slice(0, 80),
+        followupMessage: parsed.data.content.slice(0, 80),
+        resolvedScope: _resolvedScope,
+        resolvedIntent: pending.intentFamily,
         intentFamily: pending.intentFamily,
         pendingAspect: pending.pendingAspect,
-        originalRequest: pending.originalRequest.slice(0, 80),
-        userReply: parsed.data.content.slice(0, 80),
-        targetProgramId: pending.targetProgramId,
+        trainingSystemId: pending.targetProgramId ?? null,
       },
-      "[ClarificationFollowup] Resuming pending mutation"
+      "[ClarificationFollowup] pending context found — executing original intent"
     );
 
     const reconstructedRequest = buildReconstructedRequest(
@@ -1107,8 +1123,13 @@ Keep it helpful and intelligent, never promotional.`;
     );
 
     logger.info(
-      { reconstructedRequest: reconstructedRequest.slice(0, 200) },
-      "[ClarificationFollowup] Reconstructed request built"
+      {
+        reconstructedRequest: reconstructedRequest.slice(0, 200),
+        resolvedScope: _resolvedScope,
+        resolvedIntent: pending.intentFamily,
+        trainingSystemId: pending.targetProgramId ?? null,
+      },
+      "[ClarificationFollowup] resolved scope — reconstructed request built"
     );
 
     // Resolve the active system for editing
@@ -1171,8 +1192,14 @@ Keep it helpful and intelligent, never promotional.`;
         const clarificationEditResult = await applyEditPlan(clarificationEditPlan, pending.intentFamily ?? undefined);
 
         logger.info(
-          { applied: clarificationEditResult.appliedCount, skipped: clarificationEditResult.skippedCount },
-          "[ClarificationFollowup] Edit plan applied"
+          {
+            applied: clarificationEditResult.appliedCount,
+            skipped: clarificationEditResult.skippedCount,
+            resolvedScope: _resolvedScope,
+            resolvedIntent: pending.intentFamily,
+            trainingSystemId: pending.targetProgramId ?? null,
+          },
+          "[ClarificationFollowup] mutation applied"
         );
 
         if (clarificationEditResult.appliedCount > 0) {
@@ -1302,10 +1329,25 @@ Keep it helpful and intelligent, never promotional.`;
         return;
       }
     } catch (err: any) {
-      logger.error({ err: err?.message, stack: err?.stack }, "[ClarificationFollowup] Pipeline threw — returning safe failure, program left unchanged");
+      logger.error(
+        {
+          err: err?.message,
+          stack: err?.stack,
+          originalMessage: pending.originalRequest.slice(0, 80),
+          followupMessage: parsed.data.content.slice(0, 80),
+          resolvedScope: _resolvedScope,
+          resolvedIntent: pending.intentFamily,
+          trainingSystemId: pending.targetProgramId ?? null,
+        },
+        "[ClarificationFollowup] mutation failed — pipeline threw, program left unchanged"
+      );
       logger.warn("[Mutation Failure] program left unchanged — CLARIFICATION_FOLLOWUP pipeline error, no AI fallback");
       await resolvePendingClarification(pending.id, "pipeline_error").catch(() => {});
-      const pipelineErrContent = `I couldn't apply that edit, so I left your program unchanged. Try rephrasing or being more specific about which exercise or day you'd like changed.`;
+      // Scope-aware error message: mention "full program" if that was the resolved scope
+      const _isScopeFullProgram = _resolvedScope === "full_program";
+      const pipelineErrContent = _isScopeFullProgram
+        ? `I understood you want the full program adjusted, but I couldn't safely apply the edit. Your program was left unchanged. Try rephrasing — for example: "Make every session harder" or "Increase difficulty across all days".`
+        : `I couldn't apply that edit, so I left your program unchanged. Try rephrasing or being more specific about which exercise or day you'd like changed.`;
       const [pipelineErrMsg] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: pipelineErrContent, structuredData: null,
       }).returning();
@@ -1356,18 +1398,35 @@ Keep it helpful and intelligent, never promotional.`;
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
 
     // Write pending clarification state so the next reply can resume the correct intent.
-    // execPlan.action === "APPLY_MUTATION" is the authoritative check — no intentResult dependency.
-    if (execPlan.action === "APPLY_MUTATION") {
-      const familyResult = normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode);
+    // Always write here — we are inside case "ASK_CLARIFICATION" so the plan is always a question.
+    // Use execPlan.intentFamily when available (it carries the resolved intent from the planner);
+    // fall back to re-classifying the user's message only when the planner didn't resolve a family.
+    {
+      const familyForPending =
+        (execPlan.intentFamily as string | null) ??
+        normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode).family;
+
       writePendingClarification({
         conversationId: params.data.id,
         userId,
         targetProgramId: activeSystem?.id ?? null,
         originalRequest: parsed.data.content,
-        intentFamily: familyResult.family,
-        pendingAspect: "scope",
+        intentFamily: familyForPending,
+        pendingAspect: (execPlan.clarification?.pendingAspect as "scope" | "target_day" | "target_session" | "target_exercise" | "phase_or_block" | "confirmation") ?? "scope",
         clarificationQuestion: clarifyingQuestion,
         editSubtype: intentResult.editSubtype ?? null,
+        editIntent: execPlan.intentFamily ?? null,
+      }).then(() => {
+        logger.info(
+          {
+            conversationId: params.data.id,
+            originalRequest: parsed.data.content.slice(0, 80),
+            intentFamily: familyForPending,
+            pendingAspect: execPlan.clarification?.pendingAspect ?? "scope",
+            clarificationQuestion: clarifyingQuestion.slice(0, 100),
+          },
+          "[ClarificationFollowup] Pending clarification record written — next reply will resume this intent"
+        );
       }).catch((err) => logger.warn({ err }, "[PendingClarification] Failed to write record for planner clarification — non-fatal"));
     }
 
@@ -3181,19 +3240,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         { pendingId: activePendingClarification.id, newIntent: intentResult.type },
         "[PendingClarification:stream] Strong new intent — clearing pending clarification"
       );
-    } else if (
-      intentResult.type === "GENERAL_COACHING_QUESTION" &&
-      looksLikeClarificationAnswer(parsed.data.content)
-    ) {
+    } else if (looksLikeClarificationAnswer(parsed.data.content)) {
+      // Widened: any non-strong-new-intent message that looks like a clarification
+      // answer resumes the pending mutation — regardless of classified intent type.
+      const _priorIntentTypeStream = intentResult.type;
       intentResult = { type: "CLARIFICATION_FOLLOWUP", confidence: "high" };
       logger.info(
         {
           pendingId: activePendingClarification.id,
-          userMessage: parsed.data.content.slice(0, 80),
-          originalRequest: activePendingClarification.originalRequest.slice(0, 80),
+          originalMessage: activePendingClarification.originalRequest.slice(0, 80),
+          followupMessage: parsed.data.content.slice(0, 80),
           intentFamily: activePendingClarification.intentFamily,
+          pendingAspect: activePendingClarification.pendingAspect,
+          priorIntentType: _priorIntentTypeStream,
+          trainingSystemId: activePendingClarification.targetProgramId ?? null,
         },
-        "[PendingClarification:stream] Classified as CLARIFICATION_FOLLOWUP — resuming pending mutation"
+        "[ClarificationFollowup:stream] pending context found — overriding intent to CLARIFICATION_FOLLOWUP"
       );
     }
   }
@@ -3636,17 +3698,31 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
 
     // Write pending clarification state so the next reply can resume the correct intent.
-    // execPlan.action === "APPLY_MUTATION" is the authoritative check — no intentResult dependency.
-    if (execPlan.action === "APPLY_MUTATION") {
-      const familyResult = normalizeToIntentFamily(parsed.data.content, streamFocusMode);
+    // Always write here — we are inside case "ASK_CLARIFICATION" so the plan is always a question.
+    {
+      const familyForPending =
+        (execPlan.intentFamily as string | null) ??
+        normalizeToIntentFamily(parsed.data.content, streamFocusMode).family;
+
       writePendingClarification({
         conversationId: params.data.id, userId,
         targetProgramId: activeSystem?.id ?? null,
         originalRequest: parsed.data.content,
-        intentFamily: familyResult.family,
-        pendingAspect: "scope",
+        intentFamily: familyForPending,
+        pendingAspect: (execPlan.clarification?.pendingAspect as "scope" | "target_day" | "target_session" | "target_exercise" | "phase_or_block" | "confirmation") ?? "scope",
         clarificationQuestion: clarifyingQuestion,
         editSubtype: intentResult.editSubtype ?? null,
+        editIntent: execPlan.intentFamily ?? null,
+      }).then(() => {
+        logger.info(
+          {
+            conversationId: params.data.id,
+            originalRequest: parsed.data.content.slice(0, 80),
+            intentFamily: familyForPending,
+            pendingAspect: execPlan.clarification?.pendingAspect ?? "scope",
+          },
+          "[ClarificationFollowup:stream] Pending clarification record written — next reply will resume this intent"
+        );
       }).catch((err) => logger.warn({ err }, "[PendingClarification:stream] Failed to write record for planner clarification — non-fatal"));
     }
 

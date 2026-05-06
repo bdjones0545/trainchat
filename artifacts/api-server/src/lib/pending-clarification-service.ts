@@ -259,15 +259,20 @@ export function buildReconstructedRequest(
 
   switch (pendingAspect) {
     case "scope": {
+      // Program-wide: "full program", "the full program", "whole program", "all of it",
+      //               "all sessions", "everything", "across the program", "all days", etc.
       if (
-        /\b(program.?wide|whole program|all sessions?|every session|across|throughout)\b/i.test(
+        /\b(program.?wide|whole program|full program|entire program|all sessions?|every session|across|throughout|all of it|all days?|everything)\b/i.test(
           trimmedReply
         )
       ) {
-        return `${originalRequest} — apply this change across the entire program (program-wide, all sessions)`;
+        return `${originalRequest} — apply this change across the entire program (program-wide, all sessions, all days)`;
       }
       if (/\b(day\s*\d+|session\s*\d+)\b/i.test(trimmedReply)) {
         return `${originalRequest} — apply this change specifically to ${trimmedReply}`;
+      }
+      if (/\bweek\s*(\d+)\b/i.test(trimmedReply)) {
+        return `${originalRequest} — apply this change to ${trimmedReply} only`;
       }
       if (/\b(block|phase|this block|this phase|current block)\b/i.test(trimmedReply)) {
         return `${originalRequest} — apply this change to the current block or phase`;
