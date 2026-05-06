@@ -194,11 +194,16 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/sprint|speed|acceleration|velocity|faster|quickness|first.?step|explosiveness/.test(combined)) tags.push("speed");
   if (/sprint|acceleration|velocity|sprint.?mechanic/.test(combined)) tags.push("sprint_mechanics");
   if (/plyometric|jump|explosive|reactive/.test(combined)) tags.push("plyometrics");
+  // "explosive" / "power" also maps to speed-adjacent chunk tags used in sprint/power papers
+  if (/explosive|power\b|plyometric|jump/.test(combined)) {
+    tags.push("speed"); tags.push("speed training"); tags.push("sprint_performance");
+    tags.push("force-velocity"); tags.push("athletic_performance"); tags.push("force_velocity");
+  }
   if (/change.?of.?direction|agility|lateral|deceleration|cutting|cod\b/.test(combined)) tags.push("agility");
   if (/change.?of.?direction|deceleration|cod\b|cutting/.test(combined)) tags.push("change_of_direction");
   if (/sport|athletic|performance|football.?speed/.test(combined)) tags.push("sport_performance");
   if (/football/.test(combined)) tags.push("football");
-  if (/force.?velocity|strength.?speed|speed.?strength|power.?development/.test(combined)) tags.push("force_velocity");
+  if (/force.?velocity|strength.?speed|speed.?strength|power.?development|explosive|plyometric/.test(combined)) tags.push("force_velocity");
   if (/max.?velocity|top.?speed|top.?end.?speed/.test(combined)) tags.push("max_velocity");
 
   // Programming
@@ -284,7 +289,11 @@ function scoreChunk(
 ): ScoreBreakdown {
   const chunkTags: string[] = Array.isArray(chunk.topicTags) ? chunk.topicTags : [];
   const overlap = chunkTags.filter((t) => contextTags.includes(t)).length;
-  const tagOverlap = overlap * 3;
+  // Expert-consensus documents (curated seeds, weekly updates) get a reduced tag multiplier
+  // so broad multi-tag arrays don't overwhelm peer-reviewed systematic reviews / meta-analyses.
+  const isExpertConsensus = (docMeta as { evidenceType?: string | null }).evidenceType === "expert_consensus";
+  const tagMultiplier = isExpertConsensus ? 2 : 3;
+  const tagOverlap = overlap * tagMultiplier;
 
   // Trust level boost
   let trustBoost = 0;
