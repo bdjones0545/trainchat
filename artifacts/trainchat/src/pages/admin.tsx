@@ -487,6 +487,7 @@ interface ResearchDoc {
   evidenceType: string | null;
   status: "pending" | "approved" | "rejected" | "archived";
   isActive: boolean;
+  isFoundational: boolean;
   plainLanguageSummary: string | null;
   coachingImplications: string | null;
   programmingImplications: string | null;
@@ -497,6 +498,8 @@ interface ResearchDoc {
   librarianRecommendation: "approve" | "reject" | "needs_review" | null;
   librarianAdminNotes: string | null;
   warningFlags: string[] | null;
+  doi: string | null;
+  url: string | null;
   createdAt: string;
   lastReviewedAt: string | null;
 }
@@ -586,6 +589,37 @@ const WARNING_FLAG_LABELS: Record<string, string> = {
   no_abstract: "No Abstract",
   unknown_source: "Unknown Source",
 };
+
+const EVIDENCE_TYPE_LABELS: Record<string, { label: string; color: string }> = {
+  meta_analysis: { label: "Meta-Analysis", color: "hsl(142 60% 50%)" },
+  systematic_review: { label: "Systematic Review", color: "hsl(142 50% 45%)" },
+  position_stand: { label: "Position Stand", color: "hsl(199 70% 55%)" },
+  consensus_statement: { label: "Consensus", color: "hsl(199 70% 55%)" },
+  clinical_practice_guideline: { label: "Guideline", color: "hsl(199 70% 55%)" },
+  guideline: { label: "Guideline", color: "hsl(199 70% 55%)" },
+  rct: { label: "RCT", color: "hsl(40 90% 60%)" },
+  randomized_trial: { label: "RCT", color: "hsl(40 90% 60%)" },
+  cohort_study: { label: "Cohort Study", color: "hsl(0 0% 55%)" },
+  prospective_study: { label: "Prospective", color: "hsl(0 0% 55%)" },
+  review: { label: "Review", color: "hsl(0 0% 50%)" },
+  expert_consensus: { label: "Expert Consensus", color: "hsl(270 50% 60%)" },
+  observational_study: { label: "Observational", color: "hsl(0 0% 45%)" },
+  case_study: { label: "Case Study", color: "hsl(0 0% 40%)" },
+};
+
+function inferEvidenceLabel(publicationTypes: string[]): { label: string; color: string } | null {
+  const types = publicationTypes.map((t) => t.toLowerCase());
+  if (types.some((t) => t.includes("meta") || t.includes("meta-analysis"))) return EVIDENCE_TYPE_LABELS.meta_analysis;
+  if (types.some((t) => t.includes("systematic"))) return EVIDENCE_TYPE_LABELS.systematic_review;
+  if (types.some((t) => t.includes("position stand"))) return EVIDENCE_TYPE_LABELS.position_stand;
+  if (types.some((t) => t.includes("consensus"))) return EVIDENCE_TYPE_LABELS.consensus_statement;
+  if (types.some((t) => t.includes("guideline"))) return EVIDENCE_TYPE_LABELS.guideline;
+  if (types.some((t) => t.includes("randomized") || t.includes("randomised") || t.includes("rct") || t.includes("clinical trial"))) return EVIDENCE_TYPE_LABELS.rct;
+  if (types.some((t) => t.includes("cohort"))) return EVIDENCE_TYPE_LABELS.cohort_study;
+  if (types.some((t) => t.includes("review"))) return EVIDENCE_TYPE_LABELS.review;
+  if (types.length > 0) return { label: publicationTypes[0], color: "hsl(0 0% 45%)" };
+  return null;
+}
 
 // ─── Discovery Pipeline Types ─────────────────────────────────────────────────
 
@@ -985,18 +1019,25 @@ function DiscoveryPanel() {
                     <p className="text-zinc-500 text-xs mt-0.5">
                       {c.authors}{c.year ? ` (${c.year})` : ""}
                       {c.journal ? ` — ${c.journal}` : ""}
-                      {c.doi ? ` · DOI: ${c.doi}` : ""}
+                      {c.doi ? (
+                        <> · <a href={`https://doi.org/${c.doi}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300 transition-colors">DOI: {c.doi}</a></>
+                      ) : c.sourceUrl ? (
+                        <> · <a href={c.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300 transition-colors">View source ↗</a></>
+                      ) : null}
                     </p>
 
                     <div className="flex flex-wrap gap-1.5 mt-1.5">
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "hsl(199 89% 12%)", color: "hsl(199 89% 60%)" }}>
                         {CATEGORY_LABELS[c.category] ?? c.category}
                       </span>
-                      {(c.publicationTypes ?? []).slice(0, 2).map((pt) => (
-                        <span key={pt} className="text-xs px-1.5 py-0.5 rounded text-zinc-500" style={{ background: "hsl(222 47% 16%)" }}>
-                          {pt}
-                        </span>
-                      ))}
+                      {(() => {
+                        const ev = inferEvidenceLabel(c.publicationTypes ?? []);
+                        return ev ? (
+                          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: ev.color, background: ev.color + "18", border: `1px solid ${ev.color}33` }}>
+                            {ev.label}
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
                   </div>
 
@@ -1216,6 +1257,19 @@ function ResearchLibraryPanel() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: !doc.isActive }),
+      });
+      await loadAll();
+    } catch (e: any) { setError(e.message); }
+    finally { setActionLoading(null); }
+  }
+
+  async function handleToggleFoundational(doc: ResearchDoc) {
+    setActionLoading(doc.id);
+    try {
+      await apiFetch(`/api/admin/research/${doc.id}/toggle-foundational`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isFoundational: !doc.isFoundational }),
       });
       await loadAll();
     } catch (e: any) { setError(e.message); }
@@ -1591,9 +1645,21 @@ function ResearchLibraryPanel() {
                       >
                         {doc.trustLevel} trust
                       </span>
-                      {doc.evidenceType && (
-                        <span className="text-xs text-zinc-500 px-1.5 py-0.5 rounded" style={{ background: "hsl(222 47% 14%)" }}>
-                          {doc.evidenceType.replace(/_/g, " ")}
+                      {doc.evidenceType && (() => {
+                        const ev = EVIDENCE_TYPE_LABELS[doc.evidenceType];
+                        return ev ? (
+                          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: ev.color, background: ev.color + "18", border: `1px solid ${ev.color}33` }}>
+                            {ev.label}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-zinc-500 px-1.5 py-0.5 rounded" style={{ background: "hsl(222 47% 14%)" }}>
+                            {doc.evidenceType.replace(/_/g, " ")}
+                          </span>
+                        );
+                      })()}
+                      {doc.isFoundational && (
+                        <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: "hsl(40 90% 60%)", background: "hsl(40 80% 10%)", border: "1px solid hsl(40 80% 22%)" }}>
+                          ★ Foundational
                         </span>
                       )}
                       {doc.librarianRecommendation && (() => {
@@ -1621,7 +1687,16 @@ function ResearchLibraryPanel() {
                       </div>
                     )}
                     <p className="text-zinc-100 text-sm font-medium leading-snug">{doc.title}</p>
-                    {doc.authors && <p className="text-zinc-500 text-xs mt-0.5">{doc.authors}{doc.year ? ` (${doc.year})` : ""} — {doc.source}</p>}
+                    {doc.authors && (
+                      <p className="text-zinc-500 text-xs mt-0.5">
+                        {doc.authors}{doc.year ? ` (${doc.year})` : ""} — {doc.source}
+                        {doc.doi ? (
+                          <> · <a href={`https://doi.org/${doc.doi}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300 transition-colors">DOI ↗</a></>
+                        ) : doc.url ? (
+                          <> · <a href={doc.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300 transition-colors">View ↗</a></>
+                        ) : null}
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-1.5 mt-2">
                       <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: "hsl(199 89% 12%)", color: "hsl(199 89% 60%)" }}>
                         {CATEGORY_LABELS[doc.category] ?? doc.category}
@@ -1676,6 +1751,19 @@ function ResearchLibraryPanel() {
                         {doc.isActive ? "Active" : "Disabled"}
                       </button>
                     )}
+                    <button
+                      onClick={() => handleToggleFoundational(doc)}
+                      disabled={isWorking}
+                      title={doc.isFoundational ? "Unmark as foundational" : "Mark as foundational (exempts from age penalty)"}
+                      className="text-xs px-2 py-1 rounded transition-all disabled:opacity-40"
+                      style={{
+                        background: doc.isFoundational ? "hsl(40 80% 10%)" : "hsl(222 47% 16%)",
+                        color: doc.isFoundational ? "hsl(40 90% 60%)" : "hsl(0 0% 40%)",
+                        border: doc.isFoundational ? "1px solid hsl(40 80% 22%)" : "1px solid transparent",
+                      }}
+                    >
+                      ★
+                    </button>
                     <button
                       onClick={() => handleResummarize(doc.id)}
                       disabled={isWorking}

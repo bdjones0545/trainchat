@@ -81,6 +81,9 @@ export const researchDocumentsTable = pgTable("research_documents", {
   librarianAdminNotes: text("librarian_admin_notes"),
   warningFlags: jsonb("warning_flags").$type<string[]>(),
 
+  // Foundational paper flag — exempts from freshness age penalty; still retrieved alongside newer work
+  isFoundational: boolean("is_foundational").notNull().default(false),
+
   // Timestamps
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

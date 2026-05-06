@@ -609,7 +609,7 @@ router.put("/admin/research/:id", requireAuth, requireAdmin, async (req, res): P
     "category", "topicTags", "populationTags", "evidenceType", "trustLevel",
     "confidence", "abstract", "plainLanguageSummary", "coachingImplications",
     "programmingImplications", "safetyConsiderations", "limitations", "contraindications",
-    "status", "isActive",
+    "status", "isActive", "isFoundational",
   ];
 
   const updates: Record<string, any> = { updatedAt: new Date() };
@@ -682,6 +682,25 @@ router.post("/admin/research/:id/toggle", requireAuth, requireAdmin, async (req,
   const ok = await toggleDocumentActive(id, Boolean(isActive));
   if (!ok) { res.status(404).json({ error: "Not found" }); return; }
   res.json({ ok: true, id, isActive: Boolean(isActive) });
+});
+
+/**
+ * POST /api/admin/research/:id/toggle-foundational
+ * Mark or unmark a document as foundational (exempts it from freshness age penalties).
+ */
+router.post("/admin/research/:id/toggle-foundational", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id as string, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const { isFoundational } = req.body ?? {};
+  const [updated] = await db
+    .update(researchDocumentsTable)
+    .set({ isFoundational: Boolean(isFoundational), updatedAt: new Date() })
+    .where(eq(researchDocumentsTable.id, id))
+    .returning({ id: researchDocumentsTable.id, isFoundational: researchDocumentsTable.isFoundational });
+
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json({ ok: true, id, isFoundational: updated.isFoundational });
 });
 
 /**

@@ -8,6 +8,16 @@
 // eligible for retrieval. NULL-recommendation (unreviewed) documents are never
 // surfaced to the Coach Agent.
 //
+// Scoring layers (higher = more relevant):
+//   Tag overlap:      matched context tags × 3
+//   Trust boost:      gold +2, high +1
+//   Evidence boost:   meta_analysis +4, systematic_review/position_stand +3, rct +2, review/cohort +1
+//   Freshness boost:  ≤3yr +2, ≤7yr +1, >12yr −1 (unless foundational)
+//   Chunk-type boost: librarian +2, coaching/programming implications +1
+//   Injury boost:     +2 when injuries + rehab/recovery category
+//   Population boost: +3 when youth/older and matching tag
+//   Warning penalty:  per-flag deductions (see WARNING_FLAG_PENALTIES)
+//
 // Called inside buildSystemPrompt to inject evidence-informed context.
 
 import { db, researchDocumentsTable, researchChunksTable } from "@workspace/db";
@@ -44,6 +54,22 @@ export interface ResearchContext {
   hasContent: boolean;
 }
 
+// ─── Score breakdown (observability) ──────────────────────────────────────────
+
+export interface ScoreBreakdown {
+  chunkId?: number;
+  documentId: number;
+  tagOverlap: number;
+  trustBoost: number;
+  evidenceBoost: number;
+  freshnessBoost: number;
+  chunkTypeBoost: number;
+  injuryBoost: number;
+  populationBoost: number;
+  warningPenalty: number;
+  finalScore: number;
+}
+
 // ─── Warning flag score penalties ─────────────────────────────────────────────
 
 const WARNING_FLAG_PENALTIES: Record<string, number> = {
@@ -68,6 +94,63 @@ const WARNING_FLAG_CAUTION_TEXT: Record<string, string> = {
   lacks_replication: "not yet replicated",
 };
 
+// ─── Evidence-type scoring hierarchy ──────────────────────────────────────────
+// Higher-quality study designs rank above weaker evidence automatically.
+
+const EVIDENCE_TYPE_BOOSTS: Record<string, number> = {
+  meta_analysis: 4,
+  systematic_review: 3,
+  consensus_statement: 3,
+  position_stand: 3,
+  clinical_practice_guideline: 3,
+  guideline: 3,
+  rct: 2,
+  randomized_trial: 2,
+  cohort_study: 1,
+  prospective_study: 1,
+  review: 1,
+  expert_consensus: 0,
+  observational_study: 0,
+  foundational_single_study: 0,
+  case_study: 0,
+};
+
+// ─── Freshness scoring ────────────────────────────────────────────────────────
+
+function getFreshnessBoost(year: number | null | undefined, isFoundational: boolean): number {
+  if (!year) return 0;
+  const currentYear = new Date().getFullYear();
+  const age = currentYear - year;
+  if (age <= 3) return 2;
+  if (age <= 7) return 1;
+  if (age > 12 && !isFoundational) return -1;
+  return 0; // 8–12 yr or foundational older papers: neutral
+}
+
+// ─── Evidence-type boost inference ────────────────────────────────────────────
+// Use the stored evidence_type if set; otherwise infer conservatively from
+// the document title or any publication-type strings stored in tags.
+
+function inferEvidenceBoost(
+  evidenceType: string | null | undefined,
+  titleHint?: string,
+): number {
+  // Prefer explicit evidence type stored by librarian
+  if (evidenceType && EVIDENCE_TYPE_BOOSTS[evidenceType] !== undefined) {
+    return EVIDENCE_TYPE_BOOSTS[evidenceType];
+  }
+  // Fall back to title-based inference (conservative)
+  if (titleHint) {
+    const t = titleHint.toLowerCase();
+    if (t.includes("meta-analysis") || t.includes("meta analysis")) return 4;
+    if (t.includes("systematic review")) return 3;
+    if (t.includes("position stand") || t.includes("consensus statement")) return 3;
+    if (t.includes("randomized") || t.includes("randomised") || t.includes(" rct")) return 2;
+    if (t.includes("cohort") || t.includes("review")) return 1;
+  }
+  return 0;
+}
+
 // ─── Topic Tag Extraction ─────────────────────────────────────────────────────
 // Derive retrieval tags from user context without AI calls
 
@@ -91,7 +174,7 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/fat.?loss|weight.?loss|cut|lean|body.?comp/.test(combined)) tags.push("body_composition");
   if (/endurance|cardio|aerobic|conditioning/.test(combined)) tags.push("endurance");
 
-  // Strength-specific tags (expanded)
+  // Strength-specific tags
   if (/\bstrength\b|stronger|max.?strength|heavy|compound.?lift|force.?production|strength.?phase|intensification/.test(combined)) tags.push("strength");
   if (/max.?strength|one.?rep.?max|1rm|heavy.?lift|near.?max/.test(combined)) tags.push("max_strength");
   if (/progressive.?overload|overload|progression/.test(combined)) tags.push("progressive_overload");
@@ -107,7 +190,7 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/volume|weekly.?sets|hard.?sets/.test(combined)) tags.push("volume");
   if (/frequency|times.?per.?week|sessions.?per.?week/.test(combined)) tags.push("frequency");
 
-  // Speed / Power / Sport performance (expanded)
+  // Speed / Power / Sport performance
   if (/sprint|speed|acceleration|velocity|faster|quickness|first.?step|explosiveness/.test(combined)) tags.push("speed");
   if (/sprint|acceleration|velocity|sprint.?mechanic/.test(combined)) tags.push("sprint_mechanics");
   if (/plyometric|jump|explosive|reactive/.test(combined)) tags.push("plyometrics");
@@ -144,7 +227,7 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   if (/nutrition|diet|fuel|hydrat|eat/.test(combined)) tags.push("sports_nutrition");
   if (/calorie|energy balance/.test(combined)) tags.push("energy_balance");
 
-  // Mobility / Movement Quality (expanded)
+  // Mobility / Movement Quality
   if (/mobility|flexibility|range.?of.?motion|stiffness|tightness|movement.?quality/.test(combined)) tags.push("mobility");
   if (/warm.?up|warmup|movement.?prep|dynamic.?warm|activation|movement.?prep/.test(combined)) tags.push("dynamic_warmup");
   if (/hip.?mobility|hip.?flexor|hip.?tightness|tight.?hip|hip.?stiffness/.test(combined)) tags.push("hip_mobility");
@@ -157,6 +240,8 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   // Rehab / Pain
   if (/pain|hurt|injur|sore|ache/.test(combined)) tags.push("pain_modification");
   if (/return.?to|after.?injur|post.?op|rehabilit/.test(combined)) tags.push("return_to_training");
+  if (/tendon|tendinopathy|tendinitis|achilles|patellar/.test(combined)) tags.push("tendon_health");
+  if (/acl|knee.?ligament|anterior.?cruciate/.test(combined)) tags.push("acl_rehab");
   if (/knee/.test(combined)) tags.push("knee");
   if (/shoulder/.test(combined)) tags.push("shoulder");
   if (/back|spine/.test(combined)) tags.push("back");
@@ -180,7 +265,7 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
   return [...new Set(tags)];
 }
 
-// ─── Scoring ──────────────────────────────────────────────────────────────────
+// ─── Core scoring function ────────────────────────────────────────────────────
 
 function scoreChunk(
   chunk: { topicTags: string[]; category: string; trustLevel: string; chunkType: string },
@@ -188,40 +273,72 @@ function scoreChunk(
   hasInjuries: boolean,
   population: string | null | undefined,
   warningFlags: string[] = [],
-): number {
-  let score = 0;
-
+  docMeta: {
+    evidenceType?: string | null;
+    year?: number | null;
+    isFoundational?: boolean | null;
+    documentTitle?: string;
+    documentId: number;
+    chunkId?: number;
+  },
+): ScoreBreakdown {
   const chunkTags: string[] = Array.isArray(chunk.topicTags) ? chunk.topicTags : [];
   const overlap = chunkTags.filter((t) => contextTags.includes(t)).length;
-  score += overlap * 3;
+  const tagOverlap = overlap * 3;
 
   // Trust level boost
-  if (chunk.trustLevel === "gold") score += 2;
-  if (chunk.trustLevel === "high") score += 1;
+  let trustBoost = 0;
+  if (chunk.trustLevel === "gold") trustBoost = 2;
+  else if (chunk.trustLevel === "high") trustBoost = 1;
+
+  // Evidence-type boost (quality hierarchy)
+  const isFoundational = docMeta?.isFoundational ?? false;
+  const evidenceBoost = inferEvidenceBoost(docMeta?.evidenceType, docMeta?.documentTitle);
+
+  // Freshness boost / penalty
+  const freshnessBoost = getFreshnessBoost(docMeta?.year, isFoundational);
 
   // Injury-adjacent content boost
-  if (hasInjuries && ["medical_rehab", "recovery_wellness"].includes(chunk.category)) score += 2;
+  let injuryBoost = 0;
+  if (hasInjuries && ["medical_rehab", "recovery_wellness"].includes(chunk.category)) injuryBoost = 2;
 
   // Population match boost
+  let populationBoost = 0;
   if (population) {
     const pop = population.toLowerCase();
-    if (pop.includes("youth") && chunkTags.includes("youth_athlete")) score += 3;
-    if (pop.includes("older") && chunkTags.includes("older_adult")) score += 3;
+    if (pop.includes("youth") && chunkTags.includes("youth_athlete")) populationBoost = 3;
+    if (pop.includes("older") && chunkTags.includes("older_adult")) populationBoost = 3;
   }
 
-  // Prefer high-signal chunk types
-  // "librarian" chunks are generated by the Research Librarian Agent — highest priority
-  if (chunk.chunkType === "librarian") score += 2;
-  if (chunk.chunkType === "coaching_implications") score += 1;
-  if (chunk.chunkType === "programming_implications") score += 1;
+  // Chunk-type boost — librarian-generated summaries preferred
+  let chunkTypeBoost = 0;
+  if (chunk.chunkType === "librarian") chunkTypeBoost = 2;
+  else if (chunk.chunkType === "coaching_implications") chunkTypeBoost = 1;
+  else if (chunk.chunkType === "programming_implications") chunkTypeBoost = 1;
 
-  // Warning flag penalties — flagged content ranks below clean content
+  // Warning flag penalties
+  let warningPenalty = 0;
   for (const flag of warningFlags) {
-    const penalty = WARNING_FLAG_PENALTIES[flag] ?? 0;
-    score += penalty;
+    warningPenalty += WARNING_FLAG_PENALTIES[flag] ?? 0;
   }
 
-  return score;
+  const finalScore =
+    tagOverlap + trustBoost + evidenceBoost + freshnessBoost +
+    injuryBoost + populationBoost + chunkTypeBoost + warningPenalty;
+
+  return {
+    chunkId: docMeta.chunkId,
+    documentId: docMeta.documentId,
+    tagOverlap,
+    trustBoost,
+    evidenceBoost,
+    freshnessBoost,
+    chunkTypeBoost,
+    injuryBoost,
+    populationBoost,
+    warningPenalty,
+    finalScore,
+  };
 }
 
 // ─── Build caution note from warning flags ────────────────────────────────────
@@ -233,6 +350,34 @@ function buildCautionNote(warningFlags: string[]): string | null {
     .filter(Boolean);
   if (notes.length === 0) return null;
   return `*⚠ Note: ${notes.join("; ")}.*`;
+}
+
+// ─── Document query helper ────────────────────────────────────────────────────
+
+async function fetchApprovedDocs() {
+  return db
+    .select({
+      id: researchDocumentsTable.id,
+      title: researchDocumentsTable.title,
+      source: researchDocumentsTable.source,
+      trustLevel: researchDocumentsTable.trustLevel,
+      warningFlags: researchDocumentsTable.warningFlags,
+      evidenceType: researchDocumentsTable.evidenceType,
+      year: researchDocumentsTable.year,
+      isFoundational: researchDocumentsTable.isFoundational,
+    })
+    .from(researchDocumentsTable)
+    .where(
+      and(
+        eq(researchDocumentsTable.status, "approved"),
+        eq(researchDocumentsTable.isActive, true),
+        sql`${researchDocumentsTable.trustLevel} != 'reject'`,
+        or(
+          eq(researchDocumentsTable.librarianRecommendation, "approve"),
+          eq(researchDocumentsTable.librarianRecommendation, "needs_review"),
+        ),
+      ),
+    );
 }
 
 // ─── Main Retrieval Function ──────────────────────────────────────────────────
@@ -247,27 +392,7 @@ export async function getRelevantResearchContext(
   const maxChunks = params.maxChunks ?? 5;
 
   try {
-    const approvedDocs = await db
-      .select({
-        id: researchDocumentsTable.id,
-        title: researchDocumentsTable.title,
-        source: researchDocumentsTable.source,
-        trustLevel: researchDocumentsTable.trustLevel,
-        warningFlags: researchDocumentsTable.warningFlags,
-      })
-      .from(researchDocumentsTable)
-      .where(
-        and(
-          eq(researchDocumentsTable.status, "approved"),
-          eq(researchDocumentsTable.isActive, true),
-          sql`${researchDocumentsTable.trustLevel} != 'reject'`,
-          or(
-            eq(researchDocumentsTable.librarianRecommendation, "approve"),
-            eq(researchDocumentsTable.librarianRecommendation, "needs_review"),
-          ),
-        ),
-      );
-
+    const approvedDocs = await fetchApprovedDocs();
     if (approvedDocs.length === 0) return "";
 
     const approvedIds = approvedDocs.map((d) => d.id);
@@ -288,10 +413,22 @@ export async function getRelevantResearchContext(
     const scored = chunks
       .map((chunk) => {
         const doc = docMap.get(chunk.documentId);
-        return {
+        const breakdown = scoreChunk(
           chunk,
-          score: scoreChunk(chunk, contextTags, hasInjuries, params.population, (doc?.warningFlags as string[]) ?? []),
-        };
+          contextTags,
+          hasInjuries,
+          params.population,
+          (doc?.warningFlags as string[]) ?? [],
+          {
+            documentId: chunk.documentId,
+            chunkId: chunk.id,
+            evidenceType: doc?.evidenceType ?? null,
+            year: doc?.year ?? null,
+            isFoundational: doc?.isFoundational ?? false,
+            documentTitle: doc?.title,
+          },
+        );
+        return { chunk, score: breakdown.finalScore };
       })
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -364,27 +501,7 @@ export async function getRelevantResearchContextWithChunks(
   const maxChunks = params.maxChunks ?? 5;
 
   try {
-    const approvedDocs = await db
-      .select({
-        id: researchDocumentsTable.id,
-        title: researchDocumentsTable.title,
-        source: researchDocumentsTable.source,
-        trustLevel: researchDocumentsTable.trustLevel,
-        warningFlags: researchDocumentsTable.warningFlags,
-      })
-      .from(researchDocumentsTable)
-      .where(
-        and(
-          eq(researchDocumentsTable.status, "approved"),
-          eq(researchDocumentsTable.isActive, true),
-          sql`${researchDocumentsTable.trustLevel} != 'reject'`,
-          or(
-            eq(researchDocumentsTable.librarianRecommendation, "approve"),
-            eq(researchDocumentsTable.librarianRecommendation, "needs_review"),
-          ),
-        ),
-      );
-
+    const approvedDocs = await fetchApprovedDocs();
     if (approvedDocs.length === 0) return { text: "", chunks: [] };
 
     const approvedIds = approvedDocs.map((d) => d.id);
@@ -405,10 +522,22 @@ export async function getRelevantResearchContextWithChunks(
     const scored = rawChunks
       .map((chunk) => {
         const doc = docMap.get(chunk.documentId);
-        return {
+        const breakdown = scoreChunk(
           chunk,
-          score: scoreChunk(chunk, contextTags, hasInjuries, params.population, (doc?.warningFlags as string[]) ?? []),
-        };
+          contextTags,
+          hasInjuries,
+          params.population,
+          (doc?.warningFlags as string[]) ?? [],
+          {
+            documentId: chunk.documentId,
+            chunkId: chunk.id,
+            evidenceType: doc?.evidenceType ?? null,
+            year: doc?.year ?? null,
+            isFoundational: doc?.isFoundational ?? false,
+            documentTitle: doc?.title,
+          },
+        );
+        return { chunk, breakdown, score: breakdown.finalScore };
       })
       .filter((s) => s.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -475,8 +604,8 @@ export async function getRelevantResearchContextWithChunks(
 
     const text = lines.join("\n");
 
-    // ── Retrieval hit log ──────────────────────────────────────────────────────
-    // Structured log for observability: which chunks reached the Coach Agent.
+    // ── Retrieval observability log ───────────────────────────────────────────
+    // Full score breakdown per chunk — makes ranking debuggable.
     logger.info(
       {
         event: "research_retrieval_hit",
@@ -486,8 +615,19 @@ export async function getRelevantResearchContextWithChunks(
         contextTags,
         chunksRetrieved: retrievedChunks.length,
         docIds: [...seenDocIds],
-        chunkIds: scored.map((s) => s.chunk.id),
-        scores: scored.map((s) => s.score),
+        scoreBreakdowns: scored.map((s) => ({
+          chunkId: s.breakdown.chunkId,
+          documentId: s.breakdown.documentId,
+          tagOverlap: s.breakdown.tagOverlap,
+          trustBoost: s.breakdown.trustBoost,
+          evidenceBoost: s.breakdown.evidenceBoost,
+          freshnessBoost: s.breakdown.freshnessBoost,
+          chunkTypeBoost: s.breakdown.chunkTypeBoost,
+          injuryBoost: s.breakdown.injuryBoost,
+          populationBoost: s.breakdown.populationBoost,
+          warningPenalty: s.breakdown.warningPenalty,
+          finalScore: s.breakdown.finalScore,
+        })),
         trustLevels: retrievedChunks.map((c) => c.trustLevel),
         categories: [...new Set(retrievedChunks.map((c) => c.category))],
         warningFlagsPresent: retrievedChunks.flatMap((c) => c.warningFlags).filter(Boolean),

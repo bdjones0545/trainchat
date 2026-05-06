@@ -1,0 +1,211 @@
+Run a full QA + ranking validation pass for the new Research Discovery Pipeline.
+
+Goal:
+Validate that discovery → Librarian review → admin approval → retrieval → Coach injection works correctly end-to-end, and improve retrieval quality using real-world evidence ranking behavior.
+
+Do not redesign the architecture.
+Do not remove admin approval safeguards.
+This is a validation + retrieval quality pass.
+
+1. Run a manual discovery cycle
+
+Trigger:
+POST /api/admin/research/discovery/run
+
+After completion, verify:
+- discovery run logged correctly
+- candidates stored
+- duplicates skipped
+- Librarian recommendations populated
+- warningFlags populated
+- status transitions correct
+
+Expected statuses:
+discovered
+→ librarian_reviewed
+→ pending_admin
+→ approved OR rejected
+
+Acceptance:
+- No candidate bypasses Librarian review.
+- No candidate becomes retrievable automatically.
+
+2. Candidate quality audit
+
+Inspect the discovered candidates.
+
+Verify:
+- DOI populated where available
+- PubMed IDs valid
+- abstract exists
+- journal/year/authors normalized
+- title dedupe working
+- no obvious blog/non-peer-reviewed content
+- retracted papers excluded
+- category assignment reasonable
+
+Flag:
+- duplicate papers
+- malformed metadata
+- irrelevant papers
+- missing abstracts
+- broken DOI/source links
+
+Acceptance:
+- Candidate queue feels trustworthy and curated.
+- Metadata quality is production-ready.
+
+3. Retrieval ranking validation
+
+Approve a controlled set of papers:
+- 1 hypertrophy meta-analysis
+- 1 ACL/knee return-to-training paper
+- 1 sprint/force-velocity paper
+- 1 conditioning/concurrent training paper
+
+Then run retrieval tests:
+
+A. “Build a muscle growth program”
+Expected:
+- Schoenfeld/meta-analysis papers rank highest.
+
+B. “Program for knee pain return to training”
+Expected:
+- ACL/tendon/re-entry papers rank highest.
+
+C. “Make this more explosive”
+Expected:
+- sprint/plyometric/RFD papers rank highest.
+
+D. “Can I combine strength and conditioning?”
+Expected:
+- concurrent training papers retrieved with caution note.
+
+Acceptance:
+- Most relevant evidence surfaces first.
+- warningFlags affect ranking correctly.
+- caution notes injected correctly.
+
+4. Add evidence-type weighting
+
+Improve retrieval scoring hierarchy.
+
+Add scoring boosts:
+- meta_analysis: +4
+- systematic_review: +3
+- consensus_statement / position_stand: +3
+- clinical_practice_guideline: +3
+- randomized_trial: +2
+- cohort_study: +1
+- foundational_single_study: +0
+
+If publicationTypes metadata exists:
+- use it directly
+Otherwise:
+- infer conservatively from title/journal metadata.
+
+Acceptance:
+- Higher-quality evidence ranks above weaker evidence.
+- Meta-analyses dominate retrieval naturally.
+
+5. Add research freshness weighting
+
+Add recency scoring:
+- <= 3 years: +2
+- <= 7 years: +1
+- > 12 years: -1 unless foundational
+- foundational papers exempt from age penalty if flagged foundational
+
+Acceptance:
+- Newer evidence surfaces first when quality is similar.
+- Foundational classics still retrieve appropriately.
+
+6. Add foundational paper handling
+
+Create a metadata field:
+isFoundational:boolean
+
+Used for:
+- Cook & Purdam tendon continuum
+- classic force-velocity papers
+- older foundational sprint/HIIT literature
+
+Behavior:
+- exempts from harsh old_evidence penalties
+- still shows caution notes if appropriate
+
+Acceptance:
+- Foundational papers remain retrievable without overpowering newer evidence.
+
+7. Retrieval observability upgrade
+
+Extend retrieval logs to include:
+- why a chunk ranked highly
+- evidence-type boost
+- freshness boost
+- warning penalties
+- final score breakdown
+
+Example:
+{
+  chunkId,
+  baseScore,
+  tagOverlap,
+  trustBoost,
+  evidenceBoost,
+  freshnessBoost,
+  warningPenalty,
+  finalScore
+}
+
+Acceptance:
+- Retrieval ranking becomes debuggable.
+- Easy to understand why papers surfaced.
+
+8. Coach evidence behavior QA
+
+Ask Coach:
+- hypertrophy questions
+- tendon pain questions
+- concurrent training questions
+- sprint acceleration questions
+
+Verify:
+- Coach uses evidence-informed language
+- warning flags subtly affect tone
+- no robotic disclaimers
+- no overclaiming
+- practical coaching tone maintained
+
+Acceptance:
+- Coach sounds intelligent and grounded.
+- Evidence confidence translates naturally.
+
+9. Admin UX polish
+
+Improve Discovery Pipeline admin table:
+- add confidence badge colors
+- warning flag chips
+- evidence-type label
+- publication year
+- quick abstract expand/collapse
+- source links open externally
+
+Acceptance:
+- Fast triage of candidates.
+- Easy approval workflow.
+
+10. Final QA report
+
+Return:
+A. Discovery pipeline health
+B. Candidate quality
+C. Retrieval ranking quality
+D. Evidence weighting results
+E. Coach behavior results
+F. Remaining gaps
+G. Recommended next upgrades
+
+Important:
+Do not weaken governance rules.
+Admin approval must remain mandatory before retrieval.

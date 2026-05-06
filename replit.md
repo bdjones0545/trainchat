@@ -68,6 +68,16 @@ The user interface features a dark theme with electric blue accents and the Inte
 - **BUG-05** — Locked day cards (Days 2+): exercise names visible at `opacity-50`, sets×reps shown, "Upgrade to edit & adapt all days" CTA below list. No longer blank opaque cards.
 - **AgentTurnReport** — Suppressed entirely when `!receipt && !panelReceipt` (avoids "NO RECEIPT" noise on normal edit paths in DEV).
 
+## Research Discovery Pipeline (May 2026)
+- **Tables**: `research_discovery_runs` (run audit log) + `research_paper_candidates` (pre-approval staging).
+- **Discovery service**: `research-discovery-service.ts` — searches PubMed XML API + Semantic Scholar in parallel per 21 query categories, deduplicates by DOI/PubMed ID/normalized title, stores candidates, runs Librarian Agent pre-screening. Optional Crossref enrichment for journal/year/author normalization.
+- **Status flow**: `discovered → librarian_reviewed → pending_admin → approved | rejected`. No paper is retrievable without Librarian evaluation + explicit admin approval.
+- **Admin routes**: `POST /discovery/run`, `GET /discovery/runs`, `GET /candidates` (filterable), `POST /candidates/:id/approve`, `POST /candidates/:id/reject`.
+- **isFoundational flag**: `research_documents.is_foundational` (boolean) exempts papers from the freshness age penalty in retrieval scoring. Toggle via `POST /admin/research/:id/toggle-foundational`.
+- **Retrieval scoring layers** (additive): tag overlap ×3 | trust (gold +2, high +1) | evidence type (meta-analysis +4, systematic review/position stand +3, RCT +2, review/cohort +1) | freshness (≤3yr +2, ≤7yr +1, >12yr −1 unless foundational) | chunk type (librarian +2, coaching/programming implications +1) | injury boost +2 | population boost +3 | warning penalties.
+- **Score breakdown log**: every retrieval hit logs a `scoreBreakdowns[]` array with per-field values for each chunk (tagOverlap, trustBoost, evidenceBoost, freshnessBoost, chunkTypeBoost, injuryBoost, populationBoost, warningPenalty, finalScore).
+- **Admin UX**: evidence-type badges with quality-hierarchy colors, DOI/source links open externally, ★ foundational badge + toggle button, inferred evidence-type label from publicationTypes for candidates.
+
 ## Live Program Mutation Flow (Phases 1–9)
 - **Dedicated sidebar mutation endpoint**: `POST /api/training-system/mutate` in `artifacts/api-server/src/routes/training-system-mutate.ts` handles right-sidebar "Add Exercise" and "Remove Exercise" operations without touching the chat stream.
 - **No chat failure bubbles**: Panel mutations never create assistant messages or trigger chat failure toasts — all feedback is a local panel toast only.
