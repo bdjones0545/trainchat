@@ -503,3 +503,100 @@ export async function sendSupportEmail(payload: SupportEmailPayload): Promise<Se
   ]);
   return adminResult;
 }
+
+// ── Retention Emails ─────────────────────────────────────────────────────────
+
+export interface RetentionBasePayload {
+  name: string;
+  email: string;
+}
+
+export interface WeekTransitionPayload extends RetentionBasePayload {
+  weekNumber: number;
+}
+
+/**
+ * Sent once after a user's first successful training system build.
+ * Subject: "Your training system is live"
+ */
+export async function sendFirstBuildEmail(payload: RetentionBasePayload): Promise<SendResult> {
+  const body = `
+    <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#f1f5f9;line-height:1.3">
+      Your training system is live, ${escapeHtml(payload.name)}.
+    </h2>
+    <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.6">
+      This isn't a static plan. It's a live coaching system that adapts around your schedule, 
+      your feedback, and how you're actually training.
+    </p>
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:18px 20px;margin-bottom:24px">
+      <p style="margin:0 0 8px;color:#e2e8f0;font-size:14px;font-weight:600">What's waiting for you:</p>
+      <ul style="margin:0;padding-left:18px;color:#94a3b8;font-size:14px;line-height:1.8">
+        <li>Your Day 1 session is ready to go</li>
+        <li>Tell your coach how it went — it adapts from there</li>
+        <li>Ask to adjust intensity, swap exercises, or shift days anytime</li>
+      </ul>
+    </div>
+    <div style="text-align:center;margin-bottom:24px">
+      ${ctaButton("Open my training system", process.env.CLIENT_URL ?? "https://trainchat.ai")}
+    </div>
+    <p style="margin:0;color:#475569;font-size:13px;line-height:1.6">
+      Your coach remembers everything. The more you use it, the smarter it gets.
+    </p>`;
+  const html = userLayout("Your training system is live — TrainChat", body);
+  return deliver({ to: payload.email, subject: "Your training system is live", html }, "first-build");
+}
+
+/**
+ * Sent when a user advances to a new training week.
+ * Subject: "Week N of your program is ready"
+ */
+export async function sendWeekTransitionEmail(payload: WeekTransitionPayload): Promise<SendResult> {
+  const body = `
+    <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#f1f5f9;line-height:1.3">
+      Week ${payload.weekNumber} is ready, ${escapeHtml(payload.name)}.
+    </h2>
+    <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.6">
+      You completed Week ${payload.weekNumber - 1}. Your coach has your next block built and ready — 
+      progressive, adapted to how last week went.
+    </p>
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:18px 20px;margin-bottom:24px">
+      <p style="margin:0;color:#94a3b8;font-size:14px;line-height:1.7">
+        Open your program to see what changed, what's the same, and what's coming. 
+        If anything doesn't fit — just tell your coach.
+      </p>
+    </div>
+    <div style="text-align:center;margin-bottom:24px">
+      ${ctaButton("See Week ${payload.weekNumber}", process.env.CLIENT_URL ?? "https://trainchat.ai")}
+    </div>`;
+  const html = userLayout(`Week ${payload.weekNumber} of your program is ready — TrainChat`, body);
+  return deliver(
+    { to: payload.email, subject: `Week ${payload.weekNumber} of your program is ready`, html },
+    "week-transition",
+  );
+}
+
+/**
+ * Sent after ~48 hours of inactivity when user has an active training system.
+ * Subject: "Your next session is waiting"
+ */
+export async function send48hInactivityEmail(payload: RetentionBasePayload): Promise<SendResult> {
+  const body = `
+    <h2 style="margin:0 0 16px;font-size:20px;font-weight:700;color:#f1f5f9;line-height:1.3">
+      Your program is still waiting, ${escapeHtml(payload.name)}.
+    </h2>
+    <p style="margin:0 0 20px;color:#94a3b8;font-size:15px;line-height:1.6">
+      You've got a live training system — built around your goals, ready to adapt. 
+      Your next session is right where you left it.
+    </p>
+    <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:18px 20px;margin-bottom:24px">
+      <p style="margin:0;color:#94a3b8;font-size:14px;line-height:1.7">
+        Can't make the full session? Tell your coach. It'll shorten it, swap it, or push it — 
+        whatever keeps you moving forward.
+      </p>
+    </div>
+    <div style="text-align:center;margin-bottom:24px">
+      ${ctaButton("Get back to training", process.env.CLIENT_URL ?? "https://trainchat.ai")}
+    </div>`;
+  const html = userLayout("Your next session is waiting — TrainChat", body);
+  return deliver({ to: payload.email, subject: "Your next session is waiting", html }, "inactivity-48h");
+}

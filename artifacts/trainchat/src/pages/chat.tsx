@@ -248,6 +248,10 @@ export default function Chat() {
   const [calibrationNudgeShown, setCalibrationNudgeShown] = useState(false);
   const [corePulseActive, setCorePulseActive] = useState(false);
   const corePulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [mobilePanelSpotlight, setMobilePanelSpotlight] = useState(false);
+  const mobilePanelSpotlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [localMessagesRemaining, setLocalMessagesRemaining] = useState<number | null>(null);
+  const [countdownDismissed, setCountdownDismissed] = useState(false);
   const [undoChangeLogId, setUndoChangeLogId] = useState<number | null>(null);
   const [undoVerificationStatus, setUndoVerificationStatus] = useState<"verified" | "partial" | "unclear" | null>(null);
   const [lastChangeSummary, setLastChangeSummary] = useState<string | null>(null);
@@ -1416,6 +1420,7 @@ export default function Chat() {
 
     if (result.planInfo?.messagesRemaining !== undefined) {
       setMessagesUsed(messagesUsed + 1);
+      setLocalMessagesRemaining(result.planInfo.messagesRemaining);
     }
 
     // Error toasts fire ONLY for true_failure outcomes where the mutation was NOT applied.
@@ -1655,6 +1660,11 @@ export default function Chat() {
         setTimeout(() => {
           setRightPanelOpen(true);
           setMobilePanel("right");
+          // P0-1: Spotlight the mobile panel button for 2.5s after first/full builds
+          if (mobilePanelSpotlightTimerRef.current) clearTimeout(mobilePanelSpotlightTimerRef.current);
+          setMobilePanelSpotlight(true);
+          analytics.track("mobile_panel_auto_opened", { focusMode, deviceType: window.innerWidth < 768 ? "mobile" : "desktop" });
+          mobilePanelSpotlightTimerRef.current = setTimeout(() => setMobilePanelSpotlight(false), 2500);
         }, 200);
         // Trigger share moment CTA after a short delay (let program panel settle first)
         if (shareMomentTimeoutRef.current) clearTimeout(shareMomentTimeoutRef.current);
@@ -2456,7 +2466,7 @@ export default function Chat() {
         )}
         {!isPremium && (
           <button
-            onClick={() => { setShowPricing(true); setMobilePanel(null); }}
+            onClick={() => { setShowPricing(true); setMobilePanel(null); analytics.track("pricing_modal_opened", { source: "sidebar_upgrade_button" }); }}
             className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-primary hover:bg-primary/5 active:bg-primary/10 active:scale-[0.98] transition-all text-left"
           >
             <Zap className="w-4 h-4 flex-shrink-0" />
@@ -2809,16 +2819,23 @@ export default function Chat() {
           <span className="text-[15px] font-bold tracking-tight text-foreground leading-none select-none">TrainChat</span>
         </button>
         <button
-          onClick={() => setMobilePanel("right")}
+          onClick={() => { setMobilePanel("right"); analytics.track("panel_opened", { source: "mobile_header_button" }); }}
           className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
             latestProgram || hasActiveSystem
               ? "text-primary bg-primary/10 hover:bg-primary/20"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          } active:bg-muted/80`}
+          } active:bg-muted/80 ${mobilePanelSpotlight ? "ring-2 ring-primary/60 ring-offset-1 ring-offset-background animate-pulse" : ""}`}
           aria-label="View live program"
         >
           <Dumbbell className="w-5 h-5" />
         </button>
+        {mobilePanelSpotlight && (
+          <div className="absolute right-2 top-full mt-1 z-20 pointer-events-none">
+            <div className="bg-primary text-primary-foreground text-[10px] font-semibold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap animate-in fade-in slide-in-from-top-1 duration-300">
+              Your training system is ready →
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ─── Desktop TopNav ─── */}
@@ -3374,26 +3391,49 @@ export default function Chat() {
                   </div>
                 )}
 
-                {/* Limit approach nudge — subtle in-chat message when near limit */}
-                {!isPremium && subscription?.messagesRemaining !== undefined && subscription?.messagesRemaining !== null && subscription.messagesRemaining <= 2 && subscription.messagesRemaining > 0 && (
-                  <div className="flex items-start gap-3 mb-5">
-                    <div className="w-7 h-7 rounded-full bg-card border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
-                      <div className="w-2 h-2 rounded-full bg-primary/40" />
+                {/* P0-3: Coach-voiced paywall countdown — shown at 3, 2, 1 messages left */}
+                {(() => {
+                  if (isPremium || countdownDismissed) return null;
+                  const remaining = localMessagesRemaining ?? (
+                    subscription?.messagesRemaining !== undefined && subscription.messagesRemaining !== null
+                      ? subscription.messagesRemaining
+                      : null
+                  );
+                  if (remaining === null || remaining <= 0 || remaining > 3) return null;
+                  const copy =
+                    remaining === 1
+                      ? "Last free coaching message. Save your system to keep it."
+                      : remaining === 2
+                      ? "2 coaching messages left before you save your system."
+                      : "3 coaching messages left before you save your system.";
+                  return (
+                    <div className="flex items-start gap-3 mb-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                      <div className="w-7 h-7 rounded-full bg-card border border-primary/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <div className="w-2 h-2 rounded-full bg-primary/60" />
+                      </div>
+                      <div className="flex-1 max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-primary/15 text-foreground">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            {copy}{" "}
+                            <button
+                              onClick={() => setShowPaywall(true)}
+                              className="text-primary font-semibold hover:underline"
+                            >
+                              Save your system free →
+                            </button>
+                          </p>
+                          <button
+                            onClick={() => setCountdownDismissed(true)}
+                            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors flex-shrink-0 ml-1"
+                            aria-label="Dismiss"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-primary/15 text-foreground">
-                      <p className="text-sm text-muted-foreground leading-relaxed">
-                        You've built something real here.{" "}
-                        <button
-                          onClick={() => setShowPricing(true)}
-                          className="text-primary font-semibold hover:underline"
-                        >
-                          Unlock full access
-                        </button>{" "}
-                        to keep evolving it — your program doesn't stop here.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 <div ref={messagesEndRef} />
               </div>
@@ -3554,7 +3594,7 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder="Build or edit your training system…"
+                  placeholder={hasActiveSystem ? "Ask me to adjust your program…" : "Build or edit your training system…"}
                   disabled={stream.isActive}
                   onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"

@@ -8,9 +8,11 @@ interface Plan {
   yearlyPrice: number;
   badge?: string;
   badgeColor?: string;
+  headline: string;
   description: string;
   features: string[];
   highlighted?: boolean;
+  ctaLabel: string;
 }
 
 const PLANS: Plan[] = [
@@ -19,12 +21,14 @@ const PLANS: Plan[] = [
     name: "Starter",
     monthlyPrice: 19,
     yearlyPrice: 182,
-    description: "Start training with AI guidance",
+    headline: "Your program, saved and evolving.",
+    description: "Build your training system and keep progressing.",
+    ctaLabel: "Save my training system",
     features: [
-      "75 AI coaching messages/month",
       "Full program building",
       "Basic exercise library",
       "Conversation history",
+      "Save and return to your system",
     ],
   },
   {
@@ -34,7 +38,9 @@ const PLANS: Plan[] = [
     yearlyPrice: 374,
     badge: "Most Popular",
     badgeColor: "text-primary border-primary/30 bg-primary/10",
-    description: "Full coaching intelligence activated",
+    headline: "Your coach remembers you.",
+    description: "Adaptive coaching with long-term memory and evolving programming.",
+    ctaLabel: "Start coaching with Pro",
     highlighted: true,
     features: [
       "Unlimited AI coaching",
@@ -52,14 +58,15 @@ const PLANS: Plan[] = [
     yearlyPrice: 758,
     badge: "High Performance",
     badgeColor: "text-amber-400 border-amber-400/30 bg-amber-400/10",
-    description: "Maximum performance mode",
+    headline: "Maximum coaching intelligence.",
+    description: "Priority adaptation, deeper performance memory, and early access systems.",
+    ctaLabel: "Activate Elite",
     features: [
       "Everything in Pro",
       "Priority AI response speed",
       "Advanced adaptation logic",
-      "High-performance mode",
-      "Early access to new features",
       "Deepest performance memory",
+      "Early access to new features",
     ],
   },
 ];
@@ -81,8 +88,6 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
     if (plan.id === currentPlan) return;
     setErrorMsg(null);
 
-    // If a parent handler is provided, delegate to it.
-    // Pass billingInterval as the second arg so callers can forward it to the API.
     if (onSelectPlan) {
       onSelectPlan(plan.id, billing);
       return;
@@ -138,11 +143,11 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 mb-4">
               <Zap className="w-3 h-3 text-primary" />
-              <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Training Plans</span>
+              <span className="text-[11px] font-bold text-primary uppercase tracking-wider">Live Coaching System</span>
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">Unlock your full potential</h2>
-            <p className="text-sm text-muted-foreground">
-              Your AI performance architect. Cancel anytime.
+            <h2 className="text-2xl font-bold text-foreground mb-2">This isn't a workout generator.</h2>
+            <p className="text-sm text-muted-foreground max-w-sm mx-auto">
+              It's a live coaching system that adapts to you.
             </p>
           </div>
 
@@ -205,6 +210,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
 
                   <div className="mb-4">
                     <h3 className="text-sm font-bold text-foreground mb-1">{plan.name}</h3>
+                    <p className="text-[12px] font-semibold text-foreground/80 leading-snug mb-1">{plan.headline}</p>
                     <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">{plan.description}</p>
 
                     <div className="flex items-baseline gap-1">
@@ -246,7 +252,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
                     ) : isCurrentPlan ? (
                       "Current Plan"
                     ) : (
-                      `Get ${plan.name}`
+                      plan.ctaLabel
                     )}
                   </button>
                 </div>
@@ -255,7 +261,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
           </div>
 
           <div className="flex items-center justify-center gap-6 py-4 border-t border-border/50">
-            {["Secure payments via Stripe", "Cancel anytime", "No hidden fees"].map((txt) => (
+            {["Secure payments via Stripe", "Cancel anytime", "Your training data stays yours"].map((txt) => (
               <div key={txt} className="flex items-center gap-1.5">
                 <div className="w-1 h-1 rounded-full bg-primary/50" />
                 <span className="text-[11px] text-muted-foreground">{txt}</span>

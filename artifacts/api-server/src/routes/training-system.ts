@@ -24,6 +24,7 @@ import {
   createChangeLogEntry,
 } from "../lib/change-log-service";
 import { logger } from "../lib/logger";
+import { fireWeekTransitionEmail } from "../lib/retentionEmails";
 
 const router: IRouter = Router();
 
@@ -551,6 +552,10 @@ router.post("/training-system/advance-week", requireAuth, async (req, res): Prom
     if (!result) {
       res.status(404).json({ error: "No active training week to advance" });
       return;
+    }
+    // P0-5: fire week-transition retention email (idempotent, non-blocking)
+    if (result.newWeekNumber) {
+      fireWeekTransitionEmail(userId, result.newWeekNumber).catch(() => {});
     }
     res.json(result);
   } catch (err: any) {

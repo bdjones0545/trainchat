@@ -77,6 +77,7 @@ import {
 import { buildActionContract, type ActionContract } from "../lib/action-contract";
 import { enforceActionContract, buildContractPromptDirective, type TurnOutcome } from "../lib/action-contract-enforcer";
 import { orchestrate, logOrchestratorDecision } from "../agents/agent-orchestrator";
+import { fireFirstBuildEmail } from "../lib/retentionEmails";
 import {
   hasStructuralChanges,
   isMinorAttributeEdit,
@@ -2754,6 +2755,8 @@ Keep it helpful and intelligent, never promotional.`;
       // ── Action Contract TurnOutcome tracking ────────────────────────────────
       if (isNewProgramBuild) {
         turnOutcome.programRebuilt = true;
+        // P0-5: fire first-build retention email (idempotent, non-blocking)
+        fireFirstBuildEmail(userId).catch(() => {});
       } else {
         turnOutcome.mutationApplied = true;
         turnOutcome.verificationStatus = "verified";
@@ -4677,6 +4680,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       // ── Action Contract TurnOutcome tracking (SSE path) ─────────────────────
       if (isNewProgramBuildSSE) {
         turnOutcomeSSE.programRebuilt = true;
+        // P0-5: fire first-build retention email (idempotent, non-blocking)
+        fireFirstBuildEmail(userId).catch(() => {});
       } else {
         turnOutcomeSSE.mutationApplied = true;
         turnOutcomeSSE.verificationStatus = "verified";

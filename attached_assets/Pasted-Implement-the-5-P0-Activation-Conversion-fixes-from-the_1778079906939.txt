@@ -1,0 +1,246 @@
+Implement the 5 P0 Activation + Conversion fixes from the TrainChat audit.
+
+IMPORTANT:
+Do NOT redesign the app.
+Do NOT change backend architecture unnecessarily.
+Focus on activation, visibility, retention, and conversion psychology.
+
+====================================
+P0-1 — AUTO-OPEN MOBILE PROGRAM PANEL
+====================================
+
+Problem:
+After the first build completes on mobile, users never see the Live Program Panel unless they manually tap the panel button.
+
+Goal:
+Immediately reveal the generated program after the first successful build.
+
+Requirements:
+- Detect successful first program generation
+- On mobile viewports only:
+  - automatically open the right-side Live Program Panel
+  - animate smoothly
+  - preserve existing desktop behavior
+- Trigger AFTER streaming completes and program state is hydrated
+- Do NOT interrupt during stream
+- Do NOT auto-open for every future edit
+- Only:
+  - first build
+  - new full rebuilds
+
+Add:
+- lightweight spotlight pulse around the panel for ~2.5s
+- one-line helper text:
+  "Your training system is ready →"
+
+Files likely involved:
+- chat.tsx
+- LiveProgramPanel.tsx
+- mobile panel state hooks
+
+====================================
+P0-2 — REAL ANALYTICS PROVIDER
+====================================
+
+Problem:
+analytics.ts currently no-ops in production.
+
+Goal:
+Replace console logging with production analytics.
+
+Requirements:
+- Add PostHog integration (preferred)
+- Fallback abstraction remains provider-agnostic
+- Preserve existing analytics.track() calls
+- Add:
+  - identify()
+  - reset()
+  - page()
+  - captureException()
+
+Track these events:
+- first_program_generated
+- first_edit_performed
+- paywall_shown
+- pricing_modal_opened
+- checkout_started
+- checkout_completed
+- subscription_activated
+- panel_opened
+- mobile_panel_auto_opened
+- return_session_started
+- streak_extended
+
+Track properties:
+- focusMode
+- deviceType
+- anonymous vs signed-in
+- plan tier
+- messageCount
+- programSource
+
+Requirements:
+- no blocking calls
+- no console spam in production
+- safe fallback if analytics unavailable
+
+====================================
+P0-3 — SOFT PAYWALL COUNTDOWN
+====================================
+
+Problem:
+The hard wall at message 8 feels abrupt and hostile.
+
+Goal:
+Create anticipation instead of interruption.
+
+Requirements:
+At:
+- message 5:
+  "3 coaching messages left before you save your system."
+- message 6:
+  "2 coaching messages left."
+- message 7:
+  "Last free coaching message."
+
+Display:
+- subtle inline system card above input
+- NOT a modal
+- NOT blocking
+- dismissible
+
+Tone:
+coach-oriented, not SaaS-oriented.
+
+Avoid:
+- aggressive urgency
+- countdown timer aesthetics
+- red warning colors
+
+At message 8:
+- existing paywall still appears
+- but transition feels expected
+
+====================================
+P0-4 — PRICING COPY REWRITE
+====================================
+
+Goal:
+Reposition TrainChat as:
+NOT:
+- chatbot
+- workout generator
+BUT:
+- living adaptive coaching system
+
+Replace pricing modal copy.
+
+Starter:
+Headline:
+"Your program, saved and evolving."
+
+Subtext:
+"Build your training system and keep progressing."
+
+Remove:
+- leading with message counts
+
+Pro:
+Headline:
+"Your coach remembers you."
+
+Subtext:
+"Adaptive coaching with long-term memory and evolving programming."
+
+Elite:
+Headline:
+"Maximum coaching intelligence."
+
+Subtext:
+"Priority adaptation, deeper performance memory, and early access systems."
+
+Main modal headline:
+Replace:
+"Unlock your full potential"
+
+With:
+"This isn't a workout generator."
+
+Subheadline:
+"It's a live coaching system that adapts to you."
+
+Buttons:
+"Get Pro" →
+"Start coaching with Pro"
+
+"Get Starter" →
+"Save my training system"
+
+Add:
+small trust line:
+"Cancel anytime. Your training data stays yours."
+
+====================================
+P0-5 — RETURN VISIT LOOP
+====================================
+
+Goal:
+Create lightweight re-engagement loops.
+
+Use existing SendGrid integration.
+
+Add:
+1. First-session completion email
+Trigger:
+- first completed build
+
+Subject:
+"Your training system is ready."
+
+Body:
+- coach tone
+- reminds user their system adapts over time
+- CTA back into app
+
+2. 48-hour inactivity email
+Trigger:
+- no session activity for 48h after build
+
+Subject:
+"Your next session is waiting."
+
+3. Week transition email
+Trigger:
+- week progression detected
+
+Subject:
+"Week 2 is ready."
+
+Requirements:
+- plain text + HTML
+- lightweight
+- non-marketing tone
+- opt-out support
+- idempotent sending
+- safe retry behavior
+
+====================================
+QA REQUIREMENTS
+====================================
+
+Verify:
+- mobile panel opens correctly on iPhone viewport
+- no desktop regression
+- analytics fires exactly once per event
+- paywall countdown only appears on free tier
+- pricing modal copy updated everywhere
+- emails do not double-send
+- no hydration race conditions
+- no blocking UI during analytics/events
+
+Return:
+1. files changed
+2. exact behaviors implemented
+3. analytics events added
+4. QA results
+5. remaining risks
