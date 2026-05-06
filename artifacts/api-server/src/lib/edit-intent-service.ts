@@ -2535,6 +2535,90 @@ function interpretWithRules(userRequest: string, system: any, targetContext?: Ta
       // < 2 structural changes → fall through to AGENT
     }
 
+    if (lower.match(/\b(harder|tougher|more\s+(challenging|difficult|demanding|intense)|progress(ion)?|step\s+up|level\s+up)\b/) &&
+        !lower.match(/\b(endurance|aerobic|explosive|power|hypertrophy)\b/)) {
+      // ── DAY PROGRESSION BUNDLE ───────────────────────────────────────────────
+      // Requirements (minimum 1 structural change):
+      //   1. Shift primary lift rep ranges down 2 reps (heavier intensity territory)
+      //   2. Add 1 set to primaries if under 5 sets
+      //   3. Extend rest to 2-3 min for full CNS recovery between sets
+      // Validation: at least 1 primary must exist. Otherwise fall through to AGENT.
+      const targetSession = findSessionById(system, sessionId);
+      const progChanges: EditChange[] = [];
+      const progModifiedNames: string[] = [];
+
+      if (targetSession) {
+        const exercises: any[] = targetSession.exercises ?? [];
+        const primaryLifts = exercises.filter((ex: any) => ex.category === "primary");
+
+        for (const ex of primaryLifts) {
+          const repsStr: string = ex.reps ?? "";
+          const rangeMatch = repsStr.match(/(\d+)-(\d+)/);
+          const singleMatch = repsStr.match(/^(\d+)$/);
+          const currentMin = rangeMatch ? parseInt(rangeMatch[1]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          const currentMax = rangeMatch ? parseInt(rangeMatch[2]) : (singleMatch ? parseInt(singleMatch[1]) : 0);
+          const currentSets = typeof ex.sets === "number" ? ex.sets : 3;
+
+          const progUpdates: Record<string, unknown> = {
+            rest: "2-3 min",
+            notes: "Progression load: target 87–92% of your previous top set. Full reset between sets — quality counts.",
+          };
+
+          // Shift reps down toward heavier strength territory
+          if (currentMax > 8) {
+            // High rep range → push into moderate-heavy zone
+            const newMin = Math.max(3, currentMin - 2);
+            const newMax = Math.max(6, currentMax - 2);
+            progUpdates.reps = `${newMin}-${newMax}`;
+          } else if (currentMax > 4) {
+            // Moderate range → push to heavy/strength zone
+            progUpdates.reps = `${Math.max(2, currentMin - 1)}-${currentMax - 1}`;
+          }
+          // If already ≤ 4 reps: add a set instead of going lower
+
+          // Add 1 set (cap at 5) for volume progression
+          if (currentSets < 5) {
+            progUpdates.sets = currentSets + 1;
+          }
+
+          progChanges.push({
+            type: "update_exercise",
+            id: ex.id,
+            updates: progUpdates,
+            reason: "Day progression: heavier rep range + extended rest for intensity overload",
+          });
+          progModifiedNames.push(ex.name);
+        }
+      }
+
+      // At least 1 primary must be updated for this bundle to commit
+      const progStructural = progChanges.filter(c =>
+        c.type === "update_exercise" && c.updates &&
+        Object.keys(c.updates).some(k => ["sets", "reps", "rest"].includes(k))
+      );
+
+      if (progStructural.length >= 1) {
+        progChanges.push({
+          type: "update_session",
+          id: sessionId,
+          updates: {
+            emphasis: "Progressive overload — heavier loads, lower reps, full CNS recovery",
+            coachingNotes: "Progression session: push load above previous marks. Full rest between sets. Log your top-set numbers — this is a PR attempt.",
+          },
+          reason: "Updating session emphasis for day progression",
+        });
+
+        const named = progModifiedNames.slice(0, 3).join(" and ");
+        return {
+          intent: "day_progression",
+          scope: "session",
+          changeSummary: `${label} progressed: ${named} shifted to a heavier rep range with +1 set and extended rest. Target 87–92% of last session's top load — push your training weights.`,
+          changes: progChanges,
+        };
+      }
+      // No primary lifts found → fall through to AGENT for broader reasoning
+    }
+
     if (lower.match(/equipment|dumbbell|hotel|travel|minimal/)) {
       return {
         intent: "equipment_constraint",
@@ -3478,7 +3562,7 @@ export function classifyEditRequest(
   //
   // If the deterministic bundle produces < 2 structural changes, it falls through to AGENT.
   if (targetContext?.type === "session") {
-    const KNOWN_INTENT_SESSION = /\b(explosive|power|athletic|more\s+(explosive|powerful|athletic)|endurance|aerobic|cardio|metabolic|work.capacity|stamina|conditioning|hypertrophy|muscle.building|muscle.growth|strength|stronger|speed|fast.twitch|fat.loss|weight.loss|cutting|leaner)\b/i;
+    const KNOWN_INTENT_SESSION = /\b(explosive|power|athletic|more\s+(explosive|powerful|athletic)|endurance|aerobic|cardio|metabolic|work.capacity|stamina|conditioning|hypertrophy|muscle.building|muscle.growth|strength|stronger|speed|fast.twitch|fat.loss|weight.loss|cutting|leaner|harder|tougher|more\s+(challenging|difficult|demanding|intense)|progress(ion)?|step\s+up|level\s+up)\b/i;
     if (KNOWN_INTENT_SESSION.test(lower)) {
       logger.info(
         { lower: lower.slice(0, 100), targetType: targetContext.type },
