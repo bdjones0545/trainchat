@@ -67,7 +67,17 @@ export interface ScoreBreakdown {
   injuryBoost: number;
   populationBoost: number;
   warningPenalty: number;
+  diversityBonus: number;
   finalScore: number;
+}
+
+// ─── Retrieval composition (diversity logging) ─────────────────────────────────
+
+export interface RetrievalComposition {
+  uniqueDocuments: number;
+  chunksPerDocument: Record<string, number>;
+  categories: string[];
+  evidenceTypes: string[];
 }
 
 // ─── Warning flag score penalties ─────────────────────────────────────────────
@@ -346,6 +356,7 @@ function scoreChunk(
     injuryBoost,
     populationBoost,
     warningPenalty,
+    diversityBonus: 0, // applied externally after candidate pool is known
     finalScore,
   };
 }
@@ -359,6 +370,81 @@ function buildCautionNote(warningFlags: string[]): string | null {
     .filter(Boolean);
   if (notes.length === 0) return null;
   return `*⚠ Note: ${notes.join("; ")}.*`;
+}
+
+// ─── Category diversity bonus ─────────────────────────────────────────────────
+//
+// Complementary category pairs: when both sides are present in the candidate pool,
+// all chunks whose category is part of a represented pair receive +1 as a
+// tie-breaker. This does NOT override evidence quality — it only resolves
+// equal-score situations in favour of broader multi-category context.
+
+const COMPLEMENTARY_CATEGORY_PAIRS: [string, string][] = [
+  ["strength_conditioning", "recovery_wellness"],
+  ["medical_rehab", "strength_conditioning"],
+  ["sport_performance", "recovery_wellness"],
+  ["strength_conditioning", "sport_performance"],
+  ["medical_rehab", "recovery_wellness"],
+];
+
+function computeDiversityBonus(category: string, allCategories: Set<string>): number {
+  for (const [a, b] of COMPLEMENTARY_CATEGORY_PAIRS) {
+    if (category === a && allCategories.has(b)) return 1;
+    if (category === b && allCategories.has(a)) return 1;
+  }
+  return 0;
+}
+
+// ─── Post-ranking diversity filter ────────────────────────────────────────────
+//
+// Walks the ranked list (highest score first) and enforces a per-document cap.
+// The strongest chunk from each document always survives; secondary chunks
+// survive only within the cap. Continues until maxChunks slots are filled
+// or the list is exhausted — guaranteeing multi-source context.
+
+function applyDiversityFilter<T extends { chunk: { documentId: number } }>(
+  ranked: T[],
+  maxChunks: number,
+  maxPerDoc = 2,
+): T[] {
+  const docCounts = new Map<number, number>();
+  const selected: T[] = [];
+  for (const item of ranked) {
+    if (selected.length >= maxChunks) break;
+    const docId = item.chunk.documentId;
+    const count = docCounts.get(docId) ?? 0;
+    if (count >= maxPerDoc) continue;
+    docCounts.set(docId, count + 1);
+    selected.push(item);
+  }
+  return selected;
+}
+
+// ─── Retrieval composition summary ────────────────────────────────────────────
+
+function buildRetrievalComposition(
+  selected: Array<{ chunk: { documentId: number; category: string } }>,
+  docMap: Map<number, { evidenceType?: string | null }>,
+): RetrievalComposition {
+  const chunksPerDocument: Record<string, number> = {};
+  for (const { chunk } of selected) {
+    const key = String(chunk.documentId);
+    chunksPerDocument[key] = (chunksPerDocument[key] ?? 0) + 1;
+  }
+  const categories = [...new Set(selected.map((s) => s.chunk.category).filter(Boolean))];
+  const evidenceTypes = [
+    ...new Set(
+      selected
+        .map((s) => docMap.get(s.chunk.documentId)?.evidenceType)
+        .filter((e): e is string => Boolean(e)),
+    ),
+  ];
+  return {
+    uniqueDocuments: Object.keys(chunksPerDocument).length,
+    chunksPerDocument,
+    categories,
+    evidenceTypes,
+  };
 }
 
 // ─── Document query helper ────────────────────────────────────────────────────
@@ -419,7 +505,7 @@ export async function getRelevantResearchContext(
 
     const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
 
-    const scored = chunks
+    const baseScored = chunks
       .map((chunk) => {
         const doc = docMap.get(chunk.documentId);
         const breakdown = scoreChunk(
@@ -439,9 +525,19 @@ export async function getRelevantResearchContext(
         );
         return { chunk, score: breakdown.finalScore };
       })
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxChunks);
+      .filter((s) => s.score > 0);
+
+    // Category diversity bonus: +1 tie-breaker when complementary categories are both present
+    const candidateCategories = new Set(baseScored.map((s) => (s.chunk.category as string) ?? ""));
+    const diversified = baseScored
+      .map((s) => ({
+        ...s,
+        score: s.score + computeDiversityBonus(s.chunk.category as string, candidateCategories),
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    // Post-ranking diversity filter: max 2 chunks per document
+    const scored = applyDiversityFilter(diversified, maxChunks);
 
     if (scored.length === 0) return "";
 
@@ -528,7 +624,7 @@ export async function getRelevantResearchContextWithChunks(
 
     const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
 
-    const scored = rawChunks
+    const baseScored = rawChunks
       .map((chunk) => {
         const doc = docMap.get(chunk.documentId);
         const breakdown = scoreChunk(
@@ -548,9 +644,19 @@ export async function getRelevantResearchContextWithChunks(
         );
         return { chunk, breakdown, score: breakdown.finalScore };
       })
-      .filter((s) => s.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, maxChunks);
+      .filter((s) => s.score > 0);
+
+    // Category diversity bonus: +1 tie-breaker when complementary categories co-exist in pool
+    const candidateCategories = new Set(baseScored.map((s) => (s.chunk.category as string) ?? ""));
+    const diversified = baseScored
+      .map((s) => {
+        const bonus = computeDiversityBonus(s.chunk.category as string, candidateCategories);
+        return { ...s, score: s.score + bonus, breakdown: { ...s.breakdown, diversityBonus: bonus } };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    // Post-ranking diversity filter: max 2 chunks per document
+    const scored = applyDiversityFilter(diversified, maxChunks);
 
     if (scored.length === 0) return { text: "", chunks: [] };
 
@@ -614,7 +720,8 @@ export async function getRelevantResearchContextWithChunks(
     const text = lines.join("\n");
 
     // ── Retrieval observability log ───────────────────────────────────────────
-    // Full score breakdown per chunk — makes ranking debuggable.
+    // Full score breakdown per chunk + composition summary for diversity auditing.
+    const composition = buildRetrievalComposition(scored, docMap);
     logger.info(
       {
         event: "research_retrieval_hit",
@@ -624,6 +731,12 @@ export async function getRelevantResearchContextWithChunks(
         contextTags,
         chunksRetrieved: retrievedChunks.length,
         docIds: [...seenDocIds],
+        // Diversity composition
+        uniqueDocuments: composition.uniqueDocuments,
+        chunksPerDocument: composition.chunksPerDocument,
+        categorySpread: composition.categories,
+        evidenceTypeSpread: composition.evidenceTypes,
+        // Per-chunk score breakdown
         scoreBreakdowns: scored.map((s) => ({
           chunkId: s.breakdown.chunkId,
           documentId: s.breakdown.documentId,
@@ -635,10 +748,10 @@ export async function getRelevantResearchContextWithChunks(
           injuryBoost: s.breakdown.injuryBoost,
           populationBoost: s.breakdown.populationBoost,
           warningPenalty: s.breakdown.warningPenalty,
-          finalScore: s.breakdown.finalScore,
+          diversityBonus: s.breakdown.diversityBonus,
+          finalScore: s.score,
         })),
         trustLevels: retrievedChunks.map((c) => c.trustLevel),
-        categories: [...new Set(retrievedChunks.map((c) => c.category))],
         warningFlagsPresent: retrievedChunks.flatMap((c) => c.warningFlags).filter(Boolean),
       },
       "[ResearchRetriever] Retrieval hit",

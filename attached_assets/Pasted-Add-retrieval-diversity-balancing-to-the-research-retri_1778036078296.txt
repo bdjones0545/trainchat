@@ -1,0 +1,113 @@
+Add retrieval diversity balancing to the research retriever.
+
+Goal:
+Prevent one document from monopolizing the retrieved context window while still preserving ranking quality.
+
+Do not redesign retrieval scoring.
+Do not weaken evidence weighting.
+This is a post-ranking diversity balancing layer only.
+
+1. Add per-document chunk cap
+
+Rule:
+- maximum 2 chunks per document in final retrieval output
+
+Behavior:
+- rank chunks normally first
+- after ranking, apply diversity filter
+- skip additional chunks from the same document after 2 are selected
+- continue walking ranked list until target chunk count reached
+
+Acceptance:
+- multi-source retrieval context
+- no single paper dominates the prompt
+- strongest papers can still contribute multiple chunks
+
+2. Preserve strongest chunk first
+
+When multiple chunks from same document compete:
+- highest scoring chunk always survives
+- secondary chunk survives only if still within cap
+
+Acceptance:
+- best chunk from each paper retained
+
+3. Add optional category diversity bonus
+
+If final retrieval set contains:
+- strength + recovery
+- rehab + programming
+- speed + fatigue
+- hypertrophy + volume/frequency
+
+Add small retrieval diversity bonus:
++1 contextual diversity score
+
+This should only affect tie-breaks, not override core evidence quality.
+
+Acceptance:
+- broader context when scores are close
+- no random low-quality chunk promotion
+
+4. Add retrieval composition logging
+
+Extend retrieval logs with:
+- unique document count
+- chunks per document
+- category spread
+- evidence-type spread
+
+Example:
+{
+  uniqueDocuments: 4,
+  chunksPerDocument: {
+    "26": 2,
+    "28": 1,
+    "34": 1
+  },
+  categories: ["hypertrophy", "recovery", "conditioning"],
+  evidenceTypes: ["meta_analysis", "guideline", "review"]
+}
+
+Acceptance:
+- retrieval diversity measurable in logs
+
+5. Add retrieval QA tests
+
+Test:
+“Build a muscle growth program”
+
+Expected:
+- no more than 2 chunks from same Schoenfeld paper
+- at least 2 unique documents represented
+- evidence hierarchy preserved
+
+Test:
+“Return to training after knee pain”
+
+Expected:
+- ACL guideline + tendon/recovery paper combination
+- not 4 chunks from same ACL paper
+
+Test:
+“Combine strength and conditioning”
+
+Expected:
+- concurrent training + fatigue/recovery context both present
+
+6. Keep hard priorities intact
+
+Do NOT:
+- weaken evidence weighting
+- weaken warning penalties
+- weaken trust hierarchy
+- weaken foundational handling
+
+Evidence quality still wins first.
+Diversity balancing only happens after ranking.
+
+Final QA:
+- retrieval quality improves
+- prompt context becomes broader
+- Coach responses become more nuanced
+- no evidence regression
