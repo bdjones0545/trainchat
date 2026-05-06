@@ -1,0 +1,252 @@
+Run a universal root-cause audit for why TrainChat main chat commands are not reliably mutating programs.
+
+Do not modify code yet. Audit only.
+
+Problem:
+Main chat should be the CEO brain. Any clear training-system command should either:
+1. apply a mutation,
+2. ask a useful clarification,
+3. or clearly say it could not change the program.
+
+It should never:
+- lose the original command after a clarification
+- classify a scope-only answer like “Day 1” as standalone NO_OP
+- say it applied a change when actionType is NO_OP
+- route clear edit commands to guidance only
+
+Current confirmed failure:
+User: “Make this program harder”
+Assistant: asks scope
+User: “Day 1”
+Actual:
+- actionType: NO_OP
+- shouldMutate: false
+- mutationType: none
+- response says it applied a change
+
+This must be fixed for all command families, not just “harder.”
+
+Audit all main-chat command categories:
+
+A. Difficulty / intensity
+- make this harder
+- make this easier
+- increase difficulty
+- lower impact
+- make it less intense
+
+B. Session duration / density
+- make Day 2 shorter
+- make this fit 45 minutes
+- shorten the full program
+- make sessions longer
+
+C. Training quality shifts
+- more explosive
+- more strength
+- more endurance
+- more hypertrophy
+- more athletic
+- more mobility-focused
+
+D. Exercise substitutions
+- replace squats
+- remove all barbell exercises
+- swap this exercise
+- make it knee-friendly
+
+E. Program structure
+- progress this for 4 weeks
+- make it 4 days
+- change to upper/lower
+- add a core finisher
+
+F. Pain / limitation adjustments
+- make this knee-friendly
+- shoulder-friendly version
+- no jumping
+- low back sensitive
+
+G. Equipment constraints
+- home gym version
+- dumbbells only
+- no machines
+- no barbell
+
+H. Scope-only clarification answers
+- Day 1
+- Day 2
+- Week 1
+- full program
+- all days
+- this session
+- this exercise
+
+Goal:
+Find the exact point where main-chat commands lose mutation intent or fail to execute.
+
+Audit pipeline:
+
+1. Command detection
+For each category above, inspect:
+- normalizeToIntentFamily
+- classifyIntent
+- buildExecutionPlan
+- action-contract builder
+- execution planner decision branches
+
+Return which commands currently map to:
+- APPLY_MUTATION
+- ASK_CLARIFICATION
+- REBUILD_PROGRAM
+- GUIDANCE
+- NO_OP
+
+2. Pending clarification lifecycle
+For any command that asks clarification:
+Confirm:
+- pending record is written
+- pending record includes originalMessage
+- original intent/mutation family is saved
+- target scope options are saved
+- conversation/user scoping is correct
+- record is not cleared too early
+- expiration is reasonable
+
+3. Clarification follow-up handling
+Confirm follow-up replies are interpreted as missing parameters, not standalone commands.
+
+Examples:
+
+Original:
+“Make this program harder”
+Follow-up:
+“Day 1”
+Expected reconstructed request:
+“Make this program harder on Day 1”
+
+Original:
+“Remove barbell exercises”
+Follow-up:
+“The full program”
+Expected:
+“Remove barbell exercises across the full program”
+
+Original:
+“Make this more explosive”
+Follow-up:
+“Week 1”
+Expected:
+“Make this more explosive in Week 1”
+
+Original:
+“Make this knee-friendly”
+Follow-up:
+“Day 2”
+Expected:
+“Make this knee-friendly on Day 2”
+
+4. Planner handoff
+Confirm the reconstructed request is what gets passed to buildExecutionPlan and edit execution.
+
+Expected:
+plannerInput = reconstructedRequest
+
+Not:
+plannerInput = raw followup only
+
+5. Universal deterministic fallback
+Identify where to add one fallback layer:
+
+If pending clarification exists AND originalIntent is a known mutation family AND follow-up resolves scope:
+- skip normal NO_OP classification
+- force APPLY_MUTATION
+- pass reconstructedRequest to the edit/refinement engine
+
+Known mutation families:
+- increase_difficulty
+- reduce_difficulty
+- reduce_time
+- increase_time
+- power_explosive_focus
+- strength_focus
+- conditioning_focus
+- hypertrophy_focus
+- lower_impact
+- home_gym
+- limited_space
+- equipment_constraint
+- remove_exercise_family
+- replace_exercise
+- add_exercise
+- add_finisher
+- progress_program
+- change_split
+- pain_modification
+- mobility_focus
+
+6. Response truth enforcement
+Audit response-alignment-verifier and Agent Turn Report.
+
+Hard rule:
+If no mutation happened:
+- no “applied”
+- no “updated”
+- no “processed your request”
+- no “check the Program tab”
+- no green PASS when response claims mutation
+
+If response claims mutation:
+Required:
+- actionType must be mutation route
+- shouldMutate = true
+- systemEdit.applied = true
+- persistenceType != none
+
+7. Add command matrix tests
+
+Create tests for the following:
+
+Clarification follow-up tests:
+- “Make this program harder” → “Day 1”
+- “Make this easier” → “full program”
+- “Make this more explosive” → “Week 1”
+- “Remove all barbell exercises” → “full program”
+- “Make this knee-friendly” → “Day 2”
+- “Make this fit 45 minutes” → “all sessions”
+
+Direct command tests:
+- “Make Day 2 shorter”
+- “Add a core finisher”
+- “Replace squats with knee-friendly options”
+- “Progress this for 4 weeks”
+- “Make it dumbbells only”
+- “No jumping”
+
+For each test assert:
+- expected action
+- expected scope
+- shouldMutate
+- mutationType
+- reconstructedRequest if clarification follow-up
+- no false success language
+
+8. Output report
+Return:
+- command matrix PASS/FAIL
+- exact failure point for each failed family
+- root cause classification:
+  A. command not recognized
+  B. clarification not written
+  C. clarification not read
+  D. reconstruction failed
+  E. reconstructed request not passed forward
+  F. planner misclassified
+  G. edit engine failed
+  H. response falsely claimed mutation
+- minimal implementation plan
+- highest-risk files/functions
+
+Important:
+Do not patch one command at a time.
+The fix should create a universal clarification → reconstructed request → mutation pipeline for all main-chat commands.
