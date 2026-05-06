@@ -566,7 +566,7 @@ export async function sendWeekTransitionEmail(payload: WeekTransitionPayload): P
       </p>
     </div>
     <div style="text-align:center;margin-bottom:24px">
-      ${ctaButton("See Week ${payload.weekNumber}", process.env.CLIENT_URL ?? "https://trainchat.ai")}
+      ${ctaButton(`See Week ${payload.weekNumber}`, process.env.CLIENT_URL ?? "https://trainchat.ai")}
     </div>`;
   const html = userLayout(`Week ${payload.weekNumber} of your program is ready — TrainChat`, body);
   return deliver(

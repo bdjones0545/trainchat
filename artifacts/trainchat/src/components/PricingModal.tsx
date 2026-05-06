@@ -1,5 +1,6 @@
 import { X, Zap, Check, Star, Crown, Loader2 } from "lucide-react";
 import { useState } from "react";
+import { analytics } from "@/lib/analytics";
 
 interface Plan {
   id: string;
@@ -94,6 +95,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
     }
 
     setLoadingPlan(plan.id);
+    analytics.track("checkout_started", { plan: plan.id, billing });
     try {
       const r = await fetch("/api/billing/create-checkout-session", {
         method: "POST",

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Loader2, ArrowRight } from "lucide-react";
+import { analytics } from "@/lib/analytics";
 
 export default function BillingSuccess() {
   const [, navigate] = useLocation();
@@ -34,6 +35,11 @@ export default function BillingSuccess() {
           // Invalidate again after session fetch — webhook may have landed by now
           queryClient.invalidateQueries({ queryKey: ["subscription"] });
           queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+          // Track conversion
+          analytics.track("subscription_activated", {
+            plan: data?.tier ?? "unknown",
+            billing: data?.billingInterval ?? "unknown",
+          });
         })
         .catch(() => setStatus("success"));
 

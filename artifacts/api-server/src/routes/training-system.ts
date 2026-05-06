@@ -554,8 +554,8 @@ router.post("/training-system/advance-week", requireAuth, async (req, res): Prom
       return;
     }
     // P0-5: fire week-transition retention email (idempotent, non-blocking)
-    if (result.newWeekNumber) {
-      fireWeekTransitionEmail(userId, result.newWeekNumber).catch(() => {});
+    if (result.newWeek?.weekNumber) {
+      fireWeekTransitionEmail(userId, result.newWeek.weekNumber).catch(() => {});
     }
     res.json(result);
   } catch (err: any) {

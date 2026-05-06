@@ -576,6 +576,13 @@ export function useStreamMessage(): UseStreamMessageResult {
           }
         }
 
+        // Safety guard: stream ended (done=true) without a 'complete' SSE event.
+        // If phase is still building/acknowledged, unlock the UI so the send
+        // button doesn't stay disabled indefinitely.
+        setState((s) => {
+          if (s.phase === "complete" || s.phase === "error" || s.phase === "idle") return s;
+          return { ...s, phase: "error", error: "Stream ended without a completion event." };
+        });
         return null;
       } catch (err: any) {
         if (err?.name === "AbortError") return null;

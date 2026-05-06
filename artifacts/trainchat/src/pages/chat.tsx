@@ -811,6 +811,7 @@ export default function Chat() {
     if (stream.state.paywallTriggered) {
       setPaywallIsAnon(stream.state.paywallIsAnonymous);
       setShowPaywall(true);
+      analytics.track("paywall_shown", { source: "message_limit", isAnon: stream.state.paywallIsAnonymous });
     }
   }, [stream.state.paywallTriggered, stream.state.paywallIsAnonymous]);
 
@@ -2554,7 +2555,7 @@ export default function Chat() {
           onSave={latestProgram && !isSaved ? handleSaveClick : undefined}
           onFeedback={() => { setShowFeedback(true); setMobilePanel(null); }}
           onLogSession={() => { setShowSessionLog(true); setMobilePanel(null); }}
-          onUpgrade={() => { setShowPricing(true); setMobilePanel(null); }}
+          onUpgrade={() => { analytics.track("pricing_modal_opened", { source: "mobile_panel_upgrade" }); setShowPricing(true); setMobilePanel(null); }}
           onSendMessage={(msg, opts) => handleSend(msg, opts)}
           onClose={() => setMobilePanel(null)}
           isSaving={!!latestProgram && isSaving}
@@ -2680,6 +2681,7 @@ export default function Chat() {
             if (paywallIsAnon) {
               setLocation("/register?from=paywall");
             } else {
+              analytics.track("pricing_modal_opened", { source: "paywall_upgrade" });
               setShowPricing(true);
             }
           }}
@@ -3416,7 +3418,7 @@ export default function Chat() {
                           <p className="text-sm text-muted-foreground leading-relaxed">
                             {copy}{" "}
                             <button
-                              onClick={() => setShowPaywall(true)}
+                              onClick={() => { setShowPaywall(true); analytics.track("paywall_shown", { source: "countdown_nudge" }); }}
                               className="text-primary font-semibold hover:underline"
                             >
                               Save your system free →
@@ -3675,7 +3677,7 @@ export default function Chat() {
                   onSave={latestProgram && !isSaved ? handleSaveClick : undefined}
                   onFeedback={() => setShowFeedback(true)}
                   onLogSession={() => setShowSessionLog(true)}
-                  onUpgrade={() => setShowPricing(true)}
+                  onUpgrade={() => { analytics.track("pricing_modal_opened", { source: "panel_upgrade_cta" }); setShowPricing(true); }}
                   onSendMessage={(msg, opts) => handleSend(msg, opts)}
                   onClose={() => setRightPanelOpen(false)}
                   isSaving={!!latestProgram && isSaving}
