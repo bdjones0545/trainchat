@@ -1615,6 +1615,10 @@ Keep it helpful and intelligent, never promotional.`;
       "[MutationEngine] Entering mutation mode — deterministic edit, no AI interpretation"
     );
 
+    // Declared outside the try block so the catch can inspect whether the DB
+    // write succeeded even when subsequent response-generation steps throw.
+    let changeLogId: number | null = null;
+
     try {
       // ── 1. Load full training system for DB pipeline ───────────────────────
       const [directFullSystem, directDecisionMemory] = await Promise.all([
@@ -2170,7 +2174,7 @@ Keep it helpful and intelligent, never promotional.`;
         context: "non-SSE:direct_edit",
       });
 
-      const changeLogId = await createChangeLogEntry({
+      changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: resolvedSystem.id,
         source: "ai_edit",
@@ -2212,16 +2216,24 @@ Keep it helpful and intelligent, never promotional.`;
       const directTargetNames = directEditResult.changeTargets
         .flatMap((t) => [t.originalExercise, t.newExercise])
         .filter((n): n is string => !!n);
-      const directImpact = await processSessionScopeImpact({
-        userMessage: parsed.data.content,
-        scopeResolution: directScopeResolution,
-        editPlan: directEditPlan,
-        immediateChangeSummary: vibeBaseResponse,
-        fullSystem: directFullSystem ?? { phases: [] },
-        currentWeekNumber: directCurrentWeek,
-        targetExerciseNames: directTargetNames,
-      });
-      const coachingContentRaw = directImpact.coachResponse;
+      // Wrap processSessionScopeImpact so a coaching-response failure never
+      // converts a successful DB write into a user-facing error.
+      let coachingContentRaw: string;
+      try {
+        const directImpact = await processSessionScopeImpact({
+          userMessage: parsed.data.content,
+          scopeResolution: directScopeResolution,
+          editPlan: directEditPlan,
+          immediateChangeSummary: vibeBaseResponse,
+          fullSystem: directFullSystem ?? { phases: [] },
+          currentWeekNumber: directCurrentWeek,
+          targetExerciseNames: directTargetNames,
+        });
+        coachingContentRaw = directImpact.coachResponse;
+      } catch (impactErr: unknown) {
+        logger.warn({ impactErr }, "[VibeEdit] processSessionScopeImpact failed — using fallback coaching response");
+        coachingContentRaw = vibeBaseResponse;
+      }
       const _mutationConfidenceLine = buildConfidenceLine({
         hardConstraints: hardConstraintsNonSSE,
         equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
@@ -2296,9 +2308,37 @@ Keep it helpful and intelligent, never promotional.`;
       return;
 
     } catch (err: any) {
-      logger.error({ err: err?.message, stack: err?.stack }, "[VibeEdit] DB pipeline threw — returning error response");
-      // Contextual error message based on what was being attempted
-      const editIntent = (err as any)?._editIntent ?? execPlan.intentFamily ?? execPlan.mutation?.type ?? "edit";
+      logger.error({ err: err?.message, stack: err?.stack, changeLogId }, "[VibeEdit] DB pipeline threw — returning error response");
+
+      // [MutationResponse] mismatch_detected guard:
+      // If changeLogId is already set the DB write succeeded — a later step (coaching
+      // response generation, message insert, etc.) threw. Return a success envelope
+      // so the frontend shows success and refetches the updated program.
+      if (changeLogId !== null) {
+        logger.warn(
+          { changeLogId, err: err?.message },
+          "[MutationResponse] mismatch_detected — DB write succeeded but response-generation threw; returning success envelope",
+        );
+        const fallbackContent = `Done — your program has been updated.`;
+        const [successMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: fallbackContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          outcomeType: "mutation_applied",
+          userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+          assistantMessage: { id: successMsg.id, conversationId: successMsg.conversationId, role: successMsg.role, content: successMsg.content, createdAt: successMsg.createdAt.toISOString(), structuredData: null },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+          systemEdit: { applied: true, changeLogId },
+        });
+        return;
+      }
+
+      // True failure — DB write never happened.
       const structuralOp = execPlan.mutation?.type === "add"
         ? "add that exercise"
         : execPlan.mutation?.type === "remove"
@@ -3977,6 +4017,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       return;
     }
 
+    // Declared outside the try block so the catch can inspect whether the DB
+    // write succeeded even when subsequent response-generation steps throw.
+    let changeLogId: number | null = null;
+
     try {
       // ── Stage: Planning ────────────────────────────────────────────────────
       emit(buildStageEvent("planning", intentResult.type, execPlan.action, _narrationCtx));
@@ -4249,7 +4293,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       emit(buildStageEvent("validating", intentResult.type, execPlan.action, _narrationCtx));
       const streamVerification = streamEditResult.verification;
 
-      if (streamVerification.status === "failed") {
+      // Guard: only treat verification failure as a user-facing error when NOTHING
+      // was written to the DB. If appliedCount > 0 the change is already persisted —
+      // skip the failure branch and continue to createChangeLogEntry + success path.
+      if (streamVerification.status === "failed" && streamEditResult.appliedCount === 0) {
         const failedContent = `I tried applying that change but it didn't land cleanly. Could you give me a bit more direction — the specific exercise name, which day it's in, or exactly what you'd like to change?`;
         const [failedMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
@@ -4310,7 +4357,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         context: "SSE:direct_edit",
       });
 
-      const changeLogId = await createChangeLogEntry({
+      changeLogId = await createChangeLogEntry({
         userId,
         trainingSystemId: resolvedSystem.id,
         source: "ai_edit",
@@ -4352,16 +4399,24 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       const streamTargetNames = streamEditResult.changeTargets
         .flatMap((t) => [t.originalExercise, t.newExercise])
         .filter((n): n is string => !!n);
-      const streamImpact = await processSessionScopeImpact({
-        userMessage: parsed.data.content,
-        scopeResolution: streamScopeResolution,
-        editPlan: streamEditPlan,
-        immediateChangeSummary: streamVibeBaseResponse,
-        fullSystem: streamFullSystem ?? { phases: [] },
-        currentWeekNumber: streamCurrentWeek,
-        targetExerciseNames: streamTargetNames,
-      });
-      const coachingContentRaw = streamImpact.coachResponse;
+      // Wrap processSessionScopeImpact so a coaching-response failure never
+      // converts a successful DB write into a user-facing error.
+      let coachingContentRaw: string;
+      try {
+        const streamImpact = await processSessionScopeImpact({
+          userMessage: parsed.data.content,
+          scopeResolution: streamScopeResolution,
+          editPlan: streamEditPlan,
+          immediateChangeSummary: streamVibeBaseResponse,
+          fullSystem: streamFullSystem ?? { phases: [] },
+          currentWeekNumber: streamCurrentWeek,
+          targetExerciseNames: streamTargetNames,
+        });
+        coachingContentRaw = streamImpact.coachResponse;
+      } catch (impactErr: unknown) {
+        logger.warn({ impactErr }, "[VibeEdit:stream] processSessionScopeImpact failed — using fallback coaching response");
+        coachingContentRaw = streamVibeBaseResponse;
+      }
       const _sseConfidenceLine = buildConfidenceLine({
         hardConstraints: hardConstraintsSSE,
         equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
@@ -4428,8 +4483,33 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       editLock.release();
       return;
     } catch (err: any) {
-      logger.error({ err: err?.message }, "[VibeEdit:stream] DB pipeline threw — returning error response");
-      // Phase 5: Contextual error message based on what was being attempted
+      logger.error({ err: err?.message, changeLogId }, "[VibeEdit:stream] DB pipeline threw — returning error response");
+
+      // [MutationResponse] mismatch_detected guard:
+      // If changeLogId is already set the DB write succeeded — a later step threw.
+      // Return a success envelope so the frontend shows success and refetches.
+      if (changeLogId !== null) {
+        logger.warn(
+          { changeLogId, err: err?.message },
+          "[MutationResponse] mismatch_detected — DB write succeeded but response-generation threw (SSE); returning success envelope",
+        );
+        const fallbackContent = `Done — your program has been updated.`;
+        const [successMsg] = await db.insert(messagesTable).values({
+          conversationId: params.data.id, role: "assistant", content: fallbackContent, structuredData: null,
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        done({
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: successMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "mutation_applied" }),
+          systemEdit: { applied: true, changeLogId },
+        });
+        editLock.release();
+        return;
+      }
+
+      // True failure — DB write never happened.
       const streamStructuralOp = execPlan.mutation?.type === "add"
         ? "add that exercise"
         : execPlan.mutation?.type === "remove"

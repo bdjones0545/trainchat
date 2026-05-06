@@ -1,0 +1,146 @@
+Fix TrainChat mutation success/response mismatch.
+
+Bug:
+Main chat edit actually applies successfully and appears in the Changes tab, but chat still returns:
+“I wasn’t able to apply that change…”
+and the UI shows a red error toast.
+
+Evidence:
+- Changes tab shows new session change entry.
+- Program was modified.
+- Change log entry exists.
+- Chat response still says failure.
+
+Goal:
+If mutation applied and change log exists, the chat response and UI toast must show success, not failure.
+
+Do not change mutation logic.
+Do not change intent routing.
+Fix the response/result handoff.
+
+Audit/fix:
+
+1. Identify source of truth for success
+
+Mutation should be considered successful if ANY are true:
+- editResult.appliedCount > 0
+- systemEdit.applied === true
+- changeLogEntry created
+- changeTargets.length > 0
+- mutation verifier confirmed changed fields
+
+Do not rely only on:
+- AI coaching response text
+- auditReceipt status
+- response alignment result
+- finalResponsePath string
+
+2. Trace response construction after applyEditPlan
+
+Inspect:
+- conversations.ts mutation success path
+- SSE done() payload
+- non-SSE JSON response
+- buildVibeEditCoachingResponse()
+- response-alignment-verifier
+- action-contract enforcement
+- frontend useStreamMessage completion handling
+- toast/error state logic
+
+Find where a successful edit is being converted into failure.
+
+3. Fix backend success envelope
+
+When appliedCount > 0:
+Return/send:
+
+systemEdit: {
+  applied: true,
+  appliedCount,
+  scope,
+  mutationType,
+  changeLogId,
+  changeSummary,
+  changeTargets
+}
+
+Do NOT include:
+- error
+- failed=true
+- outcomeType: "conversation_only"
+- responseType: "guidance_answer"
+
+4. Fix chat response
+
+When appliedCount > 0, response should say something like:
+“I updated Day 1 by reducing volume while keeping the main structure intact.”
+
+Never say:
+- wasn’t able to apply
+- program hasn’t been modified
+- try being specific
+
+5. Fix frontend toast logic
+
+Frontend should show red toast only if:
+- systemEdit.applied === false
+AND no changeLogId
+AND appliedCount === 0
+
+If systemEdit.applied === true:
+- show success banner/toast
+- invalidate/refetch program + history
+- no red error toast
+
+6. Fix audit receipt mismatch
+
+If mutation applied but auditReceipt says failure:
+- auditReceipt should be downgraded to warning, not drive user-facing failure.
+- User-facing success should follow mutation outcome.
+
+7. Add logs
+
+Add structured logs:
+[MutationResponse] success_envelope_built
+[MutationResponse] mismatch_detected
+[MutationResponse] frontend_error_despite_success
+
+Log:
+- appliedCount
+- systemEdit.applied
+- changeLogId
+- responseText
+- toastType
+- auditReceiptStatus
+
+8. QA tests
+
+Test A:
+“Make Day 1 easier”
+Expected:
+- Changes tab entry created
+- chat says success
+- no red toast
+- systemEdit.applied = true
+
+Test B:
+“Make Day 1 harder”
+Expected:
+- same success behavior
+
+Test C:
+Force appliedCount = 0
+Expected:
+- no change log
+- failure message
+- red toast allowed
+
+Test D:
+Mutation succeeds but response alignment warning occurs
+Expected:
+- program success shown
+- warning only in dev/audit, not user-facing failure
+
+Important:
+Program mutation outcome is the source of truth.
+If DB changed successfully, never tell the user it failed.
