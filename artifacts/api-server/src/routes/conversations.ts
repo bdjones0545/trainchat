@@ -1879,12 +1879,54 @@ Keep it helpful and intelligent, never promotional.`;
         (directFullSystem as any).bannedItems = hardConstraintsNonSSE.bannedItems;
       }
 
+      // ── [MutationTrace] STEP 1+6 — direct vibe edit entry (non-SSE) ─────────
+      logger.info(
+        {
+          path:                "non-SSE:direct_vibe_edit",
+          originalUserMessage: parsed.data.content.slice(0, 200),
+          intentFamily:        execPlan.intentFamily ?? null,
+          mutationType:        execPlan.mutation?.type ?? null,
+          targetScope: {
+            type:         execPlan.scope.type,
+            dayIndex:     execPlan.scope.dayIndex ?? null,
+            exerciseName: execPlan.scope.exerciseName ?? null,
+          },
+          resolvedTarget: directTarget
+            ? {
+                resolvedSessionId:   (directTarget as any).sessionId ?? null,
+                resolvedSessionName: (directTarget as any).sessionLabel ?? null,
+                exerciseCountFound:  (directTarget as any).exerciseCount ?? null,
+              }
+            : null,
+          systemId: resolvedSystem.id,
+          systemAutoCreated: systemAutoCreatedForEdit,
+        },
+        "[MutationTrace] ENTRY — direct vibe edit (non-SSE)",
+      );
+
       const directEditPlan = await interpretEditRequest(
         parsed.data.content,
         directFullSystem,
         directTarget,
         adaptationCtx || undefined,
         directDecisionMemory?.decisionMemoryContext || undefined
+      );
+
+      logger.info(
+        {
+          intent:   directEditPlan.intent,
+          scope:    directEditPlan.scope,
+          changes:  directEditPlan.changes.length,
+          systemId: resolvedSystem.id,
+          changeDetail: directEditPlan.changes.map((c) => ({
+            type:         c.type,
+            id:           c.id ?? null,
+            sessionId:    c.sessionId ?? null,
+            exerciseName: c.exercise?.name ?? c.replacement?.name ?? null,
+            updatesKeys:  c.updates ? Object.keys(c.updates) : null,
+          })),
+        },
+        "[MutationTrace] STEP2 — interpretEditRequest complete (non-SSE)",
       );
 
       logger.info(
@@ -4116,12 +4158,54 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         (streamFullSystem as any).bannedItems = hardConstraintsSSE.bannedItems;
       }
 
+      // ── [MutationTrace] STEP 1+6 — direct vibe edit entry (SSE) ─────────────
+      logger.info(
+        {
+          path:                "SSE:direct_vibe_edit",
+          originalUserMessage: parsed.data.content.slice(0, 200),
+          intentFamily:        execPlan.intentFamily ?? null,
+          mutationType:        execPlan.mutation?.type ?? null,
+          targetScope: {
+            type:         execPlan.scope.type,
+            dayIndex:     execPlan.scope.dayIndex ?? null,
+            exerciseName: execPlan.scope.exerciseName ?? null,
+          },
+          resolvedTarget: streamTarget
+            ? {
+                resolvedSessionId:   (streamTarget as any).sessionId ?? null,
+                resolvedSessionName: (streamTarget as any).sessionLabel ?? null,
+                exerciseCountFound:  (streamTarget as any).exerciseCount ?? null,
+              }
+            : null,
+          systemId: resolvedSystem.id,
+          systemAutoCreated: systemAutoCreatedForEdit,
+        },
+        "[MutationTrace] ENTRY — direct vibe edit (SSE)",
+      );
+
       const streamEditPlan = await interpretEditRequest(
         parsed.data.content,
         streamFullSystem,
         streamTarget,
         adaptationCtx || undefined,
         streamDecisionMemory?.decisionMemoryContext || undefined
+      );
+
+      logger.info(
+        {
+          intent:   streamEditPlan.intent,
+          scope:    streamEditPlan.scope,
+          changes:  streamEditPlan.changes.length,
+          systemId: resolvedSystem.id,
+          changeDetail: streamEditPlan.changes.map((c) => ({
+            type:         c.type,
+            id:           c.id ?? null,
+            sessionId:    c.sessionId ?? null,
+            exerciseName: c.exercise?.name ?? c.replacement?.name ?? null,
+            updatesKeys:  c.updates ? Object.keys(c.updates) : null,
+          })),
+        },
+        "[MutationTrace] STEP2 — interpretEditRequest complete (SSE)",
       );
 
       logger.info(

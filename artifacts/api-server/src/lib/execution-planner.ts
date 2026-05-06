@@ -664,18 +664,22 @@ export async function buildExecutionPlan({
     }
   }
 
-  logger.debug(
+  logger.info(
     {
       conversationId,
       userId,
-      action: plan.action,
-      intentFamily: plan.intentFamily,
-      scope: plan.scope,
-      mutationType: plan.mutation?.type ?? null,
-      reasoning: plan.reasoning,
+      action:           plan.action,
+      intentFamily:     plan.intentFamily,
+      scope:            plan.scope,
+      mutationType:     plan.mutation?.type ?? null,
+      mutationParams:   plan.mutation?.params ?? null,
+      reasoning:        plan.reasoning,
       intentConfidence: intentResult.confidence,
+      intentRaw:        intentResult.family,
+      hasProgram:       !!program,
+      messagePreview:   message.slice(0, 120),
     },
-    "[ExecutionPlanner] Plan resolved"
+    "[MutationTrace] ExecutionPlanner — plan resolved",
   );
 
   return plan;

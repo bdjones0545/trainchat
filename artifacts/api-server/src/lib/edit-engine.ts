@@ -1336,6 +1336,33 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
   // Phase 4: Capture state BEFORE applying changes
   const beforeSnapshot = await captureBeforeSnapshot(plan);
 
+  // ── [MutationTrace] STEP 1 — Full edit execution entry log ────────────────
+  const _traceBeforeExerciseCount = Object.keys(beforeSnapshot.exercises).length;
+  const _traceBeforeSessionCount  = Object.keys(beforeSnapshot.sessions).length;
+  const _traceBeforeExerciseNames = Object.values(beforeSnapshot.exercises)
+    .map((e: any) => e?.name ?? null).filter(Boolean).slice(0, 20);
+
+  logger.info(
+    {
+      intentFamily:         intentFamily ?? null,
+      planIntent:           plan.intent,
+      planScope:            plan.scope,
+      operationsGenerated:  plan.changes.length,
+      changeTypes:          plan.changes.map((c) => c.type),
+      targetedExerciseIds:  plan.changes.map((c) => c.id ?? null),
+      targetedExerciseNames: plan.changes
+        .map((c) => c.exercise?.name ?? c.replacement?.name ?? (c.id ? `id:${c.id}` : null))
+        .filter(Boolean),
+      targetedSessionIds:   [...new Set(plan.changes.map((c) => c.sessionId ?? null).filter(Boolean))],
+      beforeSnapshot: {
+        exerciseCount: _traceBeforeExerciseCount,
+        sessionCount:  _traceBeforeSessionCount,
+        exerciseNames: _traceBeforeExerciseNames,
+      },
+    },
+    "[MutationTrace] ENTRY — edit plan received by applyEditPlan",
+  );
+
   // Phase 7 — [Program Mutation Attempt] log
   const structuralOps = plan.changes
     .filter((c) => c.type === "add_exercise" || c.type === "delete_exercise" || c.type === "replace_exercise")
@@ -1410,6 +1437,44 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
         details:      results.map((r) => r.detail),
       },
       "[Program Mutation Failure]",
+    );
+
+    // ── [MutationTrace] STEP 3 — appliedCount=0 failure classification ──────
+    const _traceDetails = results.map((r) => r.detail);
+    const _traceEmptyPlan     = plan.changes.length === 0;
+    const _traceNotFound      = _traceDetails.some((d) => /not found|missing sessionId|missing.*name/i.test(d));
+    const _traceBlocked       = _traceDetails.some((d) => /blocked|no valid non-duplicate|unapproved|generic_name/i.test(d));
+    const _traceNoAllowed     = _traceDetails.some((d) => /no allowed fields|no updates/i.test(d));
+    const _traceUnknownType   = _traceDetails.some((d) => /unknown change type/i.test(d));
+    const _traceError         = _traceDetails.some((d) => /error applying/i.test(d));
+
+    const reasonCategory: string =
+      _traceEmptyPlan   ? "EMPTY_EDIT_PLAN" :
+      _traceNotFound    ? "NO_MATCHING_TARGET" :
+      _traceBlocked     ? "UNSUPPORTED_MUTATION" :
+      _traceNoAllowed   ? "SCOPE_RESOLUTION_FAILED" :
+      _traceUnknownType ? "UNSUPPORTED_MUTATION" :
+      _traceError       ? "UNKNOWN" :
+                          "UNKNOWN";
+
+    logger.warn(
+      {
+        reasonCategory,
+        mutationType:         plan.intent,
+        scope:                plan.scope,
+        operationsGenerated:  plan.changes.length,
+        targetedExercises:    plan.changes
+          .map((c) => c.exercise?.name ?? c.replacement?.name ?? (c.id ? `id:${c.id}` : null))
+          .filter(Boolean),
+        perChangeResults: results.map((r, i) => ({
+          changeType: plan.changes[i]?.type ?? "unknown",
+          exerciseId: plan.changes[i]?.id ?? null,
+          sessionId:  plan.changes[i]?.sessionId ?? null,
+          applied:    r.applied,
+          detail:     r.detail,
+        })),
+      },
+      "[MutationTrace] ZERO_APPLIED — failure classification",
     );
   }
 
@@ -1554,6 +1619,28 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
 
   // Phase 2: Verify that the intended changes are actually present in the post-mutation state
   const verification = verifyMutation(plan, beforeSnapshot, afterSnapshot, results);
+
+  // ── [MutationTrace] STEP 5 — pre/post verification detail ────────────────
+  const _traceAfterExerciseNames = Object.values(afterSnapshot.exercises)
+    .map((e: any) => e?.name ?? null).filter(Boolean).slice(0, 20);
+  logger.info(
+    {
+      preVerificationAppliedCount:  appliedCount,
+      postVerificationAppliedCount: appliedCount,
+      verificationStatus:           verification.status,
+      verifiedChangesCount:         verification.verifiedChanges.length,
+      missingChangesCount:          verification.missingChanges.length,
+      requiresReview:               verification.requiresReview ?? false,
+      verifiedChanges:              verification.verifiedChanges.slice(0, 10),
+      missingChanges:               verification.missingChanges.slice(0, 10),
+      afterSnapshot: {
+        exerciseCount: Object.keys(afterSnapshot.exercises).length,
+        exerciseNames: _traceAfterExerciseNames,
+      },
+    },
+    "[MutationTrace] STEP5 — verification complete",
+  );
+
   logger.info(
     { status: verification.status, verified: verification.verifiedChanges.length, missing: verification.missingChanges.length, requiresReview: verification.requiresReview ?? false, intent: plan.intent },
     "[MutationVerifier] Verification complete"
@@ -1624,6 +1711,30 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
     propagationSuffix = ` Applied to ${totalPropagated} additional week${totalPropagated !== 1 ? "s" : ""} across the program.`;
   }
   const finalChangeSummary = (plan.changeSummary + identitySuffix + propagationSuffix).trim();
+
+  // ── [MutationTrace] EXIT — final summary ──────────────────────────────────
+  const _traceResponsePath =
+    appliedCount === 0                          ? "ZERO_APPLIED" :
+    verification.status === "failed"            ? "VERIFICATION_FAILED" :
+                                                  "SUCCESS";
+
+  logger.info(
+    {
+      finalResponsePath:       _traceResponsePath,
+      appliedCount,
+      skippedCount,
+      verificationStatus:      verification.status,
+      changeTargets:           changeTargets.map((t) => ({
+        type:             t.type,
+        originalExercise: t.originalExercise ?? null,
+        newExercise:      t.newExercise,
+      })),
+      identityPatchCount:      identityPatches.length,
+      propagationStatus:       aggregatePropagationSummary?.status ?? "local_only",
+      changeSummary:           finalChangeSummary.slice(0, 200),
+    },
+    "[MutationTrace] EXIT — applyEditPlan complete",
+  );
 
   return {
     appliedCount,
