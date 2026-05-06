@@ -1,0 +1,257 @@
+Make TrainChat main-chat mutation confirmation global.
+
+Problem:
+Some main-chat commands now mutate and confirm correctly, but others route as MUTATE_ACTIVE_PROGRAM / shouldMutate=true and still end with:
+actualTurnOutcome = no_state_change
+or unclear failure.
+
+This creates inconsistent behavior:
+- some edits apply
+- some don't
+- some fail without a useful reason
+- Agent Turn Report can still PASS even when shouldMutate=true but no state changed
+
+Goal:
+Create one global mutation outcome contract for all main-chat commands.
+
+Do not patch individual commands one by one.
+Do not redesign the whole agent.
+Add a universal outcome finalizer for mutation turns.
+
+====================================
+GLOBAL RULE
+====================================
+
+If actionContract.shouldMutate === true:
+
+The turn must end as one of:
+
+A. mutation_applied
+Required:
+- appliedCount > 0 OR changeLogId exists OR changeTargets.length > 0
+- systemEdit.applied = true
+- user-facing response confirms the edit
+- no red error toast
+
+B. mutation_not_applied_with_reason
+Required:
+- appliedCount === 0
+- no changeLogId
+- systemEdit.applied = false
+- user-facing response explains why:
+  - unsupported command
+  - no matching target
+  - scope not found
+  - empty edit plan
+  - verification failed
+  - needs more specificity
+- no success language
+
+There should be no third state:
+shouldMutate=true + no_state_change + PASS
+
+====================================
+PHASE 1 — ADD GLOBAL MUTATION OUTCOME FINALIZER
+====================================
+
+Create a helper:
+
+finalizeMutationOutcome({
+  actionContract,
+  editResult,
+  changeLogId,
+  changeTargets,
+  verification,
+  responseText,
+  error,
+  scope,
+  mutationType,
+  intentFamily
+})
+
+Return:
+{
+  outcomeType:
+    | "mutation_applied"
+    | "mutation_not_applied",
+
+  systemEdit: {
+    applied: boolean,
+    appliedCount,
+    changeLogId,
+    changeTargets,
+    scope,
+    mutationType,
+    intentFamily,
+    failureReason?,
+    warning?
+  },
+
+  safeResponseText,
+  toastType: "success" | "error" | "none",
+  auditStatus: "PASS" | "FAIL" | "WARNING"
+}
+
+Rules:
+- If appliedCount > 0 OR changeLogId OR changeTargets.length > 0:
+  outcomeType = mutation_applied
+- If no mutation happened:
+  outcomeType = mutation_not_applied
+- If response text conflicts with outcome, repair it.
+
+====================================
+PHASE 2 — USE FINALIZER EVERYWHERE
+====================================
+
+Apply it to:
+- non-SSE APPLY_MUTATION path
+- SSE APPLY_MUTATION path
+- CLARIFICATION_FOLLOWUP success path
+- direct chat edit path
+- hierarchical refinement path
+- session-scope edit path
+- exercise swap path if routed through chat
+
+Do not let any path manually decide applied:false after the finalizer.
+
+====================================
+PHASE 3 — AGENT TURN REPORT CONTRACT
+====================================
+
+Update Agent Turn Report enforcement:
+
+If shouldMutate === true:
+- actualTurnOutcome = no_state_change should be FAIL
+- not PASS
+
+If shouldMutate === true and outcomeType = mutation_not_applied:
+- report status = FAIL or WARNING
+- show failureReason
+
+If shouldMutate === true and outcomeType = mutation_applied:
+- report status = PASS
+
+This is important:
+“Contract honored” should not be green unless the expected state change actually happened.
+
+====================================
+PHASE 4 — CLASSIFY NO-CHANGE REASONS
+====================================
+
+Use existing MutationTrace reasonCategory.
+
+Map:
+EMPTY_EDIT_PLAN
+→ "I understood the request, but no executable edit plan was produced."
+
+NO_MATCHING_TARGET
+→ "I couldn't find the exercise or session to change."
+
+UNSUPPORTED_MUTATION
+→ "That edit type isn't supported yet."
+
+SCOPE_RESOLUTION_FAILED
+→ "I couldn't safely identify where to apply the change."
+
+VERIFICATION_FAILED
+→ "The edit did not pass verification, so your program was left unchanged."
+
+UNKNOWN
+→ "I couldn't safely apply that edit."
+
+User-facing copy should be simple:
+"I didn't change your program yet — I couldn't safely identify where to apply that edit."
+
+====================================
+PHASE 5 — RESPONSE TEXT REPAIR
+====================================
+
+If outcomeType = mutation_not_applied:
+Remove/replace:
+- applied
+- updated
+- processed your request
+- check the Program tab
+- what was updated
+- changed your program
+
+Use:
+"I didn't change your program yet — [reason]."
+
+If outcomeType = mutation_applied:
+Do not allow failure copy:
+- wasn't able to apply
+- hasn't been modified
+- try again
+- couldn't apply
+
+Use:
+"Done — I updated [scope] by [summary]."
+
+====================================
+PHASE 6 — FRONTEND TOAST SOURCE OF TRUTH
+====================================
+
+Frontend should use systemEdit.applied as the source of truth.
+
+If systemEdit.applied === true:
+- never show red toast
+- show success/neutral update
+- invalidate program/history
+
+If systemEdit.applied === false:
+- show red toast only if action expected mutation
+- include failureReason if available
+
+Do not derive failure from:
+- response text
+- audit receipt alone
+- stream phase if complete event exists
+
+====================================
+PHASE 7 — TEST MATRIX
+====================================
+
+Test these successful edits:
+1. Make day 1 harder
+2. Make day 1 easier
+3. Add 1 set to every exercise on day 1
+4. Make day 2 shorter
+5. Make this fit 45 minutes
+
+Expected:
+- mutation_applied
+- systemEdit.applied = true
+- Agent Turn Report PASS
+- no red toast
+
+Test these unsupported/no-change edits:
+6. Add more jumps to day 1 when no safe jump insertion recipe exists
+7. Make this program more intense if no intensity recipe exists
+8. Remove exercises that do not exist
+
+Expected:
+- mutation_not_applied
+- systemEdit.applied = false
+- Agent Turn Report not green PASS
+- clear reason
+- no success language
+
+Test side-effect failure:
+9. Force impact explanation failure after DB write
+
+Expected:
+- mutation_applied
+- warning only
+- no red toast
+
+====================================
+FINAL REPORT
+====================================
+
+Return:
+- finalizer file/function added
+- all paths using it
+- before/after behavior
+- test matrix PASS/FAIL
+- any mutation families still unsupported

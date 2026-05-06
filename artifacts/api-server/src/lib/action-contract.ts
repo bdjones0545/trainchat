@@ -620,6 +620,15 @@ export function validateContractCompliance(
     );
   }
 
+  // Check: shouldMutate=true with no mutation and "unable_to_verify" is also a violation.
+  // "unable_to_verify" is only acceptable as a downgrade from a confirmed write (partial
+  // verification). Using it when NO mutation happened hides the failure from the audit.
+  if (contract.shouldMutate && !mutationApplied && actualResponseType === "unable_to_verify") {
+    violations.push(
+      `shouldMutate=true but no mutation was applied — "unable_to_verify" is not an acceptable outcome when mutation was contractually required`
+    );
+  }
+
   // Check: requiredVerification means cannot return "change_confirmed" on "unclear" verification
   if (contract.requiredVerification && verificationStatus === "unclear" && actualResponseType === "change_confirmed") {
     violations.push(

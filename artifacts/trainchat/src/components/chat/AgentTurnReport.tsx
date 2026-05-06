@@ -36,6 +36,12 @@ function derivePersistenceType(actionType: string): string {
 }
 
 function deriveActualTurnOutcome(event: CompleteEvent): string {
+  // mutationOutcome is the authoritative signal for direct-edit paths
+  // (which return before enforceActionContract is called and thus have no auditReceipt).
+  if (event.mutationOutcome) {
+    if (event.mutationOutcome.outcomeType === "mutation_applied") return "mutation_applied";
+    if (event.mutationOutcome.outcomeType === "mutation_not_applied") return "mutation_not_applied_with_reason";
+  }
   const receipt = event.auditReceipt;
   if (!receipt) return event.outcomeType;
   const { outcome } = receipt;
@@ -87,11 +93,12 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
   if (!import.meta.env.DEV) return null;
 
   const receipt = event.auditReceipt;
+  // mutationOutcome: from finalizeMutationOutcome() on direct-edit SSE paths —
+  // the authoritative PASS/FAIL signal when no auditReceipt was generated.
+  const mutationOutcome = event.mutationOutcome ?? null;
 
-  // Suppress the card entirely when there is no receipt and no compliance data —
-  // "NO RECEIPT" is only meaningful to an engineer who triggered the exact failure.
-  // For normal edit-failure paths, the coach-safe message in chat is sufficient.
-  if (!receipt && !panelReceipt) return null;
+  // Suppress the card entirely when there is no compliance data of any kind.
+  if (!receipt && !panelReceipt && !mutationOutcome) return null;
   const contract = receipt?.contract;
   const outcome = receipt?.outcome;
   const compliance = receipt?.compliance;
@@ -100,8 +107,30 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
   // override the status display — program changed is the authoritative signal.
   const panelReconciled = panelReceipt?.programChanged === true;
 
-  const passed = panelReconciled ? true : compliance?.passed;
-  const hasViolations = !panelReconciled && compliance?.violations && compliance.violations.length > 0;
+  // PASS/FAIL precedence:
+  //   panelReconciled (sidebar action) → always PASS
+  //   compliance?.passed (AI-call path audit receipt) → authoritative for that path
+  //   mutationOutcome.auditStatus (direct-edit path) → fallback when no receipt
+  const mutationAuditPassed: boolean | undefined =
+    mutationOutcome
+      ? mutationOutcome.auditStatus === "PASS"
+        ? true
+        : mutationOutcome.auditStatus === "FAIL"
+        ? false
+        : undefined
+      : undefined;
+
+  const passed: boolean | undefined = panelReconciled
+    ? true
+    : compliance?.passed !== undefined
+    ? compliance.passed
+    : mutationAuditPassed;
+
+  const hasViolations =
+    !panelReconciled && (
+      (compliance?.violations && compliance.violations.length > 0) ||
+      (mutationOutcome?.auditStatus === "FAIL")
+    );
 
   const statusColor = panelReconciled
     ? "border-emerald-500/40 bg-emerald-950/30"
@@ -109,7 +138,9 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
     ? "border-emerald-500/40 bg-emerald-950/30"
     : passed === false
     ? "border-red-500/40 bg-red-950/30"
-    : "border-yellow-500/40 bg-yellow-950/20";
+    : mutationOutcome?.auditStatus === "WARNING"
+    ? "border-yellow-500/40 bg-yellow-950/20"
+    : "border-zinc-700/40 bg-zinc-900/20";
 
   const statusIcon = (panelReconciled || passed === true)
     ? <ShieldCheck size={12} className="text-emerald-400" />
@@ -123,6 +154,8 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
     ? "PASS"
     : passed === false
     ? "FAIL"
+    : mutationOutcome?.auditStatus === "WARNING"
+    ? "WARNING"
     : "NO RECEIPT";
 
   const statusLabelColor = (panelReconciled || passed === true)
@@ -137,6 +170,7 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
   const actualTurnOutcome = deriveActualTurnOutcome(event);
   const verificationResult = outcome?.verificationStatus ?? event.systemEdit?.verificationStatus ?? "—";
   const responseType = outcome?.actualResponseType ?? "—";
+  const failureReason = mutationOutcome?.failureReason ?? null;
   const responseShown = event.assistantMessage.content?.slice(0, 180) + (event.assistantMessage.content?.length > 180 ? "…" : "");
   const detectedIntentFamily = event.intentDebug?.type ?? "—";
 
@@ -197,7 +231,7 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
               </Section>
             )}
 
-            {/* Contract pass/fail banner */}
+            {/* Contract pass/fail banner — AI-call path (has auditReceipt) */}
             {!panelReconciled && compliance && (
               <div className={`flex items-start gap-2 rounded p-2 mb-3 text-[10px] ${
                 compliance.passed
@@ -212,6 +246,31 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
                       <ul className="space-y-0.5 list-disc list-inside">
                         {compliance.violations.map((v, i) => <li key={i}>{v}</li>)}
                       </ul>
+                    </div>
+                  )
+                }
+              </div>
+            )}
+
+            {/* Mutation outcome banner — direct-edit path (no auditReceipt, has mutationOutcome) */}
+            {!panelReconciled && !compliance && mutationOutcome && (
+              <div className={`flex items-start gap-2 rounded p-2 mb-3 text-[10px] ${
+                mutationOutcome.auditStatus === "PASS"
+                  ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                  : mutationOutcome.auditStatus === "FAIL"
+                  ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                  : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-400"
+              }`}>
+                {mutationOutcome.auditStatus === "PASS"
+                  ? <span>✓ Mutation applied — DB evidence confirms change.</span>
+                  : mutationOutcome.auditStatus === "WARNING"
+                  ? <span>⚠ Mutation applied but verification was inconclusive.</span>
+                  : (
+                    <div>
+                      <p className="font-semibold mb-1">✗ Mutation not applied</p>
+                      {mutationOutcome.failureReason && (
+                        <p className="text-red-300">{mutationOutcome.failureReason}</p>
+                      )}
                     </div>
                   )
                 }
@@ -272,6 +331,19 @@ export default function AgentTurnReport({ event, panelReceipt }: Props) {
                 </span>
               } />
               <Field label="responseType" value={responseType} />
+              {mutationOutcome && (
+                <Field label="mutationOutcome.appliedCount" value={String(mutationOutcome.systemEdit.appliedCount)} />
+              )}
+              {failureReason && (
+                <Field label="failureReason" mono={false} value={
+                  <span className="text-red-300 italic">{failureReason}</span>
+                } />
+              )}
+              {mutationOutcome?.systemEdit.warning && (
+                <Field label="verificationWarning" mono={false} value={
+                  <span className="text-yellow-300 italic">{mutationOutcome.systemEdit.warning}</span>
+                } />
+              )}
               {receipt?.receiptId && (
                 <Field label="auditReceiptId" value={<span className="text-zinc-400">{receipt.receiptId}</span>} />
               )}

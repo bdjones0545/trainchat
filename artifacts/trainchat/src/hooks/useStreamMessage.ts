@@ -147,6 +147,33 @@ export interface CompleteEvent {
       violations: string[];
     };
   } | null;
+  /**
+   * Global mutation outcome — present on every shouldMutate=true SSE turn.
+   * Produced by finalizeMutationOutcome() in the server route and included in
+   * the complete event so the Agent Turn Report can show PASS/FAIL without
+   * needing a full auditReceipt (which only the AI-call path generates).
+   *
+   * Source-of-truth precedence:
+   *   auditReceipt.compliance (AI path) > mutationOutcome (direct edit path)
+   */
+  mutationOutcome?: {
+    outcomeType: "mutation_applied" | "mutation_not_applied";
+    auditStatus: "PASS" | "FAIL" | "WARNING";
+    failureReason?: string;
+    toastType: "success" | "error" | "none";
+    safeResponseText: string;
+    systemEdit: {
+      applied: boolean;
+      appliedCount: number;
+      changeLogId: number | null;
+      changeTargets: Array<{ type: string }>;
+      scope?: string;
+      mutationType?: string;
+      intentFamily?: string;
+      failureReason?: string;
+      warning?: string;
+    };
+  } | null;
 }
 
 export interface MicroReasonsEvent {

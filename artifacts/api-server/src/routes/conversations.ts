@@ -86,6 +86,7 @@ import {
   buildMutationFailureReceipt,
   type SessionContext,
 } from "../lib/architect-patch-generator";
+import { finalizeMutationOutcome, type MutationOutcomeResult } from "../lib/mutation-outcome-finalizer";
 
 const router: IRouter = Router();
 
@@ -3543,6 +3544,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     changeLogIdVal?: number;
     outcomeTypeVal?: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure";
     auditReceiptVal?: unknown;
+    /** Global mutation outcome from finalizeMutationOutcome() — present on shouldMutate=true paths. */
+    mutationOutcomeVal?: MutationOutcomeResult | null;
   }) {
     const outcomeType: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure" =
       opts.outcomeTypeVal ?? "conversation_only";
@@ -3578,6 +3581,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       systemEdit: opts.systemEditVal,
       changeLogId: opts.changeLogIdVal,
       auditReceipt: opts.auditReceiptVal ?? null,
+      mutationOutcome: opts.mutationOutcomeVal ?? null,
     };
   }
 
@@ -4274,6 +4278,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           streamTarget,
           execPlan.intentFamily,
         );
+        const _noChangeOutcome = finalizeMutationOutcome({
+          appliedCount: 0,
+          changeLogId: null,
+          changeTargets: [],
+          responseText: noChangesContent,
+          editFailureReason: "no_changes_produced",
+          scope: streamEditPlan.scope ?? undefined,
+          mutationType: execPlan.mutation?.type ?? undefined,
+          intentFamily: execPlan.intentFamily ?? undefined,
+        });
         const [noChangesMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
         }).returning();
@@ -4282,9 +4296,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           stripeStorage.incrementMessageCount(userId).catch(() => {});
         }
         done({
-          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noChangesMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }),
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noChangesMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure", mutationOutcomeVal: _noChangeOutcome }),
           systemEdit: { applied: false },
           editFailure: { reason: "no_changes_produced" },
+          mutationOutcome: _noChangeOutcome,
         });
         return;
       }
@@ -4298,6 +4313,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       // skip the failure branch and continue to createChangeLogEntry + success path.
       if (streamVerification.status === "failed" && streamEditResult.appliedCount === 0) {
         const failedContent = `I tried applying that change but it didn't land cleanly. Could you give me a bit more direction — the specific exercise name, which day it's in, or exactly what you'd like to change?`;
+        const _verifyFailOutcome = finalizeMutationOutcome({
+          appliedCount: 0,
+          changeLogId: null,
+          changeTargets: [],
+          responseText: failedContent,
+          reasonCategory: "VERIFICATION_FAILED",
+          scope: streamEditPlan.scope ?? undefined,
+          mutationType: execPlan.mutation?.type ?? undefined,
+          intentFamily: execPlan.intentFamily ?? undefined,
+        });
         const [failedMsg] = await db.insert(messagesTable).values({
           conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
         }).returning();
@@ -4306,9 +4331,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           stripeStorage.incrementMessageCount(userId).catch(() => {});
         }
         done({
-          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
+          ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure", mutationOutcomeVal: _verifyFailOutcome }),
           systemEdit: { applied: false },
           editFailure: { reason: "verification_failed" },
+          mutationOutcome: _verifyFailOutcome,
         });
         return;
       }
@@ -4453,14 +4479,27 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         stripeStorage.incrementMessageCount(userId).catch(() => {});
       }
 
+      const _sseSuccessOutcome = finalizeMutationOutcome({
+        appliedCount: streamEditResult.appliedCount,
+        changeLogId,
+        changeTargets: streamEditResult.changeTargets ?? [],
+        verificationStatus: streamVerification.status,
+        responseText: coachingContent,
+        scope: streamEditPlan.scope ?? undefined,
+        mutationType: execPlan.mutation?.type ?? undefined,
+        intentFamily: execPlan.intentFamily ?? undefined,
+      });
+
       done({
         ...buildCompleteEvent({
           userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo,
           intentResultVal: intentResult, systemSavedVal: systemAutoCreatedForEdit,
           systemIdVal: systemAutoCreatedForEdit ? resolvedSystem.id : undefined,
           outcomeTypeVal: "mutation_applied",
+          mutationOutcomeVal: _sseSuccessOutcome,
         }),
         ...(systemAutoCreatedForEdit ? { trainingSystemId: resolvedSystem.id } : {}),
+        mutationOutcome: _sseSuccessOutcome,
         systemEdit: {
           applied: true,
           route: "direct_edit" as const,
@@ -4519,6 +4558,15 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             : "apply that change";
       const errContent = `I wasn't able to ${streamStructuralOp} — your program hasn't been modified. Try being specific: include the exercise name, which day it's in, and exactly what you'd like changed. If it keeps happening, try opening the session panel and making the change from there.`;
       const streamReceipt = buildMutationFailureReceipt(err?.message ?? "edit_pipeline_error");
+      const _catchFailOutcome = finalizeMutationOutcome({
+        appliedCount: 0,
+        changeLogId: null,
+        changeTargets: [],
+        responseText: errContent,
+        editFailureReason: "edit_pipeline_error",
+        mutationType: execPlan.mutation?.type ?? undefined,
+        intentFamily: execPlan.intentFamily ?? undefined,
+      });
       const [errMsg] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
@@ -4527,10 +4575,11 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         stripeStorage.incrementMessageCount(userId).catch(() => {});
       }
       done({
-        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
+        ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure", mutationOutcomeVal: _catchFailOutcome }),
         systemEdit: { applied: false },
         editFailure: { reason: "edit_pipeline_error" },
         mutationReceipt: streamReceipt,
+        mutationOutcome: _catchFailOutcome,
       });
       editLock.release();
       return;
