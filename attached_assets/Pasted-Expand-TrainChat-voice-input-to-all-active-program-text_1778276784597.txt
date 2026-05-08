@@ -1,0 +1,90 @@
+Expand TrainChat voice input to all active-program text command fields.
+
+Goal:
+Any text input that edits, refines, or commands an active program should support the same voice command behavior:
+- tap mic → dictate/edit/send manually
+- hold mic → speak/release/auto-submit
+
+Apply to:
+- main chat input when active program exists
+- Live Program sidebar refine input
+- session-level refine inputs
+- exercise-level refine/swap/edit inputs
+- any “custom instruction” input inside active program panels
+- any modal input that submits a program mutation
+
+Do not apply to:
+- login/signup fields
+- profile/account fields
+- search fields
+- non-program forms
+- payment/billing fields
+
+Implementation:
+Create a reusable component or wrapper:
+
+ProgramVoiceTextInput
+
+Props:
+- value
+- onChange
+- onSubmit
+- placeholder
+- disabled
+- isSubmitting
+- trainingSystemId
+- conversationId
+- submitSource
+- emptyMessage
+- releaseLabel
+- listeningLabel
+- className
+
+Behavior:
+- Reuse the existing useVoiceCommandInput hook.
+- Reuse the same push-to-talk logic.
+- Reuse the same cleanup lifecycle.
+- Reuse transcript normalization.
+- Keep submit routing scoped to the correct trainingSystemId and conversationId.
+- Never default to newest/global program.
+- Do not duplicate Web Speech API logic in each input.
+
+Submission rules:
+- Typed submit, send button, Enter key, tap-dictated text, and push-to-talk must all call the same onSubmit pipeline for that specific input.
+- Voice should only fill the text field or trigger that field’s existing submit behavior.
+- Voice must not create a separate command route or alternate agent mode.
+
+Lifecycle:
+After successful submit:
+- stop listening
+- abort recognition if needed
+- reset transcript
+- clear input
+- clear PTT refs
+- hide waveform/status strip
+- prevent transcript re-injection during mutation/streaming
+
+If submit fails:
+- preserve text
+- show the existing error state
+
+Dev logging:
+Add temporary logs:
+
+console.log("[Program Voice Text Input Submit]", {
+  source,
+  message,
+  trainingSystemId,
+  conversationId,
+  inputContext,
+});
+
+Acceptance criteria:
+- Main chat voice commands still work.
+- Sidebar refine voice commands work.
+- Session-level text refinements work.
+- Exercise-level text refinements work.
+- “Make day one harder” resolves correctly.
+- “Add two sets to exercise two” resolves correctly.
+- Every mutation targets the currently loaded active program, not the newest global one.
+- No TypeScript errors.

@@ -21,7 +21,6 @@ import {
   Calendar,
   Layers,
   BarChart3,
-  Send,
   RotateCcw,
   CheckCircle2,
   AlertCircle,
@@ -46,6 +45,7 @@ import {
 } from "@/lib/midSessionEngine";
 import CoachInsightCard from "./CoachInsightCard";
 import { getQuickCommands, recordQuickCommandSelection } from "@/lib/quickCommands";
+import { ProgramVoiceTextInput } from "@/components/ui/ProgramVoiceTextInput";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -863,7 +863,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [loggedFeedback, setLoggedFeedback] = useState<FeedbackTag | null>(null);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
   const config = TARGET_CONFIG[target.type];
@@ -893,12 +892,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     return () => cancelAnimationFrame(t);
   }, []);
 
-  // Focus textarea when in input phase (only when logging section is not shown)
-  useEffect(() => {
-    if (visible && phase === "input" && !isExercise) {
-      setTimeout(() => textareaRef.current?.focus(), 200);
-    }
-  }, [visible, phase, isExercise]);
 
   // ── Directions fetch mutation ──
   const directionsMutation = useMutation({
@@ -946,20 +939,12 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
     if (e.target === backdropRef.current) animateClose();
   }
 
-  function handleSubmit() {
-    const trimmed = input.trim();
+  function handleSubmit(overrideMessage?: string) {
+    const trimmed = (overrideMessage ?? input).trim();
     if (!trimmed || directionsMutation.isPending) return;
     setErrorMsg(null);
     setPhase("executing");
     directionsMutation.mutate(trimmed);
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-    if (e.key === "Escape") animateClose();
   }
 
   function handleSuggestion(text: string) {
@@ -971,7 +956,6 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
       userId,
     });
     setInput(text);
-    setTimeout(() => textareaRef.current?.focus(), 50);
   }
 
   function handleSelectDirection(direction: DirectionOption) {
@@ -1118,24 +1102,20 @@ export default function EditDrawer({ target, onClose, onEditComplete, prefillReq
                   <span>Performance logged — agent command pre-filled below</span>
                 </div>
               )}
-              <div className="flex gap-2.5 items-end">
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={`Tell the agent what to change…`}
-                  rows={3}
-                  className="flex-1 bg-muted/30 border border-border rounded-xl px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:border-primary/50 focus:bg-muted/50 transition-all duration-150"
-                />
-                <button
-                  onClick={handleSubmit}
-                  disabled={!input.trim()}
-                  className="w-11 h-11 rounded-xl bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 hover:bg-primary/90 active:scale-95 transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </div>
+              <ProgramVoiceTextInput
+                value={input}
+                onChange={setInput}
+                onSubmit={(msg) => handleSubmit(msg)}
+                placeholder="Tell the agent what to change…"
+                disabled={phase !== "input"}
+                isSubmitting={directionsMutation.isPending || editMutation.isPending}
+                multiline
+                rows={3}
+                submitSource="edit_drawer"
+                inputContext={`${target.type}_command`}
+                releaseLabel="Release to command"
+                listeningLabel="Listening for your command…"
+              />
             </div>
           </div>
         )}
