@@ -199,18 +199,50 @@ export async function decrementTurnsRemaining(id: number): Promise<void> {
  * rather than a new independent intent.
  *
  * Intentionally permissive — short answers, day references, scope words,
- * exercise names, and affirmations all qualify.
+ * exercise names, season/phase answers, equipment answers, and affirmations
+ * all qualify. Any answer ≤8 words is treated as a likely clarification.
  */
 export function looksLikeClarificationAnswer(message: string): boolean {
   const lower = message.toLowerCase().trim();
 
   const wordCount = lower.split(/\s+/).filter(Boolean).length;
 
-  // Very short message (≤6 words) — strong signal it's a direct answer
-  if (wordCount <= 6) return true;
+  // Very short message (≤8 words) — strong signal it's a direct answer
+  if (wordCount <= 8) return true;
 
   // Day / session / week reference
   if (/\b(day\s*\d+|session\s*\d+|week\s*\d+)\b/i.test(lower)) return true;
+
+  // Season / training phase answers (e.g. "in season", "off season", "pre-season",
+  // "in season maintenance", "off-season", "pre-season conditioning")
+  if (
+    /\b(in.?season|off.?season|pre.?season|post.?season|in.?season maintenance|pre.?season conditioning)\b/i.test(
+      lower
+    )
+  )
+    return true;
+
+  // Training block / phase names
+  if (
+    /\b(maintenance|hypertrophy|strength phase|conditioning|peaking|deload|base building|accumulation|intensification)\b/i.test(
+      lower
+    )
+  )
+    return true;
+
+  // Equipment / gym access answers
+  if (
+    /\b(full gym|home gym|gym access|bodyweight only|no gym|dumbbells?|barbells?|kettlebells?|resistance bands?|access to a gym|full gym access|home equipment)\b/i.test(
+      lower
+    )
+  )
+    return true;
+
+  // Duration answers (e.g. "45 minutes", "30 min", "an hour", "1 hour")
+  if (
+    /\b(\d+\s*(minutes?|mins?|hours?|hrs?)|(half an?|an?)\s+hour)\b/i.test(lower)
+  )
+    return true;
 
   // Scope words
   if (
@@ -232,9 +264,9 @@ export function looksLikeClarificationAnswer(message: string): boolean {
   )
     return true;
 
-  // Yes/confirmation
+  // Yes / No / confirmation
   if (
-    /^\s*(yes|yeah|yep|sure|correct|that.s right|sounds good|exactly|go for it|do it|go ahead|please|yep go ahead)\s*$/i.test(
+    /^\s*(yes|yeah|yep|sure|correct|that.s right|sounds good|exactly|go for it|do it|go ahead|please|yep go ahead|no|nope|not yet|not really)\s*$/i.test(
       lower
     )
   )

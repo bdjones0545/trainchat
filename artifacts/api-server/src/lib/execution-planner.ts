@@ -728,11 +728,47 @@ function resolveClarification({
     return "increase_difficulty" as IntentFamily;
   })();
 
-  // Resolve pending scope clarification
-  if (pendingClarification.pendingAspect === "scope") {
-    const dayMatch = lower.match(/day\s*(\d+)/i);
+  // Dev logging — clarification state before resolution attempt
+  console.log("[Clarification State]", {
+    pendingIntentFamily: rawStoredFamily,
+    effectiveFamily,
+    pendingAction: "APPLY_MUTATION",
+    pendingScope: pendingClarification.pendingAspect,
+    pendingClarificationQuestion: pendingClarification.clarificationQuestion,
+    pendingClarificationFields: {
+      originalRequest: pendingClarification.originalRequest?.slice(0, 80),
+      intentFamily: pendingClarification.intentFamily,
+      pendingAspect: pendingClarification.pendingAspect,
+    },
+    currentMessage: message.slice(0, 80),
+    clarificationResolutionAttempted: true,
+    clarificationResolved: false, // updated on resolution
+  });
 
+  // ── Resolve pending scope / phase / general clarification ────────────────────
+  // Handles: "scope", "target_day", "target_session", "phase_or_block" and any
+  // non-exercise aspects. Structural patterns are checked first; unmatched answers
+  // fall through to a general catch-all that still routes to APPLY_MUTATION so the
+  // pending clarification is always consumed (never left dangling as GUIDANCE).
+  if (
+    pendingClarification.pendingAspect === "scope" ||
+    pendingClarification.pendingAspect === "target_day" ||
+    pendingClarification.pendingAspect === "target_session" ||
+    pendingClarification.pendingAspect === "phase_or_block" ||
+    pendingClarification.pendingAspect === "confirmation"
+  ) {
+    // Day-level structural match
+    const dayMatch = lower.match(/day\s*(\d+)/i);
     if (dayMatch) {
+      console.log("[Clarification State]", {
+        pendingIntentFamily: rawStoredFamily,
+        effectiveFamily,
+        pendingScope: pendingClarification.pendingAspect,
+        currentMessage: message.slice(0, 80),
+        clarificationResolutionAttempted: true,
+        clarificationResolved: true,
+        resolvedAs: "day_target",
+      });
       return {
         action: "APPLY_MUTATION",
         intentFamily: effectiveFamily,
@@ -742,17 +778,14 @@ function resolveClarification({
         },
         mutation: {
           type: "transform",
-          params: {
-            transformation: effectiveFamily,
-          },
+          params: { transformation: effectiveFamily },
         },
         reasoning: "Resolved scope clarification → day target identified",
       };
     }
 
-    // FIX 5: Deictic scope — "this session", "this day", "this workout",
-    // "current session", "today", "the current day", "right now"
-    // Resolves to session scope without a dayIndex — caller picks active session.
+    // Deictic scope — "this session", "this day", "this workout", "current session",
+    // "today", "the current day", "right now"
     if (
       /\b(this session|this day|this workout|current session|current day|today|the current day|right now|this one)\b/i.test(lower)
     ) {
@@ -762,19 +795,13 @@ function resolveClarification({
         scope: { type: "session" },
         mutation: {
           type: "transform",
-          params: {
-            transformation: effectiveFamily,
-            scopeLabel: "this session",
-          },
+          params: { transformation: effectiveFamily, scopeLabel: "this session" },
         },
         reasoning: "Resolved scope clarification → deictic scope (this session/today)",
       };
     }
 
     // Whole-program resolution
-    // Matches: "whole program", "entire program", "full program", "the full program",
-    //          "all of it", "all sessions", "every day", "everything", "program-wide",
-    //          "across the program", "all days", "across all"
     if (
       /\b(whole|entire|full|all|everything|program.?wide|every day|all days?|across (all|the)|across the program)\b/.test(lower) ||
       /\b(the full program|the whole program|the entire program)\b/.test(lower)
@@ -785,9 +812,7 @@ function resolveClarification({
         scope: { type: "program" },
         mutation: {
           type: "transform",
-          params: {
-            transformation: effectiveFamily,
-          },
+          params: { transformation: effectiveFamily },
         },
         reasoning: "Resolved scope clarification → program-wide target",
       };
@@ -811,11 +836,51 @@ function resolveClarification({
         reasoning: `Resolved scope clarification → week ${weekMatch[1]} target`,
       };
     }
+
+    // ── General catch-all for scope/phase/confirmation answers ──────────────────
+    // Handles non-structural answers like "in season maintenance", "pre-season",
+    // "full gym access", "45 minutes", "all exercises", "maintenance", etc.
+    // CRITICAL: never return GUIDANCE here — that leaves the pending clarification
+    // unresolved in the DB, causing it to bleed into subsequent turns.
+    console.log("[Clarification State]", {
+      pendingIntentFamily: rawStoredFamily,
+      effectiveFamily,
+      pendingScope: pendingClarification.pendingAspect,
+      currentMessage: message.slice(0, 80),
+      clarificationResolutionAttempted: true,
+      clarificationResolved: true,
+      resolvedAs: "general_catch_all",
+    });
+    return {
+      action: "APPLY_MUTATION",
+      intentFamily: effectiveFamily,
+      scope: { type: "program" },
+      mutation: {
+        type: "transform",
+        params: {
+          transformation: effectiveFamily,
+          clarificationAnswer: message.trim(),
+        },
+      },
+      reasoning: `Resolved ${pendingClarification.pendingAspect} clarification → general answer applied (was: "${pendingClarification.originalRequest.slice(0, 60)}")`,
+    };
   }
 
-  // Resolve pending exercise clarification
+  // ── Resolve pending exercise clarification ──────────────────────────────────
+  // Only binds to this path when the ORIGINAL intent was exercise_swap and
+  // the pending question was specifically asking which exercise to target.
   if (pendingClarification.pendingAspect === "target_exercise") {
     const exerciseName = extractExerciseName(message) ?? message.trim();
+    console.log("[Clarification State]", {
+      pendingIntentFamily: rawStoredFamily,
+      effectiveFamily,
+      pendingScope: pendingClarification.pendingAspect,
+      currentMessage: message.slice(0, 80),
+      clarificationResolutionAttempted: true,
+      clarificationResolved: true,
+      resolvedAs: "target_exercise",
+      exerciseName,
+    });
     return {
       action: "APPLY_MUTATION",
       intentFamily: effectiveFamily,
@@ -828,12 +893,30 @@ function resolveClarification({
     };
   }
 
-  // Could not resolve — fall through to guidance
+  // ── Final safety catch-all — should never reach here given the branches above ──
+  // Route to APPLY_MUTATION rather than GUIDANCE to ensure the pending clarification
+  // is always consumed and never left dangling across turns.
+  console.log("[Clarification State]", {
+    pendingIntentFamily: rawStoredFamily,
+    effectiveFamily,
+    pendingScope: pendingClarification.pendingAspect,
+    currentMessage: message.slice(0, 80),
+    clarificationResolutionAttempted: true,
+    clarificationResolved: false,
+    resolvedAs: "safety_fallback",
+  });
   return {
-    action: "GUIDANCE",
-    intentFamily: null,
-    scope: { type: null },
-    reasoning: "Failed clarification resolution → fallback to coaching",
+    action: "APPLY_MUTATION",
+    intentFamily: effectiveFamily,
+    scope: { type: "program" },
+    mutation: {
+      type: "transform",
+      params: {
+        transformation: effectiveFamily,
+        clarificationAnswer: message.trim(),
+      },
+    },
+    reasoning: `Safety catch-all: unhandled pendingAspect "${pendingClarification.pendingAspect}" — routing to APPLY_MUTATION to prevent stale clarification leakage`,
   };
 }
 

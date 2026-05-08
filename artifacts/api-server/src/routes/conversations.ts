@@ -809,6 +809,27 @@ Keep it helpful and intelligent, never promotional.`;
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
 
+  // ── Clarification State Dev Log (non-SSE path) ────────────────────────────
+  console.log("[Clarification State]", {
+    pendingIntentFamily: activePendingClarification?.intentFamily ?? null,
+    pendingAction: activePendingClarification ? "pending" : "none",
+    pendingScope: activePendingClarification?.pendingAspect ?? null,
+    pendingClarificationQuestion: activePendingClarification?.clarificationQuestion?.slice(0, 80) ?? null,
+    pendingClarificationFields: activePendingClarification
+      ? {
+          originalRequest: activePendingClarification.originalRequest?.slice(0, 80),
+          intentFamily: activePendingClarification.intentFamily,
+          pendingAspect: activePendingClarification.pendingAspect,
+          turnsRemaining: activePendingClarification.turnsRemaining,
+        }
+      : null,
+    pendingTrainingSystemId: activePendingClarification?.targetProgramId ?? null,
+    pendingConversationId: activePendingClarification?.conversationId ?? null,
+    currentMessage: parsed.data.content.slice(0, 80),
+    clarificationResolutionAttempted: intentResult.type === "CLARIFICATION_FOLLOWUP",
+    clarificationResolved: false, // updated after execPlan resolves
+  });
+
   // ── Language System + Response Policy ────────────────────────────────────
   // Layer 1: extract broad coaching language profile from the user message.
   // Layer 2: resolve a ResponsePolicy (action, scope, mode, voice, preserves).
@@ -3368,6 +3389,27 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   logIntentSummary(parsed.data.content, intentResult, hasAnyProgram);
+
+  // ── Clarification State Dev Log (SSE path) ────────────────────────────────
+  console.log("[Clarification State]", {
+    pendingIntentFamily: activePendingClarification?.intentFamily ?? null,
+    pendingAction: activePendingClarification ? "pending" : "none",
+    pendingScope: activePendingClarification?.pendingAspect ?? null,
+    pendingClarificationQuestion: activePendingClarification?.clarificationQuestion?.slice(0, 80) ?? null,
+    pendingClarificationFields: activePendingClarification
+      ? {
+          originalRequest: activePendingClarification.originalRequest?.slice(0, 80),
+          intentFamily: activePendingClarification.intentFamily,
+          pendingAspect: activePendingClarification.pendingAspect,
+          turnsRemaining: activePendingClarification.turnsRemaining,
+        }
+      : null,
+    pendingTrainingSystemId: activePendingClarification?.targetProgramId ?? null,
+    pendingConversationId: activePendingClarification?.conversationId ?? null,
+    currentMessage: parsed.data.content.slice(0, 80),
+    clarificationResolutionAttempted: intentResult.type === "CLARIFICATION_FOLLOWUP",
+    clarificationResolved: false, // updated after execPlan resolves
+  });
 
   // ── Language System + Response Policy (SSE path) ─────────────────────────
   // Mirror of the same block in the non-stream handler. Both handlers must
