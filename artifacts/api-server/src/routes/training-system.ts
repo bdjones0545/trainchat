@@ -9,6 +9,8 @@ import {
   getFullTrainingSystem,
   getTodaySession,
   getCurrentWeek,
+  getCurrentWeekBySystemId,
+  getTrainingSystemByConversation,
   getWeeksList,
   getBlockSummary,
   initializeTrainingSystem,
@@ -133,14 +135,48 @@ router.get("/training-system/today", requireAuth, async (req, res): Promise<void
   }
 });
 
+// ─── GET /training-system/by-conversation/:conversationId ────────────────────
+// Returns the training system linked to a specific conversation (any status).
+// Used by Live Program Restore: never falls back to the global active system.
+router.get("/training-system/by-conversation/:conversationId", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const conversationId = parseInt(req.params.conversationId as string, 10);
+    if (isNaN(conversationId)) {
+      res.status(400).json({ error: "Invalid conversationId" });
+      return;
+    }
+    const system = await getTrainingSystemByConversation(userId, conversationId);
+    logger.info(
+      { userId, conversationId, foundSystemId: system?.id ?? null, systemStatus: system?.status ?? null },
+      "[Live Program Restore] GET /by-conversation"
+    );
+    res.json(system ?? null);
+  } catch (err) {
+    logger.error({ err }, "[training-system] GET /by-conversation error");
+    res.status(500).json({ error: "Failed to load training system for conversation" });
+  }
+});
+
 // ─── GET /training-system/week ────────────────────────────────────────────────
-// Returns the current week (or a specific week by ?weekNumber=N) for the given focus
-// Optional query params: ?weekNumber=N&focus=strength|speed|mobility
+// Returns the current week (or a specific week by ?weekNumber=N) for the given focus.
+// Optional query params: ?weekNumber=N&focus=strength|speed|mobility&systemId=N
+// When ?systemId=N is provided it bypasses the global active-system lookup and
+// fetches week data for that exact system — used by Live Program Restore.
 router.get("/training-system/week", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
     const weekNumberParam = req.query.weekNumber;
     const weekNumber = typeof weekNumberParam === "string" ? parseInt(weekNumberParam, 10) || undefined : undefined;
+    const systemIdParam = req.query.systemId;
+    const systemId = typeof systemIdParam === "string" ? parseInt(systemIdParam, 10) || undefined : undefined;
+
+    if (systemId) {
+      const week = await getCurrentWeekBySystemId(systemId, weekNumber);
+      res.json(week ?? null);
+      return;
+    }
+
     const focusMode = typeof req.query.focus === "string" ? req.query.focus : null;
     const week = await getCurrentWeek(userId, weekNumber, focusMode);
 

@@ -126,6 +126,27 @@ async function fetchActiveSystem(focusMode?: string) {
   }
 }
 
+/**
+ * Fetches the training system linked to a specific conversation.
+ * Returns null (never falls back) if no system is linked to that conversation.
+ * Used by Live Program Restore to show the correct program per chat.
+ */
+async function fetchSystemByConversation(conversationId: number) {
+  try {
+    return await customFetch<any>(`/api/training-system/by-conversation/${conversationId}`);
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCurrentWeekBySystemId(systemId: number) {
+  try {
+    return await customFetch<any>(`/api/training-system/week?systemId=${systemId}`);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCurrentWeek(focusMode?: string) {
   try {
     const url = focusMode
@@ -593,13 +614,34 @@ export default function Chat() {
     staleTime: 300000,
   });
 
-  const { data: activeSystem } = useQuery({
-    queryKey: ["training-system-active", focusMode],
-    queryFn: () => fetchActiveSystem(focusMode),
-    enabled: !!me,
+  // ── Conversation-scoped program restore ─────────────────────────────────────
+  // Fetches the training system linked to the active conversation specifically.
+  // This is the single source of truth for the Live Program sidebar when a
+  // conversation is open. Returns null — never falls back — if the chat has no
+  // linked program, so the sidebar shows the correct empty state.
+  const { data: conversationSystem, isLoading: conversationSystemLoading } = useQuery({
+    queryKey: ["training-system-conv", activeConvoId],
+    queryFn: () => activeConvoId ? fetchSystemByConversation(activeConvoId) : Promise.resolve(null),
+    enabled: !!me && !!activeConvoId,
     staleTime: 0,
     refetchOnMount: "always",
   });
+
+  // The active system for display is always conversation-scoped — no global fallback.
+  // When no conversation is open, or the conversation has no linked program, activeSystem is null.
+  const activeSystem = activeConvoId !== null ? (conversationSystem ?? null) : null;
+
+  // Dev audit log for Live Program Restore
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    console.log("[Live Program Restore]", {
+      conversationId: activeConvoId,
+      conversationLinkedTrainingSystemId: conversationSystem?.id ?? null,
+      loadedTrainingSystemId: activeSystem?.id ?? null,
+      loadedProgramTitle: activeSystem?.name ?? null,
+      fallbackUsed: false,
+    });
+  }, [activeConvoId, conversationSystem, activeSystem]);
 
   const { data: programLibrary = [] } = useQuery({
     queryKey: ["training-system-library"],
@@ -619,10 +661,9 @@ export default function Chat() {
   }, [programLibrary, me]);
 
   const { data: weekData, isLoading: weekDataLoading } = useQuery({
-    // Include activeSystem.id AND focusMode so React Query creates distinct cache entries
-    // per focus lane — prevents stale exercises from another focus leaking in.
-    queryKey: ["training-system-week", activeSystem?.id ?? null, focusMode],
-    queryFn: () => fetchCurrentWeek(focusMode),
+    // Keyed by conversation + system ID so each chat gets its own isolated cache entry.
+    queryKey: ["training-system-week", activeSystem?.id ?? null, activeConvoId],
+    queryFn: () => activeSystem?.id ? fetchCurrentWeekBySystemId(activeSystem.id) : Promise.resolve(null),
     enabled: !!me && !!activeSystem?.id,
     staleTime: 0,
     refetchOnMount: "always",
@@ -2138,9 +2179,8 @@ export default function Chat() {
         justSavedSystemIdRef.current = newSystemId;
       }
 
-      // Force-refetch (not just invalidate) so activeSystem.id updates immediately.
-      // Using the full focusMode-qualified key matches the query registered at line ~378.
-      queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
+      // Force-refetch the conversation-scoped system so the sidebar updates immediately.
+      queryClient.refetchQueries({ queryKey: ["training-system-conv", activeConvoId] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
@@ -2338,6 +2378,8 @@ export default function Chat() {
       queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
       queryClient.refetchQueries({ queryKey: ["training-system-week"] });
+      // Invalidate the conversation-scoped query so the sidebar reflects the deletion
+      queryClient.invalidateQueries({ queryKey: ["training-system-conv"] });
 
       // If the deleted system had a live draft in the right panel, clear it
       if (result.wasActive) {

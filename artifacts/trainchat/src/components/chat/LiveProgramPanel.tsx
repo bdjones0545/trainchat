@@ -761,10 +761,15 @@ function ProgramTab({
   const { focusMode: panelFocusMode } = useFocusMode();
 
   const { data: altWeekData, isLoading: altWeekLoading } = useQuery({
-    queryKey: ["week-view-select", selectedWeek, panelFocusMode],
+    // Key includes trainingSystemId to prevent stale cross-conversation cache leakage.
+    queryKey: ["week-view-select", selectedWeek, trainingSystemId ?? panelFocusMode],
     queryFn: () => {
       const params = new URLSearchParams({ weekNumber: String(selectedWeek) });
-      if (panelFocusMode) params.set("focus", panelFocusMode);
+      if (trainingSystemId) {
+        params.set("systemId", String(trainingSystemId));
+      } else if (panelFocusMode) {
+        params.set("focus", panelFocusMode);
+      }
       return customFetch<any>(`/api/training-system/week?${params.toString()}`);
     },
     // Gate: only fire when both the system ID and currentWeekNum are fully resolved.
@@ -775,8 +780,12 @@ function ProgramTab({
 
   // ── Current-week DB data for exercise ID lookup (needed for direct edits) ──
   const { data: currentWeekDbData } = useQuery({
-    queryKey: ["live-panel-week-ids", savedProgramId, panelFocusMode],
+    // Key includes trainingSystemId so each conversation's system gets its own cache entry.
+    queryKey: ["live-panel-week-ids", trainingSystemId ?? savedProgramId, panelFocusMode],
     queryFn: () => {
+      if (trainingSystemId) {
+        return customFetch<any>(`/api/training-system/week?systemId=${trainingSystemId}`);
+      }
       const url = panelFocusMode
         ? `/api/training-system/week?focus=${encodeURIComponent(panelFocusMode)}`
         : "/api/training-system/week";

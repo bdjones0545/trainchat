@@ -355,6 +355,78 @@ function getCoachingNotes(goal: string, weekIndex: number, dayLabel: string): st
 
 // ─── Main Service Functions ───────────────────────────────────────────────────
 
+/**
+ * Returns the training system linked to a specific conversation (any status).
+ * Used by the Live Program Restore feature to show the correct program when
+ * a user opens an older chat. Never falls back to the global active system.
+ */
+export async function getTrainingSystemByConversation(userId: number, conversationId: number) {
+  const [system] = await db
+    .select()
+    .from(trainingSystems)
+    .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.conversationId, conversationId)))
+    .orderBy(desc(trainingSystems.id));
+  return system ?? null;
+}
+
+/**
+ * Returns current week data for a specific training system by ID.
+ * Used by Live Program Restore to fetch week data for the conversation-linked
+ * system without relying on the global active-system lookup.
+ */
+export async function getCurrentWeekBySystemId(systemId: number, weekNumber?: number) {
+  const [system] = await db
+    .select()
+    .from(trainingSystems)
+    .where(eq(trainingSystems.id, systemId));
+
+  if (!system || !system.currentPhaseId) return null;
+
+  const [currentPhase] = await db
+    .select()
+    .from(trainingPhases)
+    .where(and(eq(trainingPhases.id, system.currentPhaseId), eq(trainingPhases.status, "current")));
+
+  if (!currentPhase) return null;
+
+  let targetWeek;
+  if (weekNumber != null) {
+    const allWeeks = await db
+      .select()
+      .from(trainingWeeks)
+      .where(eq(trainingWeeks.trainingPhaseId, currentPhase.id))
+      .orderBy(trainingWeeks.orderIndex);
+    targetWeek = allWeeks.find((w) => w.weekNumber === weekNumber) ?? allWeeks[0];
+  } else {
+    const [currentWeek] = await db
+      .select()
+      .from(trainingWeeks)
+      .where(and(eq(trainingWeeks.trainingPhaseId, currentPhase.id), eq(trainingWeeks.status, "current")));
+    targetWeek = currentWeek;
+  }
+
+  if (!targetWeek) return null;
+
+  const sessions = await db
+    .select()
+    .from(trainingSessions)
+    .where(eq(trainingSessions.trainingWeekId, targetWeek.id))
+    .orderBy(trainingSessions.orderIndex);
+
+  const sessionsWithExercises = await Promise.all(
+    sessions.map(async (session) => {
+      const exercises = await db
+        .select()
+        .from(sessionExercises)
+        .where(eq(sessionExercises.trainingSessionId, session.id))
+        .orderBy(sessionExercises.orderIndex);
+      return { ...session, exercises };
+    })
+  );
+
+  return { ...targetWeek, sessions: sessionsWithExercises, phase: currentPhase };
+}
+
 export async function getActiveTrainingSystem(userId: number, focusMode?: string | null) {
   // Order by id desc so the most recently created system comes first.
   // This ensures the no-focusMode fallback returns the newest system,
