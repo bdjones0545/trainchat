@@ -4,8 +4,10 @@ import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
-  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles, Loader2, Check,
+  CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles, Loader2, Check, Mic, MicOff,
 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useVoiceCommandInput } from "@/hooks/useVoiceCommandInput";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   useGetMe,
@@ -335,6 +337,45 @@ export default function Chat() {
   // the server classifies the turn as true_failure despite the DB mutating.
   const preSendActiveSystemVersionRef = useRef<string | null>(null);
   const [showCalibrationNudge, setShowCalibrationNudge] = useState(false);
+
+  // ── Voice command input ──────────────────────────────────────────────────
+  const voice = useVoiceCommandInput();
+  const prevTranscriptRef = useRef("");
+
+  const voiceBaseTextRef = useRef("");
+
+  useEffect(() => {
+    if (!voice.isListening && !voice.transcript) return;
+    if (voice.transcript !== prevTranscriptRef.current) {
+      prevTranscriptRef.current = voice.transcript;
+      const base = voiceBaseTextRef.current;
+      const combined = base
+        ? base.trimEnd() + " " + voice.transcript.trim()
+        : voice.transcript;
+      setInputText(combined);
+      // resize textarea
+      if (inputRef.current) {
+        const t = inputRef.current;
+        t.style.height = "auto";
+        t.style.height = Math.min(t.scrollHeight, 160) + "px";
+      }
+    }
+  }, [voice.transcript, voice.isListening]);
+
+  const handleMicClick = () => {
+    if (!voice.isSupported) {
+      voice.startListening(); // will immediately surface the unsupported error
+      return;
+    }
+    if (voice.isListening) {
+      voice.stopListening();
+    } else {
+      voiceBaseTextRef.current = inputText;
+      voice.resetTranscript();
+      prevTranscriptRef.current = "";
+      voice.startListening();
+    }
+  };
 
   const logout = useLogout();
 
@@ -3511,7 +3552,46 @@ export default function Chat() {
                   </div>
                 )}
               </div>
-              <div className="relative flex items-end gap-2 bg-card border border-border rounded-2xl focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/15 focus-within:shadow-sm transition-all duration-200">
+              {/* Voice status strip — sits above the input, takes no extra height when idle */}
+              <AnimatePresence>
+                {(voice.isListening || voice.error) && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-center gap-2 mb-1.5 px-1"
+                  >
+                    {voice.isListening && (
+                      <>
+                        <motion.span
+                          animate={{ opacity: [1, 0.4, 1] }}
+                          transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                          className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"
+                        />
+                        <span className="text-[11px] text-blue-400 font-medium">Listening…</span>
+                        {/* Animated waveform bars */}
+                        <div className="flex items-end gap-0.5 h-3">
+                          {[0.6, 1, 0.7, 1, 0.5].map((delay, i) => (
+                            <motion.span
+                              key={i}
+                              className="w-0.5 rounded-full bg-blue-400/70"
+                              animate={{ scaleY: [0.3, 1, 0.3] }}
+                              transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.12, ease: "easeInOut" }}
+                              style={{ height: "10px", transformOrigin: "bottom" }}
+                            />
+                          ))}
+                        </div>
+                      </>
+                    )}
+                    {voice.error && !voice.isListening && (
+                      <span className="text-[11px] text-destructive/80">{voice.error}</span>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className={`relative flex items-end gap-2 bg-card border rounded-2xl focus-within:ring-2 focus-within:ring-primary/15 focus-within:shadow-sm transition-all duration-200 ${voice.isListening ? "border-blue-500/60 ring-2 ring-blue-500/15" : "border-border focus-within:border-primary/60"}`}>
                 <textarea
                   ref={inputRef}
                   data-testid="input-message"
@@ -3519,7 +3599,7 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder={hasActiveSystem ? "Ask me to adjust your program…" : "Build or edit your training system…"}
+                  placeholder={voice.isListening ? "Speak now…" : hasActiveSystem ? "Ask me to adjust your program…" : "Build or edit your training system…"}
                   disabled={stream.isActive}
                   onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
@@ -3530,6 +3610,52 @@ export default function Chat() {
                     t.style.height = Math.min(t.scrollHeight, 160) + "px";
                   }}
                 />
+                {/* Mic button */}
+                <motion.button
+                  type="button"
+                  onClick={handleMicClick}
+                  disabled={stream.isActive}
+                  whileTap={{ scale: 0.88 }}
+                  title={voice.isListening ? "Stop listening" : "Voice input"}
+                  className={`mb-2 p-2.5 rounded-xl flex-shrink-0 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
+                    voice.isListening
+                      ? "text-blue-400 bg-blue-500/15 hover:bg-blue-500/25"
+                      : "text-muted-foreground/50 hover:text-foreground hover:bg-accent"
+                  }`}
+                >
+                  <AnimatePresence mode="wait" initial={false}>
+                    {voice.isListening ? (
+                      <motion.span
+                        key="mic-on"
+                        initial={{ scale: 0.7, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.7, opacity: 0 }}
+                        transition={{ duration: 0.12 }}
+                        className="block"
+                      >
+                        <motion.span
+                          animate={{ opacity: [1, 0.5, 1] }}
+                          transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                          className="block"
+                        >
+                          <Mic className="w-4 h-4" />
+                        </motion.span>
+                      </motion.span>
+                    ) : (
+                      <motion.span
+                        key="mic-off"
+                        initial={{ scale: 0.7, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.7, opacity: 0 }}
+                        transition={{ duration: 0.12 }}
+                        className="block"
+                      >
+                        <Mic className="w-4 h-4" />
+                      </motion.span>
+                    )}
+                  </AnimatePresence>
+                </motion.button>
+                {/* Send button */}
                 <button
                   data-testid="button-send"
                   onClick={() => handleSend()}
