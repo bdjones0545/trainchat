@@ -1,0 +1,122 @@
+Build TrainChat Anti-Loop Agent Reliability Layer.
+
+Goal:
+Make TrainChat behave like a high-quality agent system where users do not get stuck in clarification loops, stale pending states, no-op replies, or repeated guidance responses.
+
+Core principle:
+If the user has an active program and the request is reasonably actionable, TrainChat should act using safe expert defaults instead of asking another question.
+
+Add an AntiLoopReliabilityLayer before final planner routing.
+
+It should detect and repair:
+
+1. Repeated clarification loops
+If the same pending intent asks for clarification more than once:
+- stop asking
+- apply best safe default
+- route to APPLY_MUTATION
+- set loopBreaker: true
+- response should say: “I’ll apply this across the full program.”
+
+2. Guidance instead of mutation
+If activeProgram exists and the user asks for a change/refinement:
+- do not return GUIDANCE unless the user explicitly asks for advice
+- route to APPLY_MUTATION
+
+Examples:
+“make it better”
+“more athletic”
+“football”
+“harder”
+“less volume”
+“make it fit 45 minutes”
+“full gym”
+“dumbbells”
+“in season”
+“change this for speed”
+
+3. Stale pending clarification cleanup
+If pending clarification exists but:
+- user gives a new actionable command
+- current message contradicts pending scope
+- pending conversationId/trainingSystemId does not match current
+- pending state is older than allowed turn limit
+then clear pending clarification and classify fresh.
+
+4. No-op prevention
+If planner route is NO_OP but activeProgram exists and message contains any action/refinement signal:
+- upgrade to APPLY_MUTATION
+- default scope = full_program
+
+5. Ambiguous scope defaults
+If user does not specify day/exercise/session:
+- default to full_program for non-destructive changes
+- only ask clarification for destructive or target-required changes
+
+Safe to default:
+- sport changes
+- equipment constraints
+- duration changes
+- volume/intensity tweaks
+- style changes
+- conditioning emphasis
+- speed/power emphasis
+- in-season/off-season changes
+
+Must clarify:
+- delete/remove ambiguous exercise
+- swap “this” with no recent reference
+- injury/pain red flags
+- conflicting commands
+- multiple equally likely exercise targets
+
+6. Conversation repair response
+When loopBreaker/defaultScopeUsed is true, include a short user-facing explanation:
+- “I’ll apply this across the full program.”
+- “I’ll use the current program as the target.”
+- “I’ll make the safest global adjustment.”
+
+7. Agent action guarantee
+Every turn should end in one of:
+- mutation applied
+- program built
+- clear single clarification
+- safety explanation
+- direct answer if user asked for advice
+
+Never allow:
+- vague “I can help with that”
+- repeated “which one did you mean?”
+- generic advice when a program mutation was requested
+- silent no-op
+- stale clarification carryover
+
+8. Add structured audit log:
+console.log("[AntiLoop Reliability]", {
+  message,
+  activeProgramId,
+  originalRoute,
+  finalRoute,
+  intentFamily,
+  pendingClarificationId,
+  pendingClarificationCount,
+  stalePendingCleared,
+  defaultScopeUsed,
+  loopBreakerUsed,
+  noOpUpgraded,
+  guidanceUpgraded,
+  reason,
+});
+
+9. Add regression tests:
+
+Active program exists:
+- “football” → APPLY_MUTATION full_program
+- “make it more athletic” → APPLY_MUTATION full_program
+- “harder” → APPLY_MUTATION full_program
+- “easier” → APPLY_MUTATION full_program
+- “45 minutes” → APPLY_MUTATION full_program
+- “full gym” → APPLY_MUTATION full_program
+- “in season” → APPLY_MUTATION full_program
+- “yes” after clarification → resolves and acts
+- “do it

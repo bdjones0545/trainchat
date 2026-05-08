@@ -54,6 +54,7 @@ import {
 } from "../lib/pending-clarification-service";
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
+import { applyAntiLoopReliabilityLayer } from "../lib/anti-loop-reliability-layer";
 import { validatePostMutationArchitectureLight } from "../lib/post-mutation-validator";
 import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
 import { resolveRefinementScope, inferBlockTypeFromMessage, type ScopeResolution } from "../lib/refinement-scope-resolver";
@@ -772,7 +773,22 @@ Keep it helpful and intelligent, never promotional.`;
   // doesn't match normal edit patterns) AND the message looks like a
   // clarification answer, override to CLARIFICATION_FOLLOWUP so we resume
   // the pending mutation instead of routing to GUIDANCE_ONLY.
-  const activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
+  let activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
+
+  // ── Stale pending check (non-SSE path) ─────────────────────────────────────
+  if (
+    activePendingClarification &&
+    (activeSystem as any)?.id != null &&
+    activePendingClarification.targetProgramId != null &&
+    activePendingClarification.targetProgramId !== (activeSystem as any)?.id
+  ) {
+    resolvePendingClarification(activePendingClarification.id, "expired").catch(() => {});
+    logger.warn(
+      { pendingId: activePendingClarification.id, pendingTargetId: activePendingClarification.targetProgramId, activeSystemId: (activeSystem as any)?.id },
+      "[AntiLoop] Stale pending cleared — system mismatch (non-SSE)"
+    );
+    activePendingClarification = null;
+  }
 
   if (activePendingClarification) {
     const isStrongNewIntent =
@@ -892,7 +908,7 @@ Keep it helpful and intelligent, never promotional.`;
     : 0;
   const lastClarificationQuestion = activePendingClarification?.clarificationQuestion ?? undefined;
 
-  const execPlan: ExecutionPlan = await buildExecutionPlan({
+  const _rawExecPlan: ExecutionPlan = await buildExecutionPlan({
     message: parsed.data.content,
     userId: String(userId),
     conversationId: String(params.data.id),
@@ -911,6 +927,22 @@ Keep it helpful and intelligent, never promotional.`;
     pendingClarificationCount,
     lastClarificationQuestion,
   });
+
+  // ── Anti-Loop Reliability Layer (non-SSE) ──────────────────────────────────
+  const _antiLoopResult = applyAntiLoopReliabilityLayer(_rawExecPlan, {
+    message: parsed.data.content,
+    program: latestStructuredProgram,
+    activeSystemId: (activeSystem as any)?.id ?? null,
+    conversationId: params.data.id as number,
+    pendingClarificationId: activePendingClarification?.id ?? null,
+    pendingClarificationTargetProgramId: activePendingClarification?.targetProgramId ?? null,
+    pendingClarificationCount,
+  });
+  const execPlan = _antiLoopResult.plan;
+  if (_antiLoopResult.shouldClearPending && activePendingClarification) {
+    resolvePendingClarification(activePendingClarification.id, "expired").catch(() => {});
+    activePendingClarification = null;
+  }
 
   // Sync clarification outcome to turnOutcome
   if (execPlan.action === "ASK_CLARIFICATION") {
@@ -3371,7 +3403,24 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   });
 
   // ── Pending Clarification Check (SSE path) ─────────────────────────────────
-  const activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
+  let activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
+
+  // ── Stale pending check (SSE path) ─────────────────────────────────────────
+  // If the pending clarification targets a different training system than the
+  // one currently active, it is stale. Clear it so it doesn't pollute routing.
+  if (
+    activePendingClarification &&
+    (activeSystem as any)?.id != null &&
+    activePendingClarification.targetProgramId != null &&
+    activePendingClarification.targetProgramId !== (activeSystem as any)?.id
+  ) {
+    resolvePendingClarification(activePendingClarification.id, "expired").catch(() => {});
+    logger.warn(
+      { pendingId: activePendingClarification.id, pendingTargetId: activePendingClarification.targetProgramId, activeSystemId: (activeSystem as any)?.id },
+      "[AntiLoop] Stale pending cleared — system mismatch (SSE)"
+    );
+    activePendingClarification = null;
+  }
 
   if (activePendingClarification) {
     const isStrongNewIntent =
@@ -3558,7 +3607,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   const lastClarificationQuestionSSE = activePendingClarification?.clarificationQuestion ?? undefined;
 
   // ── EXECUTION PLANNER (SSE path) — Central single-brain routing decision ──
-  const execPlan: ExecutionPlan = await buildExecutionPlan({
+  const _rawExecPlanSSE: ExecutionPlan = await buildExecutionPlan({
     message: effectiveMessage,
     userId: String(userId),
     conversationId: String(params.data.id),
@@ -3577,6 +3626,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     pendingClarificationCount: pendingClarificationCountSSE,
     lastClarificationQuestion: lastClarificationQuestionSSE,
   });
+
+  // ── Anti-Loop Reliability Layer (SSE path) ────────────────────────────────
+  const _antiLoopResultSSE = applyAntiLoopReliabilityLayer(_rawExecPlanSSE, {
+    message: effectiveMessage,
+    program: latestStructuredProgram,
+    activeSystemId: (activeSystem as any)?.id ?? null,
+    conversationId: params.data.id as number,
+    pendingClarificationId: activePendingClarification?.id ?? null,
+    pendingClarificationTargetProgramId: activePendingClarification?.targetProgramId ?? null,
+    pendingClarificationCount: pendingClarificationCountSSE,
+  });
+  const execPlan = _antiLoopResultSSE.plan;
+  if (_antiLoopResultSSE.shouldClearPending && activePendingClarification) {
+    resolvePendingClarification(activePendingClarification.id, "expired").catch(() => {});
+    activePendingClarification = null;
+  }
 
   logger.info(
     {

@@ -144,7 +144,7 @@ const LOW_DETAIL_EQUIPMENT_RE =
 const LOW_DETAIL_DURATION_RE =
   /^(\d{1,3}\s*min(?:utes?)?|(one|1)\s*(?:hour|hr\.?)|under\s+an?\s*(?:hour|hr\.?)|\d{1,2}\s*(?:hours?|hrs?\.?))$/i;
 
-function detectLowDetailContextCommand(message: string): LowDetailContextCommand | null {
+export function detectLowDetailContextCommand(message: string): LowDetailContextCommand | null {
   const trimmed = message.trim();
 
   // Guard: bail out early if the message is more than 6 words — the normal
