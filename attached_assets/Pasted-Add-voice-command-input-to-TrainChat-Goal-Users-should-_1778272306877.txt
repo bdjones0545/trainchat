@@ -1,0 +1,49 @@
+Add voice command input to TrainChat.
+
+Goal:
+Users should be able to tap a microphone button in the chat input, speak a command, see the transcription appear in the input field, edit it if needed, and submit it to the existing TrainChat agent pipeline.
+
+UX requirements:
+- Add a microphone icon button inside the existing chat input bar, near the send button.
+- Default state: subtle mic icon.
+- Listening state: glowing blue mic, small “Listening…” label or animated waveform above the input.
+- Stop listening when the user taps the mic again or when speech ends.
+- Show the transcribed speech in the existing input textarea.
+- Do not auto-submit on first version. Let the user review and press send.
+- If browser speech recognition is unavailable, show: “Voice input isn’t supported on this browser yet.”
+- Handle permission denial gracefully with: “Microphone permission is needed to use voice commands.”
+
+Implementation:
+- Use the Web Speech API if available:
+  window.SpeechRecognition || window.webkitSpeechRecognition
+- Create a reusable hook: useVoiceCommandInput.
+- Hook should expose:
+  isSupported
+  isListening
+  transcript
+  error
+  startListening()
+  stopListening()
+  resetTranscript()
+- When transcript updates, populate the existing chat input state.
+- Preserve current typed text if the user already entered text.
+- Do not break existing SSE streaming, send flow, refine buttons, or program builder logic.
+
+Mobile polish:
+- Mic button must be thumb-friendly.
+- Prevent layout shift when listening state appears.
+- Add haptic-style visual feedback with Framer Motion.
+- Keep dark TrainChat styling consistent.
+
+Files to inspect first:
+- Chat input component
+- Training system chat page
+- Any SSE send handler
+- Any existing suggestion chip submit logic
+
+Acceptance criteria:
+- User can tap mic, speak, and see text appear in the input.
+- User can edit the transcript before sending.
+- Sending the transcript uses the same existing agent route as typed commands.
+- Permission denied and unsupported browser states are handled cleanly.
+- No TypeScript errors.
