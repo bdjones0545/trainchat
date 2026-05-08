@@ -1,0 +1,53 @@
+Fix TrainChat Live Program sidebar for older chat history restore.
+
+Bug:
+When I open an older chat, the Live Program sidebar shows the newest program I created anywhere, instead of the program that belonged to that older chat.
+
+Correct behavior:
+The sidebar should restore the program associated with the currently opened chat history.
+
+Audit:
+- Find where conversations/messages store program creation results.
+- Look for message metadata, change logs, trainingSystemId, programId, generatedProgramId, or saved system references.
+- The sidebar should derive its program from the current chat’s linked trainingSystemId/programId.
+
+Do not solve this by fetching latest active program.
+
+Implementation:
+1. When a program is created from a chat message, persist the trainingSystemId/programId onto:
+   - the conversation record, or
+   - the assistant message metadata, or
+   - a conversation_training_systems join table.
+
+2. When opening an older chat:
+   - inspect that chat’s messages/metadata
+   - find the most recent trainingSystemId associated with that chat
+   - load that exact program in the sidebar.
+
+3. If the chat has no linked program:
+   - show “No active system for this chat yet.”
+   - do not fallback to newest global program.
+
+4. When editing/refining from sidebar:
+   - mutate the loaded program linked to that chat only.
+
+5. Update frontend cache:
+   - query key must include current conversationId
+   - do not reuse global latest-program cache across chats.
+
+Dev log:
+console.log("[Live Program Restore]", {
+  conversationId,
+  messageLinkedTrainingSystemId,
+  conversationLinkedTrainingSystemId,
+  loadedTrainingSystemId,
+  loadedProgramTitle,
+  fallbackUsed,
+});
+
+Acceptance criteria:
+- Open newest chat → shows newest chat’s program.
+- Open older chat with an older program → shows that older program.
+- Open older chat without a program → shows empty state.
+- No older chat ever displays the newest global program unless that program was actually created in that chat.
+- No TypeScript errors.
