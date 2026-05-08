@@ -1,0 +1,105 @@
+Add actionable handling for single-word and low-detail sport/context commands in TrainChat.
+
+Problem:
+Users may reply with very short commands like:
+- “football”
+- “basketball”
+- “hockey”
+- “soccer”
+- “baseball”
+- “in season”
+- “full gym”
+- “dumbbells”
+- “45 minutes”
+
+These should not create conversation loops or vague guidance replies.
+
+Goal:
+When an active program exists, short context-only messages should be interpreted as refinements to the current program.
+
+Rules:
+
+1. Sport-only input
+If activeProgram exists and message is a recognized sport:
+- route to APPLY_MUTATION
+- default scope = full_program
+- intentFamily = sport_context_refinement
+- merged request should become:
+  “Refine the current program for [sport].”
+- response should say:
+  “I’ll tune this program toward [sport].”
+
+Examples:
+“football” → refine current program for football
+“hockey” → refine current program for hockey
+“basketball” → refine current program for basketball
+
+2. Phase-only input
+If activeProgram exists and message is:
+- in season
+- off season
+- preseason
+- maintenance
+- hypertrophy
+- power
+- speed
+route to APPLY_MUTATION with full_program scope.
+
+Example:
+“in season” → adjust program for in-season maintenance
+
+3. Equipment-only input
+If activeProgram exists and message is:
+- full gym
+- dumbbells
+- home gym
+- bodyweight
+- no machines
+route to APPLY_MUTATION with full_program scope.
+
+Example:
+“dumbbells” → adapt program to dumbbell equipment
+
+4. Duration-only input
+If activeProgram exists and message matches:
+- 30 minutes
+- 45 minutes
+- one hour
+- under an hour
+route to APPLY_MUTATION with full_program scope.
+
+Example:
+“45 minutes” → adjust sessions to fit 45 minutes
+
+5. No active program behavior
+If no active program exists:
+- sport-only input should start a guided build, not mutate.
+Example:
+“football” → “Got it — I’ll build for football. How many days per week do you want to train?”
+Optional better default:
+If focus mode is strength and no program exists, build a default 3-day football strength program unless user settings say otherwise.
+
+6. Do not over-clarify.
+Clarify only if:
+- the word could mean multiple things in the current context
+- action would be unsafe
+- no active program exists and required build constraints are missing
+
+7. Dev logging:
+console.log("[Low Detail Context Command]", {
+  message,
+  detectedContextType,
+  detectedValue,
+  activeProgramId,
+  routedAction,
+  defaultScopeUsed,
+});
+
+Acceptance criteria:
+- “Football” on an active hockey program changes/refines toward football.
+- “In season” applies in-season maintenance.
+- “Full gym” applies equipment context.
+- “45 minutes” applies duration constraint.
+- No repeated clarification loop.
+- No generic guidance-only response when an active program exists.
+- No TypeScript errors.

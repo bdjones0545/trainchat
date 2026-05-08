@@ -105,6 +105,73 @@ export interface PendingClarificationContext {
   clarificationQuestion: string;
 }
 
+// ─── Low-Detail Context Command Detection ─────────────────────────────────────
+// Single-word / very-short context signals that the existing multi-word intent
+// patterns don't catch. Examples: "football", "in season", "dumbbells", "45 min".
+// These fire in Step 1.5 — BEFORE the normal intent classifier — so they never
+// fall through to clarification_required.
+
+type LowDetailContextType = "sport_only" | "phase_only" | "equipment_only" | "duration_only";
+
+interface LowDetailContextCommand {
+  type: LowDetailContextType;
+  value: string;
+  intentFamily: IntentFamily;
+}
+
+// Bare sport names with no verb/preamble
+const LOW_DETAIL_SPORT_RE =
+  /^(football|basketball|soccer|hockey|baseball|lacrosse|rugby|volleyball|tennis|golf|wrestling|track(\s+and\s+field)?|swimming|mma|boxing|rowing|cycling|triathlon|crossfit|cross.?fit|softball|cricket|squash|padel|pickleball|jiu.?jitsu|bjj|powerlifting|weightlifting|olympic\s+lifting)$/i;
+
+// Training-phase single concepts with their canonical intent families
+const LOW_DETAIL_PHASE_MAP: Array<{ re: RegExp; intentFamily: IntentFamily; label: string }> = [
+  { re: /^(in.?season|in season|inseason)$/i,      intentFamily: "sport_context_update",   label: "in-season"    },
+  { re: /^(off.?season|off season|offseason)$/i,   intentFamily: "sport_context_update",   label: "off-season"   },
+  { re: /^(pre.?season|preseason)$/i,              intentFamily: "sport_context_update",   label: "pre-season"   },
+  { re: /^(post.?season|postseason)$/i,            intentFamily: "sport_context_update",   label: "post-season"  },
+  { re: /^maintenance$/i,                          intentFamily: "fatigue_management",     label: "maintenance"  },
+  { re: /^hypertrophy$/i,                          intentFamily: "hypertrophy_focus",      label: "hypertrophy"  },
+  { re: /^(power|explosive)$/i,                    intentFamily: "power_explosive_focus",  label: "power"        },
+  { re: /^speed$/i,                                intentFamily: "speed_focus",            label: "speed"        },
+  { re: /^(deload|recovery week)$/i,               intentFamily: "fatigue_management",     label: "deload"       },
+];
+
+// Equipment declarations without any negation or qualifying verb
+const LOW_DETAIL_EQUIPMENT_RE =
+  /^(full\s+gym|home\s+gym|dumbbells?|bodyweight|body\s+weight|no\s+machines?|kettlebells?|barbells?|no\s+equipment|resistance\s+bands?|cables?|machines?|free\s+weights?)$/i;
+
+// Bare duration signals: "45 min", "45 minutes", "one hour", "under an hour", "2 hours"
+const LOW_DETAIL_DURATION_RE =
+  /^(\d{1,3}\s*min(?:utes?)?|(one|1)\s*(?:hour|hr\.?)|under\s+an?\s*(?:hour|hr\.?)|\d{1,2}\s*(?:hours?|hrs?\.?))$/i;
+
+function detectLowDetailContextCommand(message: string): LowDetailContextCommand | null {
+  const trimmed = message.trim();
+
+  // Guard: bail out early if the message is more than 6 words — the normal
+  // intent engine handles richer phrases and we don't want false positives.
+  if (trimmed.split(/\s+/).length > 6) return null;
+
+  if (LOW_DETAIL_SPORT_RE.test(trimmed)) {
+    return { type: "sport_only", value: trimmed.toLowerCase(), intentFamily: "sport_context_update" };
+  }
+
+  for (const entry of LOW_DETAIL_PHASE_MAP) {
+    if (entry.re.test(trimmed)) {
+      return { type: "phase_only", value: entry.label, intentFamily: entry.intentFamily };
+    }
+  }
+
+  if (LOW_DETAIL_EQUIPMENT_RE.test(trimmed)) {
+    return { type: "equipment_only", value: trimmed.toLowerCase(), intentFamily: "equipment_constraint" };
+  }
+
+  if (LOW_DETAIL_DURATION_RE.test(trimmed)) {
+    return { type: "duration_only", value: trimmed.toLowerCase(), intentFamily: "reduce_time" };
+  }
+
+  return null;
+}
+
 // ─── Vague Improvement Patterns ───────────────────────────────────────────────
 // These phrases are intentionally direction-free and must NEVER trigger
 // REBUILD_PROGRAM. They always ask a clarifying question regardless of whether
@@ -249,6 +316,88 @@ export async function buildExecutionPlan({
     );
 
     return plan;
+  }
+
+  // ── STEP 1.5: Low-detail context command detection ────────────────────────
+  // Single-word / very-short context signals ("football", "in season",
+  // "dumbbells", "45 min") don't match any multi-word regex in the intent
+  // engine and would fall through to clarification_required. Catch them here
+  // and route directly to action — never clarify when the intent is unambiguous.
+  const ldCtx = detectLowDetailContextCommand(message);
+  if (ldCtx) {
+    if (program) {
+      const ldScope: ExecutionScope = { type: "program" };
+      const ldPlan: ExecutionPlan = {
+        action: "APPLY_MUTATION",
+        intentFamily: ldCtx.intentFamily,
+        scope: ldScope,
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: ldCtx.intentFamily,
+            context: ldCtx.value,
+            contextType: ldCtx.type,
+            defaultScopeUsed: true,
+          },
+        },
+        reasoning: `Low-detail context command "${ldCtx.value}" (${ldCtx.type}) — applying as program-wide ${ldCtx.intentFamily} mutation without clarification`,
+        defaultScopeUsed: true,
+      };
+
+      console.log("[Low Detail Context Command]", {
+        message: message.slice(0, 80),
+        detectedContextType: ldCtx.type,
+        detectedValue: ldCtx.value,
+        activeProgramId: true,
+        routedAction: "APPLY_MUTATION",
+        defaultScopeUsed: true,
+      });
+
+      logger.info(
+        {
+          conversationId,
+          userId,
+          detectedContextType: ldCtx.type,
+          detectedValue: ldCtx.value,
+          intentFamily: ldCtx.intentFamily,
+          action: "APPLY_MUTATION",
+          scope: ldScope,
+        },
+        "[LowDetailContextCommand] Short context signal detected — routing to APPLY_MUTATION program-wide (no clarification)"
+      );
+
+      return ldPlan;
+    }
+
+    // No active program — sport signals trigger a guided build.
+    // Other low-detail signals (equipment, duration, phase) fall through to
+    // the normal classification tree which will route to REBUILD_PROGRAM.
+    if (ldCtx.type === "sport_only") {
+      const ldNoProgramPlan: ExecutionPlan = {
+        action: "REBUILD_PROGRAM",
+        intentFamily: "sport_context_update",
+        scope: { type: "program" },
+        reasoning: `Low-detail sport signal "${ldCtx.value}" with no active program — triggering sport-aware program build`,
+      };
+
+      console.log("[Low Detail Context Command]", {
+        message: message.slice(0, 80),
+        detectedContextType: ldCtx.type,
+        detectedValue: ldCtx.value,
+        activeProgramId: null,
+        routedAction: "REBUILD_PROGRAM",
+        defaultScopeUsed: true,
+      });
+
+      logger.info(
+        { conversationId, userId, detectedContextType: ldCtx.type, detectedValue: ldCtx.value },
+        "[LowDetailContextCommand] Sport signal with no active program — routing to REBUILD_PROGRAM"
+      );
+
+      return ldNoProgramPlan;
+    }
+    // Non-sport low-detail without a program: fall through to STEP 2 so the
+    // normal classifier + REBUILD_PROGRAM logic handles it naturally.
   }
 
   // ── STEP 2: Resolve intent family ──────────────────────────────────────────
