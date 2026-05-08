@@ -7,6 +7,7 @@ export interface UseVoiceCommandInputReturn {
   error: string | null;
   startListening: () => void;
   stopListening: () => void;
+  abortListening: () => void;
   resetTranscript: () => void;
 }
 
@@ -30,6 +31,35 @@ export function useVoiceCommandInput(): UseVoiceCommandInputReturn {
       recognitionRef.current.stop();
     }
     setIsListening(false);
+  }, []);
+
+  /**
+   * Hard-abort: immediately stops recognition and nukes all callbacks so no
+   * further state updates (onresult, onend) can fire. Used on send so the
+   * transcript cannot re-inject into the input after the field is cleared.
+   */
+  const abortListening = useCallback(() => {
+    if (recognitionRef.current) {
+      // Null out event handlers first so no stale onresult/onend fires
+      recognitionRef.current.onstart = null;
+      recognitionRef.current.onresult = null;
+      recognitionRef.current.onerror = null;
+      recognitionRef.current.onend = null;
+      try {
+        if (typeof recognitionRef.current.abort === "function") {
+          recognitionRef.current.abort();
+        } else {
+          recognitionRef.current.stop();
+        }
+      } catch {
+        // Ignore — recognition may already be in a stopped state
+      }
+      recognitionRef.current = null;
+    }
+    accumulatedRef.current = "";
+    setIsListening(false);
+    setTranscript("");
+    setError(null);
   }, []);
 
   const startListening = useCallback(() => {
@@ -111,6 +141,7 @@ export function useVoiceCommandInput(): UseVoiceCommandInputReturn {
     error,
     startListening,
     stopListening,
+    abortListening,
     resetTranscript,
   };
 }

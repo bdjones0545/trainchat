@@ -347,8 +347,14 @@ export default function Chat() {
   const currentInputTextRef = useRef("");
   useEffect(() => { currentInputTextRef.current = inputText; }, [inputText]);
 
+  // Guard: true while a send is committing so transcript cannot re-inject
+  const sendInProgressRef = useRef(false);
+
   // Transcript → inputText sync
   useEffect(() => {
+    // Never re-inject while a send is committing (sendInProgressRef covers both
+    // manual send and PTT auto-submit; mic button is disabled during streaming)
+    if (sendInProgressRef.current) return;
     if (!voice.isListening && !voice.transcript) return;
     if (voice.transcript !== prevTranscriptRef.current) {
       prevTranscriptRef.current = voice.transcript;
@@ -376,6 +382,33 @@ export default function Chat() {
   const pttAutoSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevVoiceListeningRef = useRef(false);
 
+  /**
+   * Full voice session teardown. Call on every successful send (manual or PTT).
+   * - Hard-aborts speech recognition (no more onresult/onend callbacks)
+   * - Clears transcript and all PTT state
+   * - Sets sendInProgressRef so the transcript sync effect cannot re-inject
+   *   until after React has flushed the cleared state
+   */
+  const cleanupVoiceSession = () => {
+    sendInProgressRef.current = true;
+    // Immediately kill recognition — abort() prevents any final onresult from firing
+    voice.abortListening();
+    // Clear PTT timers
+    if (pttHoldTimerRef.current) { clearTimeout(pttHoldTimerRef.current); pttHoldTimerRef.current = null; }
+    if (pttAutoSubmitTimerRef.current) { clearTimeout(pttAutoSubmitTimerRef.current); pttAutoSubmitTimerRef.current = null; }
+    // Reset all PTT refs/state
+    isPushToTalkRef.current = false;
+    isPressedRef.current = false;
+    pendingAutoSubmitRef.current = false;
+    setIsPushToTalk(false);
+    setPttNoSpeechError(false);
+    // Reset transcript tracking refs
+    prevTranscriptRef.current = "";
+    voiceBaseTextRef.current = "";
+    // Re-enable transcript sync after React flushes the cleared state (~100ms)
+    setTimeout(() => { sendInProgressRef.current = false; }, 100);
+  };
+
   // Auto-submit: fire when isListening transitions true → false in PTT mode
   useEffect(() => {
     const wasListening = prevVoiceListeningRef.current;
@@ -390,21 +423,15 @@ export default function Chat() {
       pttAutoSubmitTimerRef.current = setTimeout(() => {
         const text = currentInputTextRef.current.trim();
         if (!text) {
+          // No speech captured — show error and reset voice state cleanly
           setPttNoSpeechError(true);
           setTimeout(() => setPttNoSpeechError(false), 3000);
-          voice.resetTranscript();
-          prevTranscriptRef.current = "";
-          voiceBaseTextRef.current = "";
+          cleanupVoiceSession();
           return;
         }
-        // Pass text explicitly to avoid stale-closure inputText
+        // handleSend clears the input and calls cleanupVoiceSession internally
+        // at the commit point, so no manual cleanup is needed here.
         handleSend(text);
-        // Reset voice state after submitting
-        setInputText("");
-        voice.resetTranscript();
-        prevTranscriptRef.current = "";
-        voiceBaseTextRef.current = "";
-        if (inputRef.current) inputRef.current.style.height = "52px";
       }, 250);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1297,6 +1324,9 @@ export default function Chat() {
     if (inputRef.current) {
       inputRef.current.style.height = "auto";
     }
+    // Stop any active voice session immediately so recognition cannot re-inject
+    // transcript text into the (now cleared) input during streaming.
+    cleanupVoiceSession();
 
     // ── Optimistic user message insertion ────────────────────────────────────
     // Show the user's message in the transcript immediately — before the server
