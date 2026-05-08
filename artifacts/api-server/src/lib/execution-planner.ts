@@ -22,6 +22,7 @@ import {
   type IntentFamily,
   type IntentFamilyResult,
 } from "./intent-family-engine";
+import { normalizeSpokenNumbers } from "./intent";
 import { isMutationFamilyOntology, getCanonicalName, getMutationCategory } from "./mutation-ontology";
 import { classifyAdjustmentIntent, type AdjustmentIntentClassification } from "./adjustment-intent-classifier";
 import { type ProgramStructure } from "./ai";
@@ -135,6 +136,12 @@ export async function buildExecutionPlan({
   focusMode?: FocusMode;
   hardConstraints?: HardConstraints;
 }): Promise<ExecutionPlan> {
+  // Normalize spoken number words to digits so voice-transcribed messages
+  // ("give me a three day strength program") hit the same patterns as typed
+  // input ("give me a 3 day strength program"). A single pass here covers
+  // all downstream sub-functions (resolveScope, resolveClarification, etc.).
+  message = normalizeSpokenNumbers(message);
+
   // ── STEP 0: Button signal override ─────────────────────────────────────────
   // Right-panel buttons send an explicit button signal via uiContext.
   // These are DETERMINISTIC CONTROLS — they must NEVER route to ASK_CLARIFICATION.

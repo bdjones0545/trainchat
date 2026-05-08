@@ -42,8 +42,27 @@ export interface ExtractedConstraints {
 // Extracts hard constraints from a user's message.
 // Called for CREATE_PROGRAM and PROGRAM_MODIFICATION intents before generation.
 
+/**
+ * Converts English number words (one–seven) to digit form so voice-transcribed
+ * messages — where the browser renders "3" as "three" — hit the same regex
+ * patterns as typed input. Scope limited to 1–7: the relevant range for
+ * days-per-week and session-count constraints. Applied before ALL intent and
+ * constraint regex so neither classifyIntent nor extractConstraints needs to
+ * know whether input came from voice or keyboard.
+ */
+export function normalizeSpokenNumbers(text: string): string {
+  return text
+    .replace(/\bone\b/gi, "1")
+    .replace(/\btwo\b/gi, "2")
+    .replace(/\bthree\b/gi, "3")
+    .replace(/\bfour\b/gi, "4")
+    .replace(/\bfive\b/gi, "5")
+    .replace(/\bsix\b/gi, "6")
+    .replace(/\bseven\b/gi, "7");
+}
+
 export function extractConstraints(message: string): ExtractedConstraints {
-  const lower = message.toLowerCase().trim();
+  const lower = normalizeSpokenNumbers(message.toLowerCase().trim());
 
   // ── Sport focus ────────────────────────────────────────────────────────────
   const sportFocus = detectSport(lower);
@@ -544,7 +563,7 @@ export function classifyIntent(
   message: string,
   context: ClassificationContext
 ): IntentResult {
-  const lower = message.toLowerCase().trim();
+  const lower = normalizeSpokenNumbers(message.toLowerCase().trim());
 
   // ── Priority 1: SAVE_PROGRAM ─────────────────────────────────────────────
   if (matchesSaveProgram(lower)) {
