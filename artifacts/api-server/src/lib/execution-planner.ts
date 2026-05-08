@@ -75,6 +75,10 @@ export interface ExecutionPlan {
   mutation?: ExecutionMutation;
   clarification?: ExecutionClarification;
   reasoning: string;
+  /** True when scope was inferred as "program" because user didn't specify one. */
+  defaultScopeUsed?: boolean;
+  /** Human-readable explanation for why no mutation was applied (ASK_CLARIFICATION / GUIDANCE paths). */
+  reasonForNoAction?: string;
   /**
    * Present when the execution planner short-circuited an equipment or dislike
    * constraint that is already satisfied by the active program.  The route handler
@@ -126,6 +130,8 @@ export async function buildExecutionPlan({
   uiContext,
   focusMode,
   hardConstraints,
+  pendingClarificationCount,
+  lastClarificationQuestion,
 }: {
   message: string;
   userId: string;
@@ -135,6 +141,10 @@ export async function buildExecutionPlan({
   uiContext?: Record<string, unknown> | null;
   focusMode?: FocusMode;
   hardConstraints?: HardConstraints;
+  /** Number of clarification turns already taken for the active pending intent (0 = first answer). */
+  pendingClarificationCount?: number;
+  /** The last clarification question asked, for loop detection. */
+  lastClarificationQuestion?: string;
 }): Promise<ExecutionPlan> {
   // Normalize spoken number words to digits so voice-transcribed messages
   // ("give me a three day strength program") hit the same patterns as typed
@@ -363,30 +373,24 @@ export async function buildExecutionPlan({
   }
 
   // ── Endurance transformation ──────────────────────────────────────────────
+  // Actionable default: endurance is safe to apply program-wide when no scope
+  // is specified — never ask "which day or whole program?".
   else if (intent === "endurance_focus") {
-    if (!scope.type) {
-      plan = {
-        action: "ASK_CLARIFICATION",
-        intentFamily: intent,
-        scope,
-        clarification: {
-          question: "Should this apply to a specific day or the whole program?",
-          pendingAspect: "scope",
-        },
-        reasoning: "Endurance intent needs scope before applying transformation",
-      };
-    } else {
-      plan = {
-        action: "APPLY_MUTATION",
-        intentFamily: intent,
-        scope,
-        mutation: {
-          type: "transform",
-          params: { transformation: "endurance" },
-        },
-        reasoning: "Endurance transformation with resolved scope",
-      };
-    }
+    const enduranceScope = scope.type ? scope : { type: "program" as const };
+    const enduranceDefaulted = !scope.type;
+    plan = {
+      action: "APPLY_MUTATION",
+      intentFamily: intent,
+      scope: enduranceScope,
+      mutation: {
+        type: "transform",
+        params: { transformation: "endurance", defaultScopeUsed: enduranceDefaulted },
+      },
+      reasoning: enduranceDefaulted
+        ? "Endurance transformation — actionable default: applying program-wide (no scope needed)"
+        : "Endurance transformation with resolved scope",
+      defaultScopeUsed: enduranceDefaulted,
+    };
   }
 
   // ── Day-level progression (text-matched, no button override needed) ─────────
@@ -637,31 +641,71 @@ export async function buildExecutionPlan({
             ? { type: "session", dayIndex: 0 }
             : { type: "program" };
 
-      const scopeQuestion = buildScopeInferenceQuestion(message);
+      const loopCount = pendingClarificationCount ?? 0;
 
-      plan = {
-        action: "ASK_CLARIFICATION",
-        intentFamily: "clarification_required",
-        scope: inferredScope,
-        clarification: {
-          question: scopeQuestion,
-          pendingAspect: "scope",
-        },
-        reasoning:
-          "[ContractBinding:Forced] EDIT_PROGRAM with action verb but no family match — routing to targeted scope clarification instead of GUIDANCE (never conversation_only)",
-      };
+      // ── Loop detection: we've already asked scope once, apply with program default ──
+      // If the user has answered the scope question but the family still can't be
+      // resolved, stop asking and apply a best-effort program-wide transformation
+      // so the AI receives the full original request and can act on it.
+      if (loopCount >= 1) {
+        const forcedScope: ExecutionScope = { type: "program" };
 
-      // Phase 7: Structured logging
-      logger.info(
-        {
-          rawText: message.slice(0, 120),
-          inferredScope,
-          operation: "scope_clarification_forced",
-          shouldMutate: true,
-          family: intent,
-        },
-        "[ContractBinding:FallbackUsed] EDIT_PROGRAM with unmatched family — blocking conversation_only, routing to ASK_CLARIFICATION"
-      );
+        plan = {
+          action: "APPLY_MUTATION",
+          intentFamily: "clarification_required",
+          scope: forcedScope,
+          mutation: {
+            type: "transform",
+            params: {
+              transformation: "general_improvement",
+              defaultScopeUsed: true,
+              loopBreaker: true,
+              originalMessage: message.slice(0, 120),
+            },
+          },
+          reasoning: `[LoopBreaker] clarification_required + ${loopCount} previous rounds — forcing APPLY_MUTATION with program-wide default`,
+          defaultScopeUsed: true,
+        };
+
+        logger.warn(
+          {
+            rawText: message.slice(0, 120),
+            loopCount,
+            operation: "loop_breaker_forced",
+            forcedScope,
+          },
+          "[Conversation Loop Audit] Loop detected — breaking out of clarification cycle with APPLY_MUTATION"
+        );
+      } else {
+        // First time: ask scope as normal
+        const scopeQuestion = buildScopeInferenceQuestion(message);
+
+        plan = {
+          action: "ASK_CLARIFICATION",
+          intentFamily: "clarification_required",
+          scope: inferredScope,
+          clarification: {
+            question: scopeQuestion,
+            pendingAspect: "scope",
+          },
+          reasoning:
+            "[ContractBinding:Forced] EDIT_PROGRAM with action verb but no family match — routing to targeted scope clarification instead of GUIDANCE (never conversation_only)",
+          reasonForNoAction: scopeQuestion,
+        };
+
+        // Phase 7: Structured logging
+        logger.info(
+          {
+            rawText: message.slice(0, 120),
+            inferredScope,
+            operation: "scope_clarification_forced",
+            shouldMutate: true,
+            family: intent,
+            loopCount,
+          },
+          "[ContractBinding:FallbackUsed] EDIT_PROGRAM with unmatched family — blocking conversation_only, routing to ASK_CLARIFICATION"
+        );
+      }
     } else {
       plan = {
         action: "GUIDANCE",
@@ -688,6 +732,25 @@ export async function buildExecutionPlan({
       messagePreview:   message.slice(0, 120),
     },
     "[MutationTrace] ExecutionPlanner — plan resolved",
+  );
+
+  // ── [Conversation Loop Audit] — structured audit log for every turn ─────────
+  logger.info(
+    {
+      conversationId,
+      userId,
+      activeProgramPresent: !!program,
+      intentFamily:            plan.intentFamily,
+      plannerRoute:            plan.action,
+      pendingClarificationCount: pendingClarificationCount ?? 0,
+      lastClarificationQuestion: lastClarificationQuestion ?? null,
+      clarificationAsked:      plan.action === "ASK_CLARIFICATION",
+      mutationQueued:          plan.action === "APPLY_MUTATION",
+      defaultScopeUsed:        plan.defaultScopeUsed ?? false,
+      reasonForNoAction:       plan.action !== "APPLY_MUTATION" ? (plan.reasonForNoAction ?? plan.reasoning) : null,
+      messagePreview:          message.slice(0, 80),
+    },
+    "[Conversation Loop Audit] turn routing resolved",
   );
 
   return plan;

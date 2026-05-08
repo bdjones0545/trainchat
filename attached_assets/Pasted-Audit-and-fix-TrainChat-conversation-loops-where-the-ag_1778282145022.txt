@@ -1,0 +1,139 @@
+Audit and fix TrainChat conversation loops where the agent keeps asking questions instead of taking action.
+
+Goal:
+Identify gray-area user messages that currently trigger clarification/guidance loops even when the agent has enough context to act.
+
+Core problem:
+The agent sometimes asks another question instead of applying a reasonable default, especially after a program already exists and the user is clearly trying to refine it.
+
+Audit these categories:
+
+1. Sport/goal pivots
+Examples:
+- “Make this for football”
+- “Gear it toward hockey”
+- “Make it more athletic”
+- “This is for basketball”
+Expected:
+Apply sport-specific refinement across the full program unless the request is impossible or unsafe.
+
+2. Phase/context answers
+Examples:
+- “In season”
+- “Off season”
+- “Maintenance”
+- “Preseason”
+Expected:
+Bind to current program and apply appropriate volume/intensity changes.
+
+3. Equipment context
+Examples:
+- “I have access to a full gym”
+- “Only dumbbells”
+- “No machines”
+- “Home gym”
+Expected:
+Apply equipment constraints globally unless a specific exercise/session is named.
+
+4. Duration constraints
+Examples:
+- “Make it 45 minutes”
+- “I only have half an hour”
+- “Shorter sessions”
+Expected:
+Adjust session density, volume, rest periods, or exercise count.
+
+5. Program-wide modifiers
+Examples:
+- “Make it harder”
+- “Make it easier”
+- “More explosive”
+- “Less impact”
+- “Add more conditioning”
+Expected:
+Default to full-program refinement if no day/exercise is specified.
+
+6. Follow-up confirmations
+Examples:
+- “Yes”
+- “No”
+- “Do it”
+- “Apply it”
+- “All of it”
+- “Full program”
+Expected:
+Resolve pending clarification/action instead of restarting classification.
+
+7. Ambiguous exercise references
+Examples:
+- “Swap this”
+- “Make that easier”
+- “Change the second one”
+Expected:
+Only ask “which exercise?” if there is truly no recent exercise/session reference.
+
+Fix rules:
+
+1. Add an “actionable default” layer.
+If activeProgram exists and user intent is clearly a refinement but lacks scope:
+- default scope = full_program
+- do not ask clarification
+- include a short confirmation in the response:
+  “I’ll apply this across the full program.”
+
+2. Clarify only when required.
+Clarification should happen only when:
+- safety risk exists
+- multiple targets are equally likely and mutation would be destructive
+- exercise target is required and no recent reference exists
+- user request conflicts with hard constraints
+- missing info prevents any reasonable action
+
+3. Never ask more than one clarification in a row for the same intent.
+If the user answers a clarification, either:
+- act
+- or explain why action cannot be taken
+
+4. Add loop detection.
+Track:
+- pendingIntentFamily
+- pendingClarificationCount
+- lastClarificationQuestion
+- lastUserAnswer
+- sameIntentRepeatCount
+
+If same intent gets 2 clarification turns without mutation:
+- force APPLY_MUTATION with best safe default
+- or show one final actionable choice card
+
+5. Add dev logging:
+console.log("[Conversation Loop Audit]", {
+  message,
+  activeProgramId,
+  intentFamily,
+  plannerRoute,
+  pendingClarificationCount,
+  clarificationAsked,
+  mutationApplied,
+  defaultScopeUsed,
+  reasonForNoAction,
+});
+
+6. Add test cases:
+- “Make it geared toward football” → applies full-program sport refinement
+- “In season maintenance” → applies phase refinement
+- “I have access to a full gym” → applies equipment context
+- “Make it 45 minutes” → applies duration constraint
+- “Make this more athletic” → applies full-program athletic refinement
+- “Add more explosive work” → applies full-program or asks day only if needed
+- “Yes” after clarification → resolves and acts
+- “Full program” after clarification → resolves and acts
+- No repeated “Which exercise did you mean?” unless exercise target is truly required
+
+Acceptance criteria:
+- Fewer dead-end guidance replies.
+- Fewer unnecessary clarification questions.
+- Active-program refinements default to action.
+- Clarifications are consumed after answer.
+- Same intent cannot loop indefinitely.
+- No TypeScript errors.

@@ -50,6 +50,7 @@ import {
   clearPendingClarificationsForConversation,
   looksLikeClarificationAnswer,
   buildReconstructedRequest,
+  decrementTurnsRemaining,
 } from "../lib/pending-clarification-service";
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
@@ -882,6 +883,15 @@ Keep it helpful and intelligent, never promotional.`;
   // ── EXECUTION PLANNER — Central single-brain routing decision ─────────────
   // Converts message + program state + pending clarification into one plan.
   // All downstream routing is driven by plan.action.
+  // ── Loop detection state ──────────────────────────────────────────────────
+  // pendingClarificationCount: how many clarification rounds have already been
+  // taken for the active pending clarification (0 = first answer, 2 = force action).
+  // Derived from turnsRemaining (starts at 2, decremented on each followup turn).
+  const pendingClarificationCount = activePendingClarification
+    ? Math.max(0, 2 - activePendingClarification.turnsRemaining)
+    : 0;
+  const lastClarificationQuestion = activePendingClarification?.clarificationQuestion ?? undefined;
+
   const execPlan: ExecutionPlan = await buildExecutionPlan({
     message: parsed.data.content,
     userId: String(userId),
@@ -898,6 +908,8 @@ Keep it helpful and intelligent, never promotional.`;
     uiContext: nonStreamUiCtx,
     focusMode: nonStreamFocusMode,
     hardConstraints: hardConstraintsNonSSE,
+    pendingClarificationCount,
+    lastClarificationQuestion,
   });
 
   // Sync clarification outcome to turnOutcome
@@ -1122,6 +1134,10 @@ Keep it helpful and intelligent, never promotional.`;
   // pending intent family.
   if (intentResult.type === "CLARIFICATION_FOLLOWUP" && activePendingClarification) {
     const pending = activePendingClarification;
+
+    // Decrement turnsRemaining so loop detection sees progress on the next turn.
+    // Fire-and-forget — the pending record may be resolved before next read.
+    decrementTurnsRemaining(pending.id).catch(() => {});
 
     // Derive resolved scope label for logging
     const _followupLower = parsed.data.content.toLowerCase().trim();
@@ -3535,6 +3551,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
+  // ── Loop detection state (SSE path) ──────────────────────────────────────
+  const pendingClarificationCountSSE = activePendingClarification
+    ? Math.max(0, 2 - activePendingClarification.turnsRemaining)
+    : 0;
+  const lastClarificationQuestionSSE = activePendingClarification?.clarificationQuestion ?? undefined;
+
   // ── EXECUTION PLANNER (SSE path) — Central single-brain routing decision ──
   const execPlan: ExecutionPlan = await buildExecutionPlan({
     message: effectiveMessage,
@@ -3552,6 +3574,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     uiContext: streamUIContext,
     focusMode: streamFocusMode,
     hardConstraints: hardConstraintsSSE,
+    pendingClarificationCount: pendingClarificationCountSSE,
+    lastClarificationQuestion: lastClarificationQuestionSSE,
   });
 
   logger.info(
@@ -3780,6 +3804,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // a complete event. Falls through to standard AI path on any pipeline error.
   if (intentResult.type === "CLARIFICATION_FOLLOWUP" && activePendingClarification) {
     const pending = activePendingClarification;
+
+    // Decrement turnsRemaining so loop detection sees progress on the next turn.
+    // Fire-and-forget — the pending record may be resolved before next read.
+    decrementTurnsRemaining(pending.id).catch(() => {});
 
     const reconstructedRequest = buildReconstructedRequest(
       pending.originalRequest,
