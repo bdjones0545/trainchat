@@ -11,6 +11,13 @@
  *   • typed text + Enter key → same onSubmit pipeline
  *   • send button → same onSubmit pipeline
  *
+ * Sound cues (Web Audio API, very quiet, premium):
+ *   • start listening  → rising tone
+ *   • stop listening   → descending tone
+ *   • submit (voice)   → two-note confirmation blip
+ *   • no speech/error  → muted low double blip
+ *   User preference stored in localStorage — toggle via speaker icon.
+ *
  * Props:
  *   value / onChange      — controlled input (parent owns state)
  *   onSubmit(msg, source) — called with the final message and source tag
@@ -25,8 +32,16 @@
  */
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Mic, Loader2 } from "lucide-react";
+import { Send, Mic, Loader2, Volume2, VolumeX } from "lucide-react";
 import { useVoiceCommandInput } from "@/hooks/useVoiceCommandInput";
+import {
+  isVoiceSoundCuesEnabled,
+  setVoiceSoundCues,
+  playVoiceStart,
+  playVoiceStop,
+  playVoiceSubmit,
+  playVoiceError,
+} from "@/lib/voiceSoundCues";
 
 export interface ProgramVoiceTextInputProps {
   value: string;
@@ -65,7 +80,16 @@ export function ProgramVoiceTextInput({
 }: ProgramVoiceTextInputProps) {
   const voice = useVoiceCommandInput();
 
-  // PTT UI state
+  // ── Sound cue preference ─────────────────────────────────────────────────
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => isVoiceSoundCuesEnabled());
+
+  function toggleSound() {
+    const next = !soundEnabled;
+    setVoiceSoundCues(next);
+    setSoundEnabled(next);
+  }
+
+  // ── PTT UI state ─────────────────────────────────────────────────────────
   const [isPushToTalk, setIsPushToTalk] = useState(false);
   const [pttNoSpeech, setPttNoSpeech] = useState(false);
 
@@ -87,6 +111,9 @@ export function ProgramVoiceTextInput({
   const pttAutoSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevListeningRef = useRef(false);
 
+  // Track previous error to play cue only on first appearance
+  const prevErrorRef = useRef("");
+
   // ── Transcript → value sync ──────────────────────────────────────────────
   useEffect(() => {
     if (sendInProgressRef.current) return;
@@ -100,6 +127,17 @@ export function ProgramVoiceTextInput({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voice.transcript, voice.isListening]);
 
+  // ── Error sound cue — fires on first appearance of voice.error ───────────
+  useEffect(() => {
+    if (voice.error && voice.error !== prevErrorRef.current) {
+      prevErrorRef.current = voice.error;
+      playVoiceError();
+    }
+    if (!voice.error) {
+      prevErrorRef.current = "";
+    }
+  }, [voice.error]);
+
   // ── PTT auto-submit: fires on isListening true→false in PTT mode ─────────
   useEffect(() => {
     const wasListening = prevListeningRef.current;
@@ -112,6 +150,7 @@ export function ProgramVoiceTextInput({
       pttAutoSubmitTimerRef.current = setTimeout(() => {
         const normalized = currentValueRef.current.trim().replace(/\s{2,}/g, " ");
         if (!normalized) {
+          playVoiceError();
           setPttNoSpeech(true);
           setTimeout(() => setPttNoSpeech(false), 3000);
           doCleanup();
@@ -155,6 +194,7 @@ export function ProgramVoiceTextInput({
   function cancelPTT() {
     if (pttHoldTimerRef.current) { clearTimeout(pttHoldTimerRef.current); pttHoldTimerRef.current = null; }
     if (isPushToTalkRef.current) {
+      playVoiceStop();
       pendingAutoSubmitRef.current = false;
       isPushToTalkRef.current = false;
       setIsPushToTalk(false);
@@ -175,6 +215,10 @@ export function ProgramVoiceTextInput({
         inputContext,
         submitSource,
       });
+    }
+    // Play submit cue only for voice-originated submissions
+    if (source.startsWith("voice")) {
+      playVoiceSubmit();
     }
     doCleanup();
     onChange("");
@@ -198,6 +242,7 @@ export function ProgramVoiceTextInput({
       baseTextRef.current = currentValueRef.current;
       voice.resetTranscript();
       prevTranscriptRef.current = "";
+      playVoiceStart();
       voice.startListening();
     }, 350);
   }
@@ -208,16 +253,21 @@ export function ProgramVoiceTextInput({
     const heldMs = Date.now() - pressStartRef.current;
     if (pttHoldTimerRef.current) { clearTimeout(pttHoldTimerRef.current); pttHoldTimerRef.current = null; }
     if (isPushToTalkRef.current) {
+      // PTT release — submit sound fires in doSubmit (or error sound if no speech)
       voice.stopListening();
     } else if (heldMs < 350) {
       if (!voice.isSupported) { voice.startListening(); return; }
       if (voice.isListening) {
+        // Tap to stop dictating
+        playVoiceStop();
         voice.stopListening();
       } else {
+        // Tap to start dictating
         baseTextRef.current = currentValueRef.current;
         voice.resetTranscript();
         prevTranscriptRef.current = "";
         setPttNoSpeech(false);
+        playVoiceStart();
         voice.startListening();
       }
     }
@@ -355,6 +405,25 @@ export function ProgramVoiceTextInput({
       {/* Mic permission / recognition error */}
       {voice.error && !voice.isListening && (
         <p className="mt-1 text-[10px] text-red-400/80 px-1">{voice.error}</p>
+      )}
+
+      {/* Hint row: usage tip + sound cue toggle */}
+      {voice.isSupported && !voice.isListening && !pttNoSpeech && !voice.error && (
+        <div className="mt-1.5 flex items-center justify-between px-1">
+          <p className="text-[10px] text-muted-foreground/40 leading-relaxed">
+            Tap mic to dictate · Hold for push-to-talk
+          </p>
+          <button
+            onClick={toggleSound}
+            className="flex items-center gap-1 text-[9px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors select-none"
+            title={soundEnabled ? "Disable voice sound cues" : "Enable voice sound cues"}
+          >
+            {soundEnabled
+              ? <Volume2 className="w-3 h-3" />
+              : <VolumeX className="w-3 h-3" />
+            }
+          </button>
+        </div>
       )}
     </div>
   );
