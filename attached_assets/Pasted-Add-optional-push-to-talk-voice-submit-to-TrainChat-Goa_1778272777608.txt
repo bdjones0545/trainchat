@@ -1,0 +1,54 @@
+Add optional push-to-talk voice submit to TrainChat.
+
+Goal:
+Keep the current tap-to-transcribe flow, but add a premium “hold to speak, release to send” behavior for faster agent commands.
+
+Requirements:
+- Current mic tap behavior must remain unchanged:
+  - tap mic → start/stop listening
+  - transcript fills input
+  - user manually presses send
+- Add press-and-hold behavior:
+  - user holds mic for 350ms+ → push-to-talk mode starts
+  - while holding, show “Release to send” above the input
+  - on release, stop listening
+  - when final transcript is ready, automatically submit through the existing send handler
+- Do not submit if:
+  - transcript is empty
+  - user releases before 350ms
+  - agent is already streaming/responding
+  - there is a permission or unsupported-browser error
+- Preserve typed base text:
+  - if input already has text, append spoken text before sending
+- Add a small safety delay after release so final Web Speech API results can arrive before submit.
+- Use the existing send pipeline only. Do not create a new route.
+- Keep SSE streaming, suggestion chips, refine buttons, and typed input behavior untouched.
+
+UX:
+- Listening tap state: keep current glow/waveform.
+- Push-to-talk state: stronger blue glow, subtle waveform, label says “Release to send.”
+- On auto-submit, clear transcript/reset voice state.
+- If auto-submit fails because no speech was captured, show: “No voice command detected.”
+- Mobile-first: support pointer events for touch and mouse.
+- Prevent accidental text selection or scrolling while holding the mic.
+
+Implementation notes:
+- Extend useVoiceCommandInput or add a small wrapper in the chat input component.
+- Track:
+  - isPressingMic
+  - isPushToTalk
+  - pressStartTimeout
+  - pendingAutoSubmit
+  - baseInputBeforeVoice
+- Use onPointerDown, onPointerUp, onPointerCancel, and onPointerLeave carefully.
+- Only trigger push-to-talk after the hold threshold.
+- Do not double-trigger the normal click handler after pointer release.
+- Add TypeScript-safe cleanup for timers and speech recognition.
+
+Acceptance criteria:
+- Tap mic still works exactly like before.
+- Hold mic starts listening and shows “Release to send.”
+- Releasing after speech sends the command automatically.
+- Quick tap does not auto-submit.
+- Empty speech does not submit.
+- No TypeScript errors.

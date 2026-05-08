@@ -341,9 +341,13 @@ export default function Chat() {
   // ── Voice command input ──────────────────────────────────────────────────
   const voice = useVoiceCommandInput();
   const prevTranscriptRef = useRef("");
-
   const voiceBaseTextRef = useRef("");
 
+  // Always-current mirror of inputText for safe async reads
+  const currentInputTextRef = useRef("");
+  useEffect(() => { currentInputTextRef.current = inputText; }, [inputText]);
+
+  // Transcript → inputText sync
   useEffect(() => {
     if (!voice.isListening && !voice.transcript) return;
     if (voice.transcript !== prevTranscriptRef.current) {
@@ -353,7 +357,6 @@ export default function Chat() {
         ? base.trimEnd() + " " + voice.transcript.trim()
         : voice.transcript;
       setInputText(combined);
-      // resize textarea
       if (inputRef.current) {
         const t = inputRef.current;
         t.style.height = "auto";
@@ -362,9 +365,69 @@ export default function Chat() {
     }
   }, [voice.transcript, voice.isListening]);
 
+  // ── Push-to-talk state ──────────────────────────────────────────────────
+  const isPressedRef = useRef(false);
+  const pressStartTimeRef = useRef(0);
+  const pttHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isPushToTalkRef = useRef(false);
+  const pendingAutoSubmitRef = useRef(false);
+  const [isPushToTalk, setIsPushToTalk] = useState(false);
+  const [pttNoSpeechError, setPttNoSpeechError] = useState(false);
+  const pttAutoSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevVoiceListeningRef = useRef(false);
+
+  // Auto-submit: fire when isListening transitions true → false in PTT mode
+  useEffect(() => {
+    const wasListening = prevVoiceListeningRef.current;
+    prevVoiceListeningRef.current = voice.isListening;
+
+    if (wasListening && !voice.isListening && pendingAutoSubmitRef.current) {
+      pendingAutoSubmitRef.current = false;
+      isPushToTalkRef.current = false;
+      setIsPushToTalk(false);
+
+      if (pttAutoSubmitTimerRef.current) clearTimeout(pttAutoSubmitTimerRef.current);
+      pttAutoSubmitTimerRef.current = setTimeout(() => {
+        const text = currentInputTextRef.current.trim();
+        if (!text) {
+          setPttNoSpeechError(true);
+          setTimeout(() => setPttNoSpeechError(false), 3000);
+          voice.resetTranscript();
+          prevTranscriptRef.current = "";
+          voiceBaseTextRef.current = "";
+          return;
+        }
+        // Pass text explicitly to avoid stale-closure inputText
+        handleSend(text);
+        // Reset voice state after submitting
+        setInputText("");
+        voice.resetTranscript();
+        prevTranscriptRef.current = "";
+        voiceBaseTextRef.current = "";
+        if (inputRef.current) inputRef.current.style.height = "52px";
+      }, 250);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.isListening]);
+
+  const cancelPTT = () => {
+    if (pttHoldTimerRef.current) {
+      clearTimeout(pttHoldTimerRef.current);
+      pttHoldTimerRef.current = null;
+    }
+    if (isPushToTalkRef.current) {
+      pendingAutoSubmitRef.current = false;
+      isPushToTalkRef.current = false;
+      setIsPushToTalk(false);
+      voice.stopListening();
+    }
+    isPressedRef.current = false;
+  };
+
+  // Tap-to-toggle handler (used when press < 350ms)
   const handleMicClick = () => {
     if (!voice.isSupported) {
-      voice.startListening(); // will immediately surface the unsupported error
+      voice.startListening(); // surfaces the unsupported error immediately
       return;
     }
     if (voice.isListening) {
@@ -373,7 +436,63 @@ export default function Chat() {
       voiceBaseTextRef.current = inputText;
       voice.resetTranscript();
       prevTranscriptRef.current = "";
+      setPttNoSpeechError(false);
       voice.startListening();
+    }
+  };
+
+  const handleMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (stream.isActive) return;
+    e.preventDefault(); // prevent text selection / scroll on mobile
+    e.currentTarget.setPointerCapture(e.pointerId);
+    isPressedRef.current = true;
+    pressStartTimeRef.current = Date.now();
+    setPttNoSpeechError(false);
+
+    pttHoldTimerRef.current = setTimeout(() => {
+      if (!isPressedRef.current) return;
+      // Enter PTT mode
+      isPushToTalkRef.current = true;
+      setIsPushToTalk(true);
+      pendingAutoSubmitRef.current = true;
+      voiceBaseTextRef.current = inputText;
+      voice.resetTranscript();
+      prevTranscriptRef.current = "";
+      voice.startListening();
+    }, 350);
+  };
+
+  const handleMicPointerUp = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (!isPressedRef.current) return;
+    isPressedRef.current = false;
+    const heldMs = Date.now() - pressStartTimeRef.current;
+
+    if (pttHoldTimerRef.current) {
+      clearTimeout(pttHoldTimerRef.current);
+      pttHoldTimerRef.current = null;
+    }
+
+    if (isPushToTalkRef.current) {
+      // PTT release → stop listening; auto-submit handled by isListening effect
+      voice.stopListening();
+    } else if (heldMs < 350) {
+      // Quick tap → normal tap-to-toggle
+      handleMicClick();
+    }
+    e.preventDefault();
+  };
+
+  const handleMicPointerCancel = () => { cancelPTT(); };
+  const handleMicPointerLeave = () => {
+    // Only cancel PTT on leave (not tap-mode listening)
+    if (isPushToTalkRef.current) cancelPTT();
+    else if (isPressedRef.current) {
+      // Finger left without releasing — cancel hold timer, treat as tap if < 350ms
+      if (pttHoldTimerRef.current) {
+        clearTimeout(pttHoldTimerRef.current);
+        pttHoldTimerRef.current = null;
+      }
+      isPressedRef.current = false;
     }
   };
 
@@ -3552,9 +3671,9 @@ export default function Chat() {
                   </div>
                 )}
               </div>
-              {/* Voice status strip — sits above the input, takes no extra height when idle */}
+              {/* Voice status strip — zero height when idle, no layout shift */}
               <AnimatePresence>
-                {(voice.isListening || voice.error) && (
+                {(voice.isListening || voice.error || pttNoSpeechError) && (
                   <motion.div
                     initial={{ opacity: 0, y: 4 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -3565,33 +3684,49 @@ export default function Chat() {
                     {voice.isListening && (
                       <>
                         <motion.span
-                          animate={{ opacity: [1, 0.4, 1] }}
-                          transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
-                          className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0"
+                          animate={{ opacity: [1, 0.35, 1] }}
+                          transition={{ repeat: Infinity, duration: isPushToTalk ? 0.7 : 1.2, ease: "easeInOut" }}
+                          className={`w-2 h-2 rounded-full flex-shrink-0 ${isPushToTalk ? "bg-blue-300" : "bg-blue-400"}`}
                         />
-                        <span className="text-[11px] text-blue-400 font-medium">Listening…</span>
-                        {/* Animated waveform bars */}
+                        <span className={`text-[11px] font-semibold ${isPushToTalk ? "text-blue-300" : "text-blue-400"}`}>
+                          {isPushToTalk ? "Release to send" : "Listening…"}
+                        </span>
+                        {/* Animated waveform — more intense in PTT */}
                         <div className="flex items-end gap-0.5 h-3">
-                          {[0.6, 1, 0.7, 1, 0.5].map((delay, i) => (
+                          {[0, 1, 2, 3, 4].map((i) => (
                             <motion.span
                               key={i}
-                              className="w-0.5 rounded-full bg-blue-400/70"
-                              animate={{ scaleY: [0.3, 1, 0.3] }}
-                              transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.12, ease: "easeInOut" }}
+                              className={`w-0.5 rounded-full ${isPushToTalk ? "bg-blue-300/90" : "bg-blue-400/70"}`}
+                              animate={{ scaleY: [0.25, 1, 0.25] }}
+                              transition={{
+                                repeat: Infinity,
+                                duration: isPushToTalk ? 0.55 : 0.8,
+                                delay: i * (isPushToTalk ? 0.09 : 0.12),
+                                ease: "easeInOut",
+                              }}
                               style={{ height: "10px", transformOrigin: "bottom" }}
                             />
                           ))}
                         </div>
                       </>
                     )}
-                    {voice.error && !voice.isListening && (
+                    {(voice.error && !voice.isListening) && (
                       <span className="text-[11px] text-destructive/80">{voice.error}</span>
+                    )}
+                    {pttNoSpeechError && !voice.isListening && !voice.error && (
+                      <span className="text-[11px] text-amber-400/80">No voice command detected.</span>
                     )}
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              <div className={`relative flex items-end gap-2 bg-card border rounded-2xl focus-within:ring-2 focus-within:ring-primary/15 focus-within:shadow-sm transition-all duration-200 ${voice.isListening ? "border-blue-500/60 ring-2 ring-blue-500/15" : "border-border focus-within:border-primary/60"}`}>
+              <div className={`relative flex items-end gap-2 bg-card border rounded-2xl focus-within:ring-2 focus-within:shadow-sm transition-all duration-200 ${
+                isPushToTalk
+                  ? "border-blue-400/80 ring-2 ring-blue-400/25 shadow-[0_0_14px_rgba(96,165,250,0.15)]"
+                  : voice.isListening
+                    ? "border-blue-500/60 ring-2 ring-blue-500/15"
+                    : "border-border focus-within:border-primary/60 focus-within:ring-primary/15"
+              }`}>
                 <textarea
                   ref={inputRef}
                   data-testid="input-message"
@@ -3599,7 +3734,15 @@ export default function Chat() {
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
                   rows={1}
-                  placeholder={voice.isListening ? "Speak now…" : hasActiveSystem ? "Ask me to adjust your program…" : "Build or edit your training system…"}
+                  placeholder={
+                    isPushToTalk
+                      ? "Release to send…"
+                      : voice.isListening
+                        ? "Speak now…"
+                        : hasActiveSystem
+                          ? "Ask me to adjust your program…"
+                          : "Build or edit your training system…"
+                  }
                   disabled={stream.isActive}
                   onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
                   className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
@@ -3610,23 +3753,29 @@ export default function Chat() {
                     t.style.height = Math.min(t.scrollHeight, 160) + "px";
                   }}
                 />
-                {/* Mic button */}
+                {/* Mic button — pointer events drive both tap and push-to-talk */}
                 <motion.button
                   type="button"
-                  onClick={handleMicClick}
                   disabled={stream.isActive}
-                  whileTap={{ scale: 0.88 }}
-                  title={voice.isListening ? "Stop listening" : "Voice input"}
-                  className={`mb-2 p-2.5 rounded-xl flex-shrink-0 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed ${
-                    voice.isListening
-                      ? "text-blue-400 bg-blue-500/15 hover:bg-blue-500/25"
-                      : "text-muted-foreground/50 hover:text-foreground hover:bg-accent"
+                  onPointerDown={handleMicPointerDown}
+                  onPointerUp={handleMicPointerUp}
+                  onPointerCancel={handleMicPointerCancel}
+                  onPointerLeave={handleMicPointerLeave}
+                  animate={isPushToTalk ? { scale: [1, 1.08, 1] } : {}}
+                  transition={isPushToTalk ? { repeat: Infinity, duration: 0.9, ease: "easeInOut" } : {}}
+                  title={isPushToTalk ? "Release to send" : voice.isListening ? "Stop listening" : "Tap or hold for voice"}
+                  className={`mb-2 p-2.5 rounded-xl flex-shrink-0 transition-all duration-150 select-none touch-none disabled:opacity-30 disabled:cursor-not-allowed ${
+                    isPushToTalk
+                      ? "text-blue-200 bg-blue-500/30 shadow-[0_0_10px_rgba(96,165,250,0.3)]"
+                      : voice.isListening
+                        ? "text-blue-400 bg-blue-500/15 hover:bg-blue-500/25"
+                        : "text-muted-foreground/50 hover:text-foreground hover:bg-accent"
                   }`}
                 >
                   <AnimatePresence mode="wait" initial={false}>
-                    {voice.isListening ? (
+                    {(voice.isListening || isPushToTalk) ? (
                       <motion.span
-                        key="mic-on"
+                        key="mic-active"
                         initial={{ scale: 0.7, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.7, opacity: 0 }}
@@ -3634,8 +3783,8 @@ export default function Chat() {
                         className="block"
                       >
                         <motion.span
-                          animate={{ opacity: [1, 0.5, 1] }}
-                          transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+                          animate={{ opacity: [1, isPushToTalk ? 0.6 : 0.5, 1] }}
+                          transition={{ repeat: Infinity, duration: isPushToTalk ? 0.7 : 1.2, ease: "easeInOut" }}
                           className="block"
                         >
                           <Mic className="w-4 h-4" />
@@ -3643,7 +3792,7 @@ export default function Chat() {
                       </motion.span>
                     ) : (
                       <motion.span
-                        key="mic-off"
+                        key="mic-idle"
                         initial={{ scale: 0.7, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
                         exit={{ scale: 0.7, opacity: 0 }}
