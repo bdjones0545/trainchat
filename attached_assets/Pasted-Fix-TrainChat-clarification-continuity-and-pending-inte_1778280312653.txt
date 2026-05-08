@@ -1,0 +1,114 @@
+Fix TrainChat clarification continuity and pending-intent binding across follow-up responses.
+
+Problem:
+The agent loses conversational continuity during multi-turn refinements and clarifications.
+
+Observed behavior:
+User says:
+- “Make it geared towards football”
+Agent asks:
+- “Off-season, pre-season, or in-season?”
+User answers:
+- “In season maintenance”
+Good so far.
+
+But later:
+- “I have access to a gym”
+Agent incorrectly asks:
+- “Which exercise did you mean?”
+
+This indicates the pending clarification target/intended mutation scope is being lost or rebound incorrectly.
+
+Goal:
+Clarification answers should remain attached to the original unresolved intent until that intent is fully resolved or completed.
+
+Tasks:
+
+1. Add explicit pending clarification state tracking.
+
+Track:
+- pendingIntentFamily
+- pendingAction
+- pendingScope
+- pendingClarificationQuestion
+- pendingClarificationFields
+- pendingTrainingSystemId
+- pendingConversationId
+- pendingMutationContext
+- pendingEntityTarget
+
+2. Clarification answers should prioritize resolving the active pending intent before creating a new intent classification.
+
+If a pending clarification exists:
+- short user replies should first be interpreted as clarification answers
+- not treated as fresh standalone commands
+
+Examples:
+“In season maintenance”
+“Full gym access”
+“45 minutes”
+“Day 2”
+“All days”
+“Yes”
+“No”
+
+should bind to the pending clarification context.
+
+3. Add clarification confidence routing.
+
+If:
+- pending clarification exists
+AND
+- new message is short/simple
+THEN:
+- route through clarification resolution first
+before normal intent classification.
+
+4. Add clarification expiration rules.
+
+Pending clarification should clear only when:
+- mutation/program build completes
+- user explicitly changes topic
+- user sends a clearly unrelated command
+- timeout threshold reached
+
+5. Prevent stale clarification leakage.
+
+Once resolved:
+- clear pending clarification state
+- do not reuse old unresolved exercise/swap scopes
+
+Likely current bug:
+Old exercise-edit clarification state is surviving into later program refinement turns.
+
+6. Add dev logging:
+
+console.log("[Clarification State]", {
+  pendingIntentFamily,
+  pendingAction,
+  pendingScope,
+  pendingClarificationFields,
+  currentMessage,
+  clarificationResolutionAttempted,
+  clarificationResolved,
+});
+
+7. Acceptance criteria:
+
+Conversation:
+“Make it geared towards football”
+→ asks season
+
+“In season maintenance”
+→ continues football refinement
+
+“I have access to a full gym”
+→ continues refinement flow
+
+No random:
+“Which exercise did you mean?”
+unless the current pending intent actually concerns an exercise.
+
+Clarification continuity should feel like a real coach conversation, not isolated command parsing.
+
+No TypeScript errors.
