@@ -339,6 +339,17 @@ export default function Chat() {
   const [showCalibrationNudge, setShowCalibrationNudge] = useState(false);
 
   // ── Voice command input ──────────────────────────────────────────────────
+
+  /**
+   * Normalizes a speech transcript before it enters the send pipeline.
+   * Typed input goes through the same handleSend() trim, so voice must match.
+   * - Trims leading/trailing whitespace
+   * - Collapses multiple consecutive spaces into one
+   */
+  function normalizeTranscript(raw: string): string {
+    return raw.trim().replace(/\s{2,}/g, " ");
+  }
+
   const voice = useVoiceCommandInput();
   const prevTranscriptRef = useRef("");
   const voiceBaseTextRef = useRef("");
@@ -359,10 +370,12 @@ export default function Chat() {
     if (voice.transcript !== prevTranscriptRef.current) {
       prevTranscriptRef.current = voice.transcript;
       const base = voiceBaseTextRef.current;
-      const combined = base
+      const raw = base
         ? base.trimEnd() + " " + voice.transcript.trim()
         : voice.transcript;
-      setInputText(combined);
+      // Normalize before injecting so the input always contains clean text —
+      // identical to what handleSend() would receive from a typed entry.
+      setInputText(normalizeTranscript(raw));
       if (inputRef.current) {
         const t = inputRef.current;
         t.style.height = "auto";
@@ -421,17 +434,21 @@ export default function Chat() {
 
       if (pttAutoSubmitTimerRef.current) clearTimeout(pttAutoSubmitTimerRef.current);
       pttAutoSubmitTimerRef.current = setTimeout(() => {
-        const text = currentInputTextRef.current.trim();
-        if (!text) {
+        // Normalize the transcript exactly as the transcript sync effect does,
+        // so the text entering handleSend is identical to typed input.
+        const normalized = normalizeTranscript(currentInputTextRef.current);
+        if (!normalized) {
           // No speech captured — show error and reset voice state cleanly
           setPttNoSpeechError(true);
           setTimeout(() => setPttNoSpeechError(false), 3000);
           cleanupVoiceSession();
           return;
         }
-        // handleSend clears the input and calls cleanupVoiceSession internally
-        // at the commit point, so no manual cleanup is needed here.
-        handleSend(text);
+        // Mirror what a typed send does: update inputText state first, then send.
+        // handleSend is called with the explicit normalized text so it does not
+        // read a stale inputText closure — behavior is identical to typed sends.
+        setInputText(normalized);
+        handleSend(normalized);
       }, 250);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1397,6 +1414,21 @@ export default function Chat() {
       // Extra context from panel actions (source, dayIndex, exerciseId, etc.)
       ...(extraContext ?? {}),
     };
+
+    // DEV-ONLY: log the full send payload before every API call so typed vs
+    // voice sends can be compared. Both paths must produce identical output
+    // except for the optional `source` field in extraContext.
+    if (import.meta.env.DEV) {
+      console.log("[TrainChat Send Payload]", {
+        source: (extraContext as any)?.source ?? "typed",
+        message: content,
+        route: `/api/conversations/${resolvedConvoId}/messages/stream`,
+        mode: chatUIContext.focusMode,
+        hasProgramContext: !!chatUIContext.activeProgramId,
+        activeProgramId: chatUIContext.activeProgramId ?? null,
+      });
+    }
+
     const result = await stream.send(resolvedConvoId, content, chatUIContext);
 
     if (!result) {

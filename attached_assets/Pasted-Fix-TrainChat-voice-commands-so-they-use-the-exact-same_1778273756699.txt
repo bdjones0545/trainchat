@@ -1,0 +1,54 @@
+Fix TrainChat voice commands so they use the exact same programming pipeline as typed text.
+
+Current issue:
+Voice-submitted commands seem to produce different programming behavior than the same command typed manually.
+
+Goal:
+Voice input must be treated as plain text only. After transcription, it should enter the exact same send path as typed input with no alternate route, no alternate prompt, no extra metadata, and no different agent handling.
+
+Requirements:
+
+1. Single source of truth:
+- All sends must go through the same handleSend() function.
+- Typed send, suggestion chips, tap-to-transcribe manual send, and push-to-talk auto-submit should all call the same function.
+- Do not create or use any separate voice route, voice mode, voice intent, voice prompt, or voice-specific agent logic.
+
+2. Normalize voice transcript before send:
+- trim whitespace
+- collapse repeated spaces
+- remove trailing transcript artifacts if present
+- preserve normal punctuation if provided by browser transcription
+
+3. Push-to-talk auto-submit:
+- It should set the final transcript into the same inputText state first.
+- Then call the same handleSend() path as the send button.
+- Avoid calling handleSend(text) if that bypasses normal state-based behavior.
+- If handleSend accepts an override, make sure typed sends and voice sends both pass through the exact same internal submit logic.
+
+4. Payload verification:
+Add temporary dev-only logging before the API call:
+console.log("[TrainChat Send Payload]", {
+  source,
+  message,
+  route,
+  mode,
+  hasProgramContext,
+  activeProgramId,
+});
+Compare typed vs voice sends and confirm the payload is identical except source.
+
+5. Backend:
+- Search for any voice-specific branch, source === "voice", mode === "voice", or audioCommand handling.
+- Remove or ignore anything that changes programming behavior for voice.
+- Voice should be treated as normal user message content.
+
+6. Guard against stale text:
+- Make sure push-to-talk waits for final transcript before submitting.
+- Do not submit partial/interim transcript unless it is the only transcript available.
+- Use the final normalized message that appears in the input.
+
+7. Acceptance criteria:
+- Typing “Make Day 2 more explosive” and saying “Make Day 2 more explosive” produce the same route, same payload shape, and same programming behavior.
+- Voice sends clear input and stop listening after successful send.
+- No transcript is re-injected after send.
+- No TypeScript errors.
