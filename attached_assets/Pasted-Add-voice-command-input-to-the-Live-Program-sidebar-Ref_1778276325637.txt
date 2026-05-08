@@ -1,0 +1,102 @@
+Add voice command input to the Live Program sidebar “Refine this program…” field.
+
+Goal:
+Users should be able to refine the currently loaded program from the right sidebar by voice, the same way they can command the main TrainChat input.
+
+Requirements:
+
+1. Add mic button to sidebar refine input
+- Place a subtle mic icon inside the refine input, before the send icon.
+- Match existing TrainChat dark styling.
+- Idle state: muted icon.
+- Listening state: blue glow + waveform/status strip.
+- Push-to-talk state: stronger glow + “Release to refine” label.
+
+2. Reuse existing voice hook
+- Use the existing useVoiceCommandInput hook.
+- Do not duplicate Web Speech API logic.
+- Support:
+  - tap mic → dictate into refine field
+  - edit text manually
+  - press send to refine
+  - hold mic → speak → release to auto-submit refine command
+
+3. Sidebar-specific behavior
+- Voice command must target only the currently loaded sidebar training system.
+- Use the conversation-scoped/current loaded trainingSystemId.
+- Do not target the newest global program.
+- Do not mutate a different chat’s program.
+
+4. Unified refine submit pipeline
+Create or use a single function:
+
+submitRefineCommand({
+  message,
+  source,
+  trainingSystemId,
+  conversationId,
+})
+
+All sidebar refine sends must use this:
+- typed refine
+- Enter key refine
+- button refine
+- tap-to-dictate refine
+- push-to-talk refine
+
+5. Normalize spoken numbers
+Frontend can keep transcript readable, but backend must receive the same normalized handling already added:
+- “day one” should resolve as “day 1”
+- “add two sets” should resolve as “add 2 sets”
+- “make day three shorter” should resolve as “day 3”
+
+Do not create sidebar-only normalization unless needed.
+
+6. Push-to-talk refine behavior
+- Hold mic for 350ms+ starts push-to-talk.
+- Label: “Release to refine”
+- On release:
+  - stop listening
+  - wait 250ms for final transcript
+  - submit through submitRefineCommand()
+- Do not submit if:
+  - transcript is empty
+  - current program is missing
+  - agent/refine request is already running
+  - browser does not support voice
+  - mic permission denied
+
+7. Cleanup lifecycle
+After successful refine submit:
+- stop listening
+- abort recognition if still active
+- reset transcript
+- clear refine input
+- clear push-to-talk refs/state
+- remove waveform/status strip
+- prevent transcript from reappearing while refine mutation is running
+
+If refine submit fails:
+- preserve refine input text
+- show error message
+
+8. Dev logging
+Add temporary logs:
+
+console.log("[Sidebar Refine Submit]", {
+  source,
+  message,
+  trainingSystemId,
+  conversationId,
+  loadedProgramTitle,
+});
+
+9. Acceptance criteria
+- User can tap mic in sidebar refine field and dictate a refinement.
+- User can edit before pressing send.
+- User can hold mic, speak, release, and auto-submit.
+- “Make day one harder” correctly targets Day 1 of the sidebar program.
+- “Add two sets to day three” correctly targets Day 3.
+- The refinement applies only to the currently loaded sidebar program.
+- Input clears and mic stops after success.
+- No TypeScript errors.

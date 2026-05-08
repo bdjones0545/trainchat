@@ -4,7 +4,7 @@ import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, TrendingDown, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2, Wrench, HelpCircle,
+  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2, Wrench, HelpCircle, Mic,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -28,6 +28,7 @@ import type { FocusMode } from "@/lib/focusMode";
 import SystemAdjustmentsPanel from "./SystemAdjustmentsPanel";
 import ProgramShareModal from "@/components/share/ProgramShareModal";
 import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
+import { useVoiceCommandInput } from "@/hooks/useVoiceCommandInput";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,8 @@ interface Props {
    * a loading state instead of the "Ready to build" empty state.
    */
   isWeekDataLoading?: boolean;
+  /** Conversation ID — used for dev logging of sidebar refine submits */
+  conversationId?: number | null;
 }
 
 type Tab = "program" | "changes" | "history" | "forecast" | "adapted";
@@ -655,6 +658,7 @@ function ProgramTab({
   onClose,
   blockMetadata,
   onSidebarMutation,
+  conversationId,
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
@@ -681,6 +685,65 @@ function ProgramTab({
   // ── Refinement state ─────────────────────────────────────────────────────
   const [pendingRefinement, setPendingRefinement] = useState<string | null>(null);
   const [refineInput, setRefineInput] = useState("");
+
+  // ── Voice refine state ────────────────────────────────────────────────────
+  const refineVoice = useVoiceCommandInput();
+  const [refineIsPushToTalk, setRefineIsPushToTalk] = useState(false);
+  const [refinePttNoSpeech, setRefinePttNoSpeech] = useState(false);
+  // Always-current mirror of refineInput for safe async reads inside effects
+  const currentRefineInputRef = useRef("");
+  useEffect(() => { currentRefineInputRef.current = refineInput; }, [refineInput]);
+  // Guard: true while a refine send is committing so transcript cannot re-inject
+  const refineVoiceSendInProgressRef = useRef(false);
+  const refineBaseTextRef = useRef("");
+  const refinePrevTranscriptRef = useRef("");
+  // PTT refs
+  const refineIsPressedRef = useRef(false);
+  const refinePressStartRef = useRef(0);
+  const refinePttHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refineIsPushToTalkRef = useRef(false);
+  const refinePendingAutoSubmitRef = useRef(false);
+  const refinePttAutoSubmitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refinePrevListeningRef = useRef(false);
+
+  // Transcript → refineInput sync
+  useEffect(() => {
+    if (refineVoiceSendInProgressRef.current) return;
+    if (!refineVoice.isListening && !refineVoice.transcript) return;
+    if (refineVoice.transcript !== refinePrevTranscriptRef.current) {
+      refinePrevTranscriptRef.current = refineVoice.transcript;
+      const base = refineBaseTextRef.current;
+      const raw = base ? base.trimEnd() + " " + refineVoice.transcript.trim() : refineVoice.transcript;
+      setRefineInput(raw.trim().replace(/\s{2,}/g, " "));
+    }
+  }, [refineVoice.transcript, refineVoice.isListening]);
+
+  // PTT auto-submit: fires when isListening transitions true → false in PTT mode
+  useEffect(() => {
+    const wasListening = refinePrevListeningRef.current;
+    refinePrevListeningRef.current = refineVoice.isListening;
+    if (wasListening && !refineVoice.isListening && refinePendingAutoSubmitRef.current) {
+      refinePendingAutoSubmitRef.current = false;
+      refineIsPushToTalkRef.current = false;
+      setRefineIsPushToTalk(false);
+      if (refinePttAutoSubmitTimerRef.current) clearTimeout(refinePttAutoSubmitTimerRef.current);
+      refinePttAutoSubmitTimerRef.current = setTimeout(() => {
+        const normalized = currentRefineInputRef.current.trim().replace(/\s{2,}/g, " ");
+        if (!normalized) {
+          setRefinePttNoSpeech(true);
+          setTimeout(() => setRefinePttNoSpeech(false), 3000);
+          cleanupRefineVoiceSession();
+          return;
+        }
+        setRefineInput(normalized);
+        Promise.resolve().then(() => {
+          submitRefineCommand({ message: normalized, source: "voice_ptt" });
+        });
+      }, 250);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refineVoice.isListening]);
+
   const [showSuccessOverlay, setShowSuccessOverlay] = useState(false);
   const [successOverlayFading, setSuccessOverlayFading] = useState(false);
   const [successMessage, setSuccessMessage] = useState("Updated");
@@ -911,9 +974,100 @@ function ProgramTab({
     onClose?.();
   }
 
-  function handleRefineSubmit() {
-    const msg = refineInput.trim();
-    if (!msg || !onSendMessage || buildingState?.isBuilding) return;
+  // ── Voice refine lifecycle ────────────────────────────────────────────────
+
+  function cleanupRefineVoiceSession() {
+    refineVoiceSendInProgressRef.current = true;
+    refineVoice.abortListening();
+    if (refinePttHoldTimerRef.current) { clearTimeout(refinePttHoldTimerRef.current); refinePttHoldTimerRef.current = null; }
+    if (refinePttAutoSubmitTimerRef.current) { clearTimeout(refinePttAutoSubmitTimerRef.current); refinePttAutoSubmitTimerRef.current = null; }
+    refineIsPushToTalkRef.current = false;
+    refineIsPressedRef.current = false;
+    refinePendingAutoSubmitRef.current = false;
+    setRefineIsPushToTalk(false);
+    setRefinePttNoSpeech(false);
+    refinePrevTranscriptRef.current = "";
+    refineBaseTextRef.current = "";
+    setTimeout(() => { refineVoiceSendInProgressRef.current = false; }, 100);
+  }
+
+  function cancelRefinePTT() {
+    if (refinePttHoldTimerRef.current) { clearTimeout(refinePttHoldTimerRef.current); refinePttHoldTimerRef.current = null; }
+    if (refineIsPushToTalkRef.current) {
+      refinePendingAutoSubmitRef.current = false;
+      refineIsPushToTalkRef.current = false;
+      setRefineIsPushToTalk(false);
+      refineVoice.stopListening();
+    }
+    refineIsPressedRef.current = false;
+  }
+
+  function handleRefineMicPointerDown(e: React.PointerEvent<HTMLButtonElement>) {
+    if (buildingState?.isBuilding || !!pendingRefinement) return;
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    refineIsPressedRef.current = true;
+    refinePressStartRef.current = Date.now();
+    setRefinePttNoSpeech(false);
+    refinePttHoldTimerRef.current = setTimeout(() => {
+      if (!refineIsPressedRef.current) return;
+      refineIsPushToTalkRef.current = true;
+      setRefineIsPushToTalk(true);
+      refinePendingAutoSubmitRef.current = true;
+      refineBaseTextRef.current = currentRefineInputRef.current;
+      refineVoice.resetTranscript();
+      refinePrevTranscriptRef.current = "";
+      refineVoice.startListening();
+    }, 350);
+  }
+
+  function handleRefineMicPointerUp(e: React.PointerEvent<HTMLButtonElement>) {
+    if (!refineIsPressedRef.current) return;
+    refineIsPressedRef.current = false;
+    const heldMs = Date.now() - refinePressStartRef.current;
+    if (refinePttHoldTimerRef.current) { clearTimeout(refinePttHoldTimerRef.current); refinePttHoldTimerRef.current = null; }
+    if (refineIsPushToTalkRef.current) {
+      // PTT release → stop listening; auto-submit fires via isListening effect
+      refineVoice.stopListening();
+    } else if (heldMs < 350) {
+      // Quick tap → toggle listen
+      if (!refineVoice.isSupported) { refineVoice.startListening(); return; }
+      if (refineVoice.isListening) {
+        refineVoice.stopListening();
+      } else {
+        refineBaseTextRef.current = currentRefineInputRef.current;
+        refineVoice.resetTranscript();
+        refinePrevTranscriptRef.current = "";
+        setRefinePttNoSpeech(false);
+        refineVoice.startListening();
+      }
+    }
+    e.preventDefault();
+  }
+
+  function handleRefineMicPointerLeave() {
+    if (refineIsPushToTalkRef.current) cancelRefinePTT();
+    else if (refineIsPressedRef.current) {
+      if (refinePttHoldTimerRef.current) { clearTimeout(refinePttHoldTimerRef.current); refinePttHoldTimerRef.current = null; }
+      refineIsPressedRef.current = false;
+    }
+  }
+
+  // ── Unified refine submit entry point ─────────────────────────────────────
+
+  function submitRefineCommand({ message, source }: { message: string; source?: string }) {
+    const msg = message.trim().replace(/\s{2,}/g, " ");
+    if (!msg || !onSendMessage || buildingState?.isBuilding || !!pendingRefinement) return;
+    if (import.meta.env.DEV) {
+      console.log("[Sidebar Refine Submit]", {
+        source: source ?? "typed",
+        message: msg,
+        trainingSystemId,
+        conversationId,
+        loadedProgramTitle: program?.programName ?? null,
+      });
+    }
+    cleanupRefineVoiceSession();
     setRefineInput("");
     sendRefinement(msg, "refine-input", { interactionType: "freeform_refine" }, {
       source: "program_panel",
@@ -921,6 +1075,10 @@ function ProgramTab({
       displayText: "Refine input",
       submittedText: msg,
     });
+  }
+
+  function handleRefineSubmit() {
+    submitRefineCommand({ message: refineInput, source: "typed" });
   }
 
   // ── Shared Changes-cache helper — optimistic insert + invalidate/refetch ──
@@ -2291,7 +2449,12 @@ function ProgramTab({
           <div>
             <div
               className={`flex items-center gap-2 rounded-xl border bg-muted/20 px-3 transition-colors ${
-                buildingState?.isBuilding ? "opacity-50" : "border-border focus-within:border-primary/40 focus-within:bg-muted/30"
+                buildingState?.isBuilding ? "opacity-50"
+                  : refineVoice.isListening
+                    ? refineIsPushToTalk
+                      ? "border-blue-500/70 bg-blue-500/5 shadow-[0_0_0_2px_rgba(59,130,246,0.18)]"
+                      : "border-blue-400/50 bg-blue-500/5"
+                    : "border-border focus-within:border-primary/40 focus-within:bg-muted/30"
               }`}
               style={{ minHeight: 48 }}
             >
@@ -2301,12 +2464,35 @@ function ProgramTab({
                 onChange={(e) => setRefineInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleRefineSubmit(); } }}
                 disabled={!!buildingState?.isBuilding}
-                placeholder="Refine this program…"
+                placeholder={refineVoice.isListening ? (refineIsPushToTalk ? "Release to refine…" : "Listening…") : "Refine this program…"}
                 className="flex-1 bg-transparent text-[12px] text-foreground placeholder:text-muted-foreground/40 outline-none py-2.5 min-w-0"
               />
+
+              {/* Mic button */}
+              {refineVoice.isSupported && (
+                <button
+                  onPointerDown={handleRefineMicPointerDown}
+                  onPointerUp={handleRefineMicPointerUp}
+                  onPointerLeave={handleRefineMicPointerLeave}
+                  onPointerCancel={() => cancelRefinePTT()}
+                  disabled={!!buildingState?.isBuilding || !!pendingRefinement}
+                  className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 touch-none select-none disabled:opacity-30 disabled:cursor-not-allowed ${
+                    refineIsPushToTalk
+                      ? "bg-blue-500/25 text-blue-400 shadow-[0_0_6px_rgba(59,130,246,0.4)] scale-105"
+                      : refineVoice.isListening
+                        ? "bg-blue-500/15 text-blue-400"
+                        : "text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/40"
+                  }`}
+                  title={refineVoice.isListening ? "Stop listening" : "Tap to dictate · Hold to push-to-talk"}
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+              )}
+
+              {/* Send button */}
               <button
                 onClick={handleRefineSubmit}
-                disabled={!refineInput.trim() || !!buildingState?.isBuilding}
+                disabled={!refineInput.trim() || !!buildingState?.isBuilding || !!pendingRefinement}
                 className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-primary bg-primary/10 hover:bg-primary/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 {pendingRefinement === "refine-input" ? (
@@ -2316,9 +2502,51 @@ function ProgramTab({
                 )}
               </button>
             </div>
-            <p className="mt-1.5 text-[10px] text-muted-foreground/45 leading-relaxed px-1">
-              Try: "add more jumps to day 1" or "make day 2 shorter"
-            </p>
+
+            {/* Voice status strip */}
+            {refineVoice.isListening && (
+              <div className={`mt-1.5 px-3 py-1.5 rounded-lg flex items-center gap-2 transition-all ${
+                refineIsPushToTalk ? "bg-blue-500/12 text-blue-400" : "bg-blue-500/8 text-blue-400/80"
+              }`}>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  {[0, 1, 2, 3].map((i) => (
+                    <div
+                      key={i}
+                      className="w-0.5 rounded-full bg-current"
+                      style={{
+                        height: refineIsPushToTalk ? "9px" : "5px",
+                        animation: `voice-bar 0.8s ease-in-out ${i * 0.15}s infinite alternate`,
+                      }}
+                    />
+                  ))}
+                </div>
+                <span className="text-[10px] font-medium leading-none">
+                  {refineIsPushToTalk
+                    ? "Release to refine"
+                    : refineVoice.transcript
+                      ? `"${refineVoice.transcript.slice(0, 36)}${refineVoice.transcript.length > 36 ? "…" : ""}"`
+                      : "Listening…"}
+                </span>
+              </div>
+            )}
+
+            {/* No-speech error */}
+            {refinePttNoSpeech && !refineVoice.isListening && (
+              <p className="mt-1 text-[10px] text-amber-400/80 px-1">No speech detected — try again.</p>
+            )}
+
+            {/* Mic permission error */}
+            {refineVoice.error && !refineVoice.isListening && (
+              <p className="mt-1 text-[10px] text-red-400/80 px-1">{refineVoice.error}</p>
+            )}
+
+            {!refineVoice.isListening && !refineVoice.error && !refinePttNoSpeech && (
+              <p className="mt-1.5 text-[10px] text-muted-foreground/45 leading-relaxed px-1">
+                {refineVoice.isSupported
+                  ? "Tap mic to dictate · Hold mic for push-to-talk"
+                  : "Try: \"add more jumps to day 1\" or \"make day 2 shorter\""}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -3512,6 +3740,7 @@ export default function LiveProgramPanel({
   activeFocusModes,
   onFocusModeChange,
   isWeekDataLoading = false,
+  conversationId,
 }: Props) {
   const { focusMode } = useFocusMode();
 
@@ -3873,6 +4102,7 @@ export default function LiveProgramPanel({
             pendingChangeHint={pendingChangeHint}
             lastChangeSummary={lastChangeSummary}
             blockMetadata={blockMetadata}
+            conversationId={conversationId}
             onSidebarMutation={() => setSidebarChangeSignal((s) => s + 1)}
           />
         )}

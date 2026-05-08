@@ -2782,6 +2782,7 @@ export default function Chat() {
           isPremium={isPremium}
           hasActiveSystem={hasActiveSystem || !!latestProgram}
           trainingSystemId={activeSystem?.id ?? undefined}
+          conversationId={activeConvoId ?? undefined}
           trainingGoal={activeSystem?.overarchingGoal ?? undefined}
           newChangeSignal={newChangeSignal}
           newProgramSignal={newProgramSignal}
