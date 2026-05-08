@@ -1,0 +1,92 @@
+Audit and unify TrainChat voice-submit vs typed-submit orchestration context.
+
+Problem:
+Programs generated from voice commands are structurally different from programs generated from typed commands, even with nearly identical wording.
+
+Observed:
+Typed commands produce richer block architecture and better orchestrator behavior.
+Voice commands produce simpler/generic structures.
+
+Goal:
+Voice commands must inherit the exact same orchestration context, state hydration, focus selection, planner routing, and architect depth as typed sends.
+
+Critical suspicion:
+Push-to-talk auto-submit may bypass state synchronization timing and submit before all derived context/state is finalized.
+
+Tasks:
+
+1. Create a single internal submit pipeline:
+submitUserMessage({
+  message,
+  source,
+})
+
+Everything:
+- typed send
+- enter key
+- suggestion chips
+- tap-to-transcribe
+- push-to-talk
+must call this exact function.
+
+2. Remove direct handleSend(normalized) calls from voice logic.
+Instead:
+- setInputText(normalized)
+- wait for next animation frame OR microtask
+- call the same submit action the send button uses
+
+Example:
+await Promise.resolve()
+submitUserMessage(...)
+
+or:
+requestAnimationFrame(() => ...)
+if needed.
+
+3. Log orchestration context before API send:
+console.log("[TrainChat Orchestration Context]", {
+  source,
+  selectedTrainingFocus,
+  activeProgramId,
+  activeProgramTitle,
+  currentBlock,
+  currentWeek,
+  conversationMode,
+  hasTrainingSystem,
+  plannerRoute,
+  orchestrationMode,
+  architectEnabled,
+});
+
+Compare typed vs voice sends.
+
+4. Verify all derived state is identical:
+- training focus
+- current program
+- active block
+- week
+- adaptation mode
+- onboarding status
+- constraint memory
+- planner route
+- architect activation
+- refinement mode
+- program generation mode
+
+5. Search for timing-sensitive state:
+- useEffect-driven context assembly
+- refs populated after render
+- derived orchestration state
+- active training system cache hydration
+- planner route inferred from inputText state
+
+6. Critical:
+If typed send depends on current inputText state internally,
+voice auto-submit must wait until that state is committed before sending.
+
+7. Acceptance criteria:
+- Voice and typed versions of:
+  “Give me a 3 day strength program”
+produce the same block architecture, planner routing, and program quality.
+- Voice no longer creates simplified/generic systems.
+- No TypeScript errors.

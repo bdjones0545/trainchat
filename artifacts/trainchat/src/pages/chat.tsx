@@ -444,11 +444,15 @@ export default function Chat() {
           cleanupVoiceSession();
           return;
         }
-        // Mirror what a typed send does: update inputText state first, then send.
-        // handleSend is called with the explicit normalized text so it does not
-        // read a stale inputText closure — behavior is identical to typed sends.
+        // Mirror what a typed send does: update inputText state first, then
+        // yield to the microtask queue (Promise.resolve) so any pending browser
+        // speech recognition events drain before the commit fires.
+        // submitUserMessage is the single unified entry point — identical to
+        // what the send button and Enter key use.
         setInputText(normalized);
-        handleSend(normalized);
+        Promise.resolve().then(() => {
+          submitUserMessage({ message: normalized, source: "voice_ptt" });
+        });
       }, 250);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1282,6 +1286,39 @@ export default function Chat() {
     setFocusSwitchConfirm(cfg.theme.confirmLabel);
     if (focusSwitchTimerRef.current) clearTimeout(focusSwitchTimerRef.current);
     focusSwitchTimerRef.current = setTimeout(() => setFocusSwitchConfirm(null), 2400);
+  }
+
+  /**
+   * Single unified entry point for all user message submissions.
+   *
+   * Every send path — typed (Enter / send button), suggestion chips,
+   * tap-to-transcribe, and push-to-talk — must go through this function.
+   * It logs the full orchestration context available on the frontend and
+   * then delegates to handleSend(), which is the internal implementation.
+   *
+   * Voice paths must NOT call handleSend() directly.
+   */
+  function submitUserMessage({ message, source }: { message: string; source?: string }) {
+    if (import.meta.env.DEV) {
+      console.log("[TrainChat Orchestration Context]", {
+        source: source ?? "typed",
+        selectedTrainingFocus: focusMode,
+        activeProgramId: activeSystem?.id ?? null,
+        activeProgramTitle:
+          (activeSystem as any)?.programName ??
+          (activeSystem as any)?.name ??
+          null,
+        hasTrainingSystem: !!activeSystem,
+        isNewBuildSession,
+        hasUnsavedDraft,
+        conversationId: activeConvoId,
+        messagePreview: message.slice(0, 80),
+        messageLength: message.length,
+      });
+    }
+    // source is passed through extraContext so the backend send payload log
+    // can differentiate typed vs voice without affecting any routing logic.
+    handleSend(message, source ? { source } : undefined);
   }
 
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
@@ -2263,7 +2300,7 @@ export default function Chat() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      submitUserMessage({ message: inputText.trim(), source: "typed" });
     }
   }
 
@@ -3869,7 +3906,7 @@ export default function Chat() {
                 {/* Send button */}
                 <button
                   data-testid="button-send"
-                  onClick={() => handleSend()}
+                  onClick={() => submitUserMessage({ message: inputText.trim(), source: "typed" })}
                   disabled={!inputText.trim() || stream.isActive}
                   className="m-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm"
                 >

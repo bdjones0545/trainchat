@@ -3523,6 +3523,32 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     "[Routing Authority] execPlan.action selected (SSE path)"
   );
 
+  // ── Orchestration context audit — compare typed vs voice sends here ──────
+  // plannerRoute is derived from execPlan.action (architect is engaged on
+  // REBUILD_PROGRAM; direct edit fast-path is used on APPLY_MUTATION).
+  logger.info(
+    {
+      plannerRoute:
+        execPlan.action === "REBUILD_PROGRAM" ? "BUILD_WITH_ARCHITECT" :
+        execPlan.action === "APPLY_MUTATION"  ? "DIRECT_EDIT" :
+        execPlan.action === "ASK_CLARIFICATION" ? "GUIDANCE" :
+        execPlan.action === "GUIDANCE"        ? "GUIDANCE" :
+        "NO_OP",
+      architectEnabled: execPlan.action === "REBUILD_PROGRAM",
+      orchestrationMode: execPlan.action,
+      intentType: intentResult.type,
+      intentFamily: execPlan.intentFamily ?? null,
+      focusMode: streamFocusMode,
+      hasActiveProgram: hasAnyProgram,
+      isFreshBuildSession,
+      activeProgramId: (activeSystem as any)?.id ?? null,
+      activeProgramName: (activeSystem as any)?.name ?? null,
+      constraintMemoryLoaded: hardConstraintsSSE != null,
+      messageSource: streamUIContext?.source ?? "typed",
+    },
+    "[TrainChat Orchestration Context]"
+  );
+
   // ── Response Mode Selection — derived from execution planner action ──────────
   // For GUIDANCE actions, specialize based on intent family so program questions
   // get the exact right response template (safety, explanation, or coaching).
