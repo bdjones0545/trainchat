@@ -144,6 +144,66 @@ const LOW_DETAIL_EQUIPMENT_RE =
 const LOW_DETAIL_DURATION_RE =
   /^(\d{1,3}\s*min(?:utes?)?|(one|1)\s*(?:hour|hr\.?)|under\s+an?\s*(?:hour|hr\.?)|\d{1,2}\s*(?:hours?|hrs?\.?))$/i;
 
+// ─── Sport-Context Pronoun Override Detection ─────────────────────────────────
+// Catches "make it for hockey", "gear it toward basketball", etc. — patterns where
+// the pronoun "it" or "this" refers to the active PROGRAM, not an individual exercise.
+// Must fire in Step 1.6, before the intent engine, to prevent exercise_swap misrouting.
+
+// Sport names matched anywhere in a message (no anchors)
+const SPORT_IN_MESSAGE_RE =
+  /\b(football|basketball|soccer|hockey|baseball|lacrosse|rugby|volleyball|tennis|golf|wrestling|track(?:\s+and\s+field)?|sprinting|swimming|mma|boxing|rowing|cycling|triathlon|crossfit|cross.?fit|softball|cricket|squash|padel|pickleball|jiu.?jitsu|bjj|powerlifting|weightlifting|olympic\s+lifting)\b/i;
+
+// Verb/preposition patterns that indicate program-level sport targeting
+const SPORT_CONTEXT_VERB_PATTERNS: RegExp[] = [
+  /\bmake\s+(it|this)\s+for\b/i,                    // "make it for hockey"
+  /\bgear\s+(it|this)\s+toward(s)?\b/i,             // "gear it toward basketball"
+  /\bgeared?\s+toward(s)?\b/i,                      // "geared toward basketball"
+  /\bthis\s+is\s+for\b/i,                           // "this is for hockey"
+  /^for\s+\w/i,                                      // "for hockey" (starts with "for")
+  /\boptimize\s+(it|this)\s+for\b/i,                // "optimize it for hockey"
+  /\btailor\s+(it|this|the\s+program)?\s*(to|for)\b/i, // "tailor it to hockey"
+  /\bbuild\s+(it|this)\s+for\b/i,                   // "build it for hockey"
+  /\bdesign\s+(it|this)\s+for\b/i,                  // "design it for hockey"
+  /\bcater\s+(it|this)?\s*(to|for)\b/i,             // "cater it to hockey"
+];
+
+// Explicit exercise references that block the override — user is talking about an exercise
+const EXPLICIT_EXERCISE_REF_RE =
+  /\b(this\s+exercise|the\s+exercise|exercise\s+\d+|exercise\s+(?:one|two|three|four|five)|the\s+first\s+exercise|the\s+second\s+exercise|the\s+third\s+exercise|first\s+exercise|second\s+exercise|third\s+exercise)\b/i;
+
+interface SportContextCommand {
+  sport: string;
+  patternMatched: string;
+}
+
+/**
+ * Detects sport-context pronoun commands: "make it for hockey", "gear it toward basketball", etc.
+ * Returns the detected sport and matched pattern, or null if no override should fire.
+ * Bare sport names ("hockey") are handled by detectLowDetailContextCommand, not here.
+ */
+export function detectSportContextCommand(message: string): SportContextCommand | null {
+  // Explicit exercise target overrides — user is targeting an exercise, not the program
+  if (EXPLICIT_EXERCISE_REF_RE.test(message)) return null;
+
+  // Named exercise in message? Let normal routing handle it
+  // (extractExerciseName is defined later; hoisting covers this)
+  if (extractExerciseName(message)) return null;
+
+  // Sport must be present
+  const sportMatch = message.match(SPORT_IN_MESSAGE_RE);
+  if (!sportMatch) return null;
+  const sport = sportMatch[0].toLowerCase();
+
+  // Require a verb/preposition pattern — bare names are handled by detectLowDetailContextCommand
+  for (const re of SPORT_CONTEXT_VERB_PATTERNS) {
+    if (re.test(message)) {
+      return { sport, patternMatched: re.source };
+    }
+  }
+
+  return null;
+}
+
 export function detectLowDetailContextCommand(message: string): LowDetailContextCommand | null {
   const trimmed = message.trim();
 
@@ -398,6 +458,50 @@ export async function buildExecutionPlan({
     }
     // Non-sport low-detail without a program: fall through to STEP 2 so the
     // normal classifier + REBUILD_PROGRAM logic handles it naturally.
+  }
+
+  // ── STEP 1.6: Sport-context pronoun override ───────────────────────────────
+  // "Make it for hockey", "gear it toward basketball", "this is for football"
+  // — pronouns like "it" and "this" refer to the ACTIVE PROGRAM, not an exercise.
+  // This fires BEFORE the intent engine so exercise_swap never misroutes them.
+  // Explicit exercise targets ("this exercise", "exercise 2") bypass the override.
+  const sportCtxCmd = detectSportContextCommand(message);
+  if (sportCtxCmd) {
+    const sportPlan: ExecutionPlan = {
+      action: program ? "APPLY_MUTATION" : "REBUILD_PROGRAM",
+      intentFamily: "sport_context_update",
+      scope: { type: "program" },
+      mutation: program
+        ? {
+            type: "transform",
+            params: {
+              transformation: "sport_context_update",
+              contextType: "sport",
+              context: sportCtxCmd.sport,
+              defaultScopeUsed: true,
+              repairHint: `Refine the current program for ${sportCtxCmd.sport}.`,
+            },
+          }
+        : undefined,
+      reasoning: `[SportContextOverride] "${sportCtxCmd.sport}" with program-level pronoun — routing to ${program ? "APPLY_MUTATION" : "REBUILD_PROGRAM"} full_program`,
+      defaultScopeUsed: true,
+    };
+
+    console.log("[Sport Context Override]", {
+      message: message.slice(0, 80),
+      detectedSport: sportCtxCmd.sport,
+      activeProgramId: (program as any)?.id ?? null,
+      explicitExerciseTarget: false,
+      routedAction: sportPlan.action,
+      scope: "full_program",
+    });
+
+    logger.info(
+      { conversationId, userId, sport: sportCtxCmd.sport, hasProgram: !!program },
+      "[SportContextOverride] Sport-context pronoun command — bypassing exercise clarification"
+    );
+
+    return sportPlan;
   }
 
   // ── STEP 2: Resolve intent family ──────────────────────────────────────────
