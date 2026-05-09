@@ -139,6 +139,19 @@ async function fetchSystemByConversation(conversationId: number) {
   }
 }
 
+/**
+ * Fetches a specific training system by ID (ownership enforced on server).
+ * Used for sidebar hydration when the conversation-scoped query returns null
+ * but the mutation response contains a trainingSystemId.
+ */
+async function fetchSystemById(systemId: number) {
+  try {
+    return await customFetch<any>(`/api/training-system/by-id/${systemId}`);
+  } catch {
+    return null;
+  }
+}
+
 async function fetchCurrentWeekBySystemId(systemId: number) {
   try {
     return await customFetch<any>(`/api/training-system/week?systemId=${systemId}`);
@@ -1837,8 +1850,64 @@ export default function Chat() {
     }
 
     if (result.systemEdit?.applied || result.systemSaved || result.trainingSystemId != null || result.systemId != null) {
+      const _activeSystemBefore = activeSystem?.id ?? null;
+      const _returnedTrainingSystemId =
+        (result as any).systemEdit?.systemId ?? result.trainingSystemId ?? result.systemId ?? null;
+
       // Centralised invalidation — covers SSE complete, non-SSE JSON, and auto-created system hydration.
-      handleTrainingSystemMutationResult(result, queryClient, focusMode);
+      // Pass activeConvoId so the helper refetches ["training-system-conv"] — the sidebar's source of truth.
+      handleTrainingSystemMutationResult(result, queryClient, focusMode, activeConvoId);
+
+      // ── Requirement 4: Immediate sidebar hydration by systemId ──────────────
+      // When activeSystem was null before the mutation (sidebar was showing "Ready to build")
+      // but the mutation response includes a trainingSystemId, the by-conversation refetch
+      // above may still return null (e.g. system was created in a different conversation).
+      // In that case fetch the system directly by ID and seed the conv query cache so
+      // the sidebar hydrates immediately without waiting for a full page refresh.
+      if (_returnedTrainingSystemId != null && _activeSystemBefore == null && activeConvoId != null) {
+        fetchSystemById(_returnedTrainingSystemId).then((fetchedSystem) => {
+          if (fetchedSystem) {
+            queryClient.setQueryData(["training-system-conv", activeConvoId], fetchedSystem);
+            if (import.meta.env.DEV) {
+              console.log("[Mutation Sidebar Hydration]", {
+                conversationId: activeConvoId,
+                returnedTrainingSystemId: _returnedTrainingSystemId,
+                activeSystemBefore: _activeSystemBefore,
+                activeSystemAfter: fetchedSystem.id ?? "unknown",
+                invalidatedKeys: [
+                  ["training-system-conv", activeConvoId],
+                  ["training-system-active", focusMode],
+                  ["training-system-week"],
+                  ["live-panel-week-ids"],
+                  ["week-view-select"],
+                  ["training-system-today"],
+                  ["training-system-block"],
+                  ["training-system-library"],
+                ],
+                hydrationPath: "by-id fallback",
+              });
+            }
+          }
+        });
+      } else if (import.meta.env.DEV) {
+        console.log("[Mutation Sidebar Hydration]", {
+          conversationId: activeConvoId,
+          returnedTrainingSystemId: _returnedTrainingSystemId,
+          activeSystemBefore: _activeSystemBefore,
+          activeSystemAfter: "pending conv-key refetch",
+          invalidatedKeys: [
+            ["training-system-conv", activeConvoId],
+            ["training-system-active", focusMode],
+            ["training-system-week"],
+            ["live-panel-week-ids"],
+            ["week-view-select"],
+            ["training-system-today"],
+            ["training-system-block"],
+            ["training-system-library"],
+          ],
+          hydrationPath: "conv-key refetch",
+        });
+      }
 
       if (result.systemSaved) {
         // Record the newly saved system ID before flipping isSaved=true.
@@ -2086,6 +2155,10 @@ export default function Chat() {
     setUndoVerificationStatus(null);
     try {
       await customFetch<any>(`/api/training-system/restore/${undoChangeLogId}`, { method: "POST" });
+      // Refetch the conversation-scoped query so the sidebar reflects the undo immediately
+      if (activeConvoId != null) {
+        queryClient.refetchQueries({ queryKey: ["training-system-conv", activeConvoId] });
+      }
       queryClient.refetchQueries({ queryKey: ["training-system-active", focusMode] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });

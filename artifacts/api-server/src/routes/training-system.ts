@@ -439,6 +439,37 @@ router.post("/training-system/set-active/:id", requireAuth, async (req, res): Pr
   }
 });
 
+// ─── GET /training-system/by-id/:systemId ────────────────────────────────────
+// Returns a specific training system by ID (ownership enforced).
+// Used by the frontend to hydrate the sidebar after a mutation when the
+// conversation-scoped query returns null (cross-conversation edit case).
+router.get("/training-system/by-id/:systemId", requireAuth, async (req, res): Promise<void> => {
+  try {
+    const userId = req.session.userId!;
+    const systemId = parseInt(req.params.systemId as string, 10);
+    if (isNaN(systemId)) {
+      res.status(400).json({ error: "Invalid systemId" });
+      return;
+    }
+    const [system] = await db
+      .select()
+      .from(trainingSystems)
+      .where(and(eq(trainingSystems.id, systemId), eq(trainingSystems.userId, userId)));
+    if (!system) {
+      res.status(404).json({ error: "Training system not found" });
+      return;
+    }
+    logger.info(
+      { userId, systemId, systemStatus: system.status ?? null },
+      "[training-system] GET /by-id — fetched for sidebar hydration"
+    );
+    res.json(system);
+  } catch (err) {
+    logger.error({ err }, "[training-system] GET /by-id error");
+    res.status(500).json({ error: "Failed to load training system by id" });
+  }
+});
+
 // ─── DELETE /training-system/:id ─────────────────────────────────────────────
 // Hard-deletes a training system (all phases/weeks/sessions/exercises/change
 // logs cascade). If the deleted system was the active one, the most-recently-
