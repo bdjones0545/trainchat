@@ -377,6 +377,43 @@ export async function buildExecutionPlan({
 
   // ── STEP 1: Handle clarification followup first ─────────────────────────────
   if (pendingClarification) {
+    // ── SPORT CONTEXT INTERCEPT (inside pending clarification) ─────────────────
+    // "Make it for hockey" / "gear it toward basketball" must NEVER be treated as
+    // an answer to "Which exercise did you mean?". Check for a sport-context
+    // pronoun command BEFORE handing off to resolveClarification. If the new
+    // message is unambiguously a full-program sport override, discard the pending
+    // clarification and fire the sport plan immediately.
+    const earlySpotCtxCmd = detectSportContextCommand(message);
+    if (earlySpotCtxCmd && program) {
+      const earlyActiveProgramId = (program as any)?.id ?? null;
+      console.log("[EARLY SPORT OVERRIDE FIRED]", { message, sport: earlySpotCtxCmd.sport, activeProgramId: earlyActiveProgramId });
+
+      const earlySportPlan: ExecutionPlan = {
+        action: "APPLY_MUTATION",
+        intentFamily: "sport_context_update",
+        scope: { type: "program" },
+        defaultScopeUsed: true,
+        mutation: {
+          type: "transform",
+          params: {
+            transformation: "sport_context_update",
+            contextType: "sport",
+            context: earlySpotCtxCmd.sport,
+            defaultScopeUsed: true,
+            repairHint: `Refine the current program for ${earlySpotCtxCmd.sport}.`,
+          },
+        },
+        reasoning: `[EarlySportOverride] "${earlySpotCtxCmd.sport}" sport-context pronoun detected inside pending clarification — discarding pending clarification and applying full-program sport mutation`,
+      };
+
+      logger.info(
+        { conversationId, userId, sport: earlySpotCtxCmd.sport, discardedPendingAspect: pendingClarification.pendingAspect },
+        "[EarlySportOverride] Sport-context command intercepted before resolveClarification — pending clarification discarded"
+      );
+
+      return earlySportPlan;
+    }
+
     const plan = resolveClarification({ message, pendingClarification });
 
     logger.debug(
