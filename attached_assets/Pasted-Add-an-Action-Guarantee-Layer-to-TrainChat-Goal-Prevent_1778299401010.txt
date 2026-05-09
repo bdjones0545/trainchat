@@ -1,0 +1,89 @@
+Add an Action Guarantee Layer to TrainChat.
+
+Goal:
+Prevent the agent from ever falling into a loop, guidance-only response, or no-op when the user is trying to change an active program.
+
+Core rule:
+When activeProgram exists and the user message has any actionable signal, the system must return one of:
+1. APPLY_MUTATION
+2. ACTION_CHOICE_CARD
+3. SAFETY_REFUSAL
+
+It must not return:
+- GUIDANCE only
+- NO_OP
+- repeated clarification
+- generic coaching response
+
+Actionable signals:
+- sport/context: football, hockey, basketball, in season, off season
+- equipment: dumbbells, full gym, home gym, no machines
+- duration: 30 minutes, 45 minutes, shorter, longer
+- intensity: harder, easier, too much, too easy
+- style: more athletic, more explosive, less impact, more conditioning
+- pain/fatigue: knees hurt, back hurts, I’m cooked, tired
+- command verbs: make, change, add, remove, replace, swap, adjust, progress, regress, shorten, increase, decrease
+
+Layer behavior:
+
+1. If planner returns APPLY_MUTATION:
+- pass through
+
+2. If planner returns GUIDANCE or NO_OP but actionableSignal = true:
+- upgrade to APPLY_MUTATION
+- default scope = full_program unless explicit day/exercise target exists
+- set defaultScopeUsed = true
+- add repairReason = "action_guarantee_upgrade"
+
+3. If target is ambiguous but safe default exists:
+- use safe default
+Example:
+“make it more athletic” → full_program
+
+4. If target is ambiguous and destructive:
+- return ACTION_CHOICE_CARD, not another free-text question
+Example:
+“replace that”
+→ choices:
+  - Replace the last exercise
+  - Pick an exercise
+  - Cancel
+
+5. If safety issue exists:
+- return SAFETY_REFUSAL or safety modification
+Example:
+“make it painful”
+→ refuse/redirect safely
+
+6. Clarification limit:
+Never ask more than one clarification for the same intent.
+After one clarification answer:
+- act with best default
+- or show ACTION_CHOICE_CARD
+
+7. Add dev logging:
+console.log("[Action Guarantee Layer]", {
+  message,
+  activeProgramId,
+  originalAction,
+  finalAction,
+  actionableSignal,
+  defaultScopeUsed,
+  repairReason,
+  choiceCardShown,
+  safetyBlocked,
+});
+
+Acceptance tests:
+- “football” → mutation
+- “make it for hockey” → mutation
+- “more athletic” → mutation
+- “too long” → mutation
+- “I’m cooked” → mutation/deload
+- “my knees hurt” → lower-impact mutation
+- “replace that” with no recent exercise → choice card
+- “yes” after clarification → mutation
+- “do it” after clarification → mutation
+- no repeated “Which exercise did you mean?”
+- no actionable message returns GUIDANCE or NO_OP
+- no TypeScript errors.
