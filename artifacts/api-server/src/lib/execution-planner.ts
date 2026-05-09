@@ -187,6 +187,50 @@ const SPORT_CONTEXT_VERB_PATTERNS: RegExp[] = [
 const EXPLICIT_EXERCISE_REF_RE =
   /\b(this\s+exercise|the\s+exercise|exercise\s+\d+|exercise\s+(?:one|two|three|four|five)|the\s+first\s+exercise|the\s+second\s+exercise|the\s+third\s+exercise|first\s+exercise|second\s+exercise|third\s+exercise)\b/i;
 
+// Explicit day/session references that also block the pending-clarification override
+const EXPLICIT_DAY_REF_RE = /\b(this\s+day|that\s+day|day\s*\d+|session\s*\d+)\b/i;
+
+// Intent families that unambiguously apply to the full program and must NEVER be
+// treated as answers to "Which exercise did you mean?" or similar exercise-clarification
+// questions. When one of these is detected while a pending clarification is active,
+// the clarification is discarded and the message falls through to the normal planner.
+const FULL_PROGRAM_CONTEXT_OVERRIDE_FAMILIES = new Set<IntentFamily>([
+  "conditioning_focus",          // "weight loss", "fat loss", "cardio focus"
+  "athletic_performance_focus",  // "more athletic"
+  "injury_modification",         // "knees hurt", "bad back"
+  "joint_friendly_modification", // "easy on my joints"
+  "readiness_low",               // "I'm tired", "exhausted"
+  "reduce_time",                 // "too long", "shorter sessions"
+  "increase_time",               // "need longer sessions"
+  "strength_focus",              // "more strength focus"
+  "hypertrophy_focus",           // "build more muscle"
+  "endurance_focus",             // "more endurance", "more cardio"
+  "power_explosive_focus",       // "more explosive"
+  "speed_focus",                 // "faster"
+  "reactive_focus",              // reactive agility focus
+  "cod_decel_focus",             // change-of-direction focus
+  "footwork_rhythm_focus",       // footwork focus
+  "fatigue_management",          // "deload me", "I'm overtrained"
+  "recovery_focus",              // "recovery week"
+  "mobility_support",            // "add more mobility"
+  "rom_restoration_focus",       // ROM-specific
+  "tissue_stiffness_focus",      // stiffness / soft tissue
+  "tendon_resilience_focus",     // tendon health
+  "end_range_control_focus",     // end range
+  "mobility_flow_focus",         // flow-based mobility
+  "unilateral_emphasis",         // "more single-leg"
+  "posterior_chain_emphasis",    // "more posterior chain"
+  "trunk_core_emphasis",         // "more core"
+  "missed_sessions_reentry",     // "I missed workouts"
+  "environment_temporary_switch",// "I'm traveling"
+  "sport_context_update",        // caught first by detectSportContextCommand, but belt+suspenders
+  "equipment_constraint",        // "full gym", "dumbbells only" — richer variants not caught by ldCtx
+  "increase_difficulty",         // "make it harder" (program-wide, no exercise ref)
+  "decrease_difficulty",         // "make it easier" (program-wide, no exercise ref)
+  "increase_volume",             // "more volume"
+  "decrease_volume",             // "less volume"
+]);
+
 interface SportContextCommand {
   sport: string;
   patternMatched: string;
@@ -376,59 +420,153 @@ export async function buildExecutionPlan({
   }
 
   // ── STEP 1: Handle clarification followup first ─────────────────────────────
+  // Before passing the message to resolveClarification, run a three-layer
+  // full-program context intercept. If the new message is an unambiguous
+  // full-program context command (sport, equipment, duration, fatigue, injury,
+  // goal, phase, style…), the pending clarification is discarded and the
+  // message falls through to the normal planner (Steps 1.5, 1.6, 2+) instead
+  // of being misread as an answer to "Which exercise did you mean?".
+  //
+  // The override is BLOCKED when the message explicitly references:
+  //   - a specific exercise  ("this exercise", "exercise 2", "first exercise")
+  //   - a specific day/session ("day 2", "that day", "session 3")
   if (pendingClarification) {
-    // ── SPORT CONTEXT INTERCEPT (inside pending clarification) ─────────────────
-    // "Make it for hockey" / "gear it toward basketball" must NEVER be treated as
-    // an answer to "Which exercise did you mean?". Check for a sport-context
-    // pronoun command BEFORE handing off to resolveClarification. If the new
-    // message is unambiguously a full-program sport override, discard the pending
-    // clarification and fire the sport plan immediately.
-    const earlySpotCtxCmd = detectSportContextCommand(message);
-    if (earlySpotCtxCmd && program) {
-      const earlyActiveProgramId = (program as any)?.id ?? null;
-      console.log("[EARLY SPORT OVERRIDE FIRED]", { message, sport: earlySpotCtxCmd.sport, activeProgramId: earlyActiveProgramId });
+    const hasExplicitRef =
+      EXPLICIT_EXERCISE_REF_RE.test(message) || EXPLICIT_DAY_REF_RE.test(message);
 
-      const earlySportPlan: ExecutionPlan = {
-        action: "APPLY_MUTATION",
-        intentFamily: "sport_context_update",
-        scope: { type: "program" },
-        defaultScopeUsed: true,
-        mutation: {
-          type: "transform",
-          params: {
-            transformation: "sport_context_update",
-            contextType: "sport",
-            context: earlySpotCtxCmd.sport,
-            defaultScopeUsed: true,
-            repairHint: `Refine the current program for ${earlySpotCtxCmd.sport}.`,
+    if (!hasExplicitRef) {
+      // ── Layer 1: Sport-context pronoun ("make it for hockey") ──────────────
+      // Returns an immediate APPLY_MUTATION plan — does not fall through.
+      const earlySpotCtxCmd = detectSportContextCommand(message);
+      if (earlySpotCtxCmd && program) {
+        const earlyActiveProgramId = (program as any)?.id ?? null;
+        console.log("[EARLY SPORT OVERRIDE FIRED]", { message, sport: earlySpotCtxCmd.sport, activeProgramId: earlyActiveProgramId });
+
+        const earlySportPlan: ExecutionPlan = {
+          action: "APPLY_MUTATION",
+          intentFamily: "sport_context_update",
+          scope: { type: "program" },
+          defaultScopeUsed: true,
+          mutation: {
+            type: "transform",
+            params: {
+              transformation: "sport_context_update",
+              contextType: "sport",
+              context: earlySpotCtxCmd.sport,
+              defaultScopeUsed: true,
+              repairHint: `Refine the current program for ${earlySpotCtxCmd.sport}.`,
+            },
           },
-        },
-        reasoning: `[EarlySportOverride] "${earlySpotCtxCmd.sport}" sport-context pronoun detected inside pending clarification — discarding pending clarification and applying full-program sport mutation`,
-      };
+          reasoning: `[EarlySportOverride] "${earlySpotCtxCmd.sport}" sport-context pronoun detected inside pending clarification — discarding pending clarification and applying full-program sport mutation`,
+        };
 
-      logger.info(
-        { conversationId, userId, sport: earlySpotCtxCmd.sport, discardedPendingAspect: pendingClarification.pendingAspect },
-        "[EarlySportOverride] Sport-context command intercepted before resolveClarification — pending clarification discarded"
+        logger.info(
+          { conversationId, userId, sport: earlySpotCtxCmd.sport, discardedPendingAspect: pendingClarification.pendingAspect },
+          "[EarlyContextOverride/sport] Sport-context pronoun — pending clarification discarded"
+        );
+
+        return earlySportPlan;
+      }
+
+      // ── Layer 2: Low-detail context ("Full gym", "45 min", "In season", "Hockey") ──
+      // Single-word / short context signals. If a program exists, return an
+      // immediate plan. If no program, just fall through — Step 1.5 catches it.
+      const earlyLdCtx = detectLowDetailContextCommand(message);
+      if (earlyLdCtx) {
+        console.log("[EARLY CONTEXT OVERRIDE FIRED]", {
+          layer: "low_detail",
+          message: message.slice(0, 80),
+          detectedType: earlyLdCtx.type,
+          detectedValue: earlyLdCtx.value,
+          activeProgramPresent: !!program,
+          discardedPendingAspect: pendingClarification.pendingAspect,
+        });
+
+        logger.info(
+          { conversationId, userId, ldCtxType: earlyLdCtx.type, ldCtxValue: earlyLdCtx.value, discardedPendingAspect: pendingClarification.pendingAspect },
+          "[EarlyContextOverride/low_detail] Low-detail context command — pending clarification discarded"
+        );
+
+        if (program) {
+          const earlyLdPlan: ExecutionPlan = {
+            action: "APPLY_MUTATION",
+            intentFamily: earlyLdCtx.intentFamily,
+            scope: { type: "program" },
+            defaultScopeUsed: true,
+            mutation: {
+              type: "transform",
+              params: {
+                transformation: earlyLdCtx.intentFamily,
+                context: earlyLdCtx.value,
+                contextType: earlyLdCtx.type,
+                defaultScopeUsed: true,
+              },
+            },
+            reasoning: `[EarlyContextOverride/low_detail] "${earlyLdCtx.value}" (${earlyLdCtx.type}) while pending clarification active — discarding clarification, applying program-wide ${earlyLdCtx.intentFamily}`,
+          };
+          return earlyLdPlan;
+        }
+        // No program → fall through; Step 1.5 will build/route correctly.
+      } else {
+        // ── Layer 3: Intent-family whitelist ───────────────────────────────────
+        // For richer messages ("Weight loss", "More athletic", "Knees hurt",
+        // "I'm tired", "Too long") that the low-detail detector doesn't catch,
+        // run normalizeToIntentFamily early. If the family is unambiguously
+        // full-program, discard the pending clarification and fall through.
+        const earlyFamily = normalizeToIntentFamily(message, focusMode).family;
+        if (FULL_PROGRAM_CONTEXT_OVERRIDE_FAMILIES.has(earlyFamily)) {
+          console.log("[EARLY CONTEXT OVERRIDE FIRED]", {
+            layer: "intent_family",
+            message: message.slice(0, 80),
+            detectedFamily: earlyFamily,
+            activeProgramPresent: !!program,
+            discardedPendingAspect: pendingClarification.pendingAspect,
+          });
+
+          logger.info(
+            { conversationId, userId, earlyFamily, discardedPendingAspect: pendingClarification.pendingAspect },
+            "[EarlyContextOverride/intent_family] Full-program intent family — pending clarification discarded, falling through to normal planner"
+          );
+
+          // Fall through to Steps 1.5, 1.6, 2+ — do NOT call resolveClarification.
+        } else {
+          // No override — treat as a normal clarification answer.
+          const plan = resolveClarification({ message, pendingClarification });
+
+          logger.debug(
+            {
+              conversationId,
+              userId,
+              action: plan.action,
+              intentFamily: plan.intentFamily,
+              scope: plan.scope,
+              reasoning: plan.reasoning,
+            },
+            "[ExecutionPlanner] Resolved from pending clarification"
+          );
+
+          return plan;
+        }
+      }
+    } else {
+      // Explicit exercise or day reference → always treat as clarification answer.
+      const plan = resolveClarification({ message, pendingClarification });
+
+      logger.debug(
+        {
+          conversationId,
+          userId,
+          action: plan.action,
+          intentFamily: plan.intentFamily,
+          scope: plan.scope,
+          reasoning: plan.reasoning,
+          hasExplicitRef,
+        },
+        "[ExecutionPlanner] Resolved from pending clarification (explicit ref present — no override)"
       );
 
-      return earlySportPlan;
+      return plan;
     }
-
-    const plan = resolveClarification({ message, pendingClarification });
-
-    logger.debug(
-      {
-        conversationId,
-        userId,
-        action: plan.action,
-        intentFamily: plan.intentFamily,
-        scope: plan.scope,
-        reasoning: plan.reasoning,
-      },
-      "[ExecutionPlanner] Resolved from pending clarification"
-    );
-
-    return plan;
   }
 
   // ── STEP 1.5: Low-detail context command detection ────────────────────────
