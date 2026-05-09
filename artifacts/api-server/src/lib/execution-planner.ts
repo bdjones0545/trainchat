@@ -42,7 +42,9 @@ export type ExecutionAction =
   | "ASK_CLARIFICATION"
   | "GUIDANCE"
   | "REBUILD_PROGRAM"
-  | "NO_OP";
+  | "NO_OP"
+  | "ACTION_CHOICE_CARD"
+  | "SAFETY_REFUSAL";
 
 // ─── Scope ───────────────────────────────────────────────────────────────────
 
@@ -90,6 +92,20 @@ export interface ExecutionPlan {
     alreadyPersisted: boolean;
     intentFamily: IntentFamily;
     promptDirective: string;
+  };
+  /**
+   * Present on ACTION_CHOICE_CARD actions — structured choices for the frontend
+   * to render as an interactive card instead of a free-text clarification question.
+   */
+  choiceCard?: {
+    prompt: string;
+    choices: Array<{ label: string; action: string }>;
+  };
+  /**
+   * Present on SAFETY_REFUSAL actions — the message to return to the user.
+   */
+  safetyRefusal?: {
+    message: string;
   };
 }
 

@@ -55,6 +55,7 @@ import {
 import { normalizeToIntentFamily } from "../lib/intent-family-engine";
 import { buildExecutionPlan, type ExecutionPlan } from "../lib/execution-planner";
 import { applyAntiLoopReliabilityLayer } from "../lib/anti-loop-reliability-layer";
+import { applyActionGuaranteeLayer } from "../lib/action-guarantee-layer";
 import { validatePostMutationArchitectureLight } from "../lib/post-mutation-validator";
 import { resolveAgentSettingsContext, type CoachBehaviorSettings, type AgentSettingsContext } from "../lib/agent-settings-resolver";
 import { resolveRefinementScope, inferBlockTypeFromMessage, type ScopeResolution } from "../lib/refinement-scope-resolver";
@@ -938,11 +939,20 @@ Keep it helpful and intelligent, never promotional.`;
     pendingClarificationTargetProgramId: activePendingClarification?.targetProgramId ?? null,
     pendingClarificationCount,
   });
-  const execPlan = _antiLoopResult.plan;
   if (_antiLoopResult.shouldClearPending && activePendingClarification) {
     resolvePendingClarification(activePendingClarification.id, "expired").catch(() => {});
     activePendingClarification = null;
   }
+
+  // ── Action Guarantee Layer (non-SSE) ──────────────────────────────────────
+  const _guaranteeResult = applyActionGuaranteeLayer(_antiLoopResult.plan, {
+    message: parsed.data.content,
+    activeProgramId: (activeSystem as any)?.id ?? null,
+    program: latestStructuredProgram,
+    conversationId: params.data.id as number,
+    pendingClarificationCount,
+  });
+  const execPlan = _guaranteeResult.plan;
 
   // Sync clarification outcome to turnOutcome
   if (execPlan.action === "ASK_CLARIFICATION") {
@@ -973,7 +983,7 @@ Keep it helpful and intelligent, never promotional.`;
     userId,
     conversationId: String(params.data.id),
     intentType: intentResult.type,
-    execPlanAction: execPlan.action as "APPLY_MUTATION" | "ASK_CLARIFICATION" | "GUIDANCE" | "REBUILD_PROGRAM" | "NO_OP",
+    execPlanAction: (execPlan.action === "ACTION_CHOICE_CARD" || execPlan.action === "SAFETY_REFUSAL" ? "GUIDANCE" : execPlan.action) as "APPLY_MUTATION" | "ASK_CLARIFICATION" | "GUIDANCE" | "REBUILD_PROGRAM" | "NO_OP",
     focusMode: nonStreamFocusMode,
     hasActiveProgram: hasAnyProgram,
     isAdminRequest: false,
@@ -1542,6 +1552,89 @@ Keep it helpful and intelligent, never promotional.`;
 
       break; // end case "ASK_CLARIFICATION"
     } // end case "ASK_CLARIFICATION"
+
+    // ── ACTION_CHOICE_CARD ────────────────────────────────────────────────────
+    // Ambiguous destructive target (e.g. "replace that" with no named exercise).
+    // Return a structured choice card instead of a free-text clarification question.
+    case "ACTION_CHOICE_CARD": {
+      const choiceCard = execPlan.choiceCard;
+      if (choiceCard) {
+        const choiceLines = choiceCard.choices.map((c, i) => `${i + 1}. ${c.label}`).join("\n");
+        const choiceContent = `${choiceCard.prompt}\n\n${choiceLines}`;
+        const [assistantMessage] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: choiceContent,
+          structuredData: JSON.stringify({ _type: "action_choice_card", ...choiceCard }),
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        res.json({
+          userMessage: {
+            id: userMessage.id,
+            conversationId: userMessage.conversationId,
+            role: userMessage.role,
+            content: userMessage.content,
+            createdAt: userMessage.createdAt.toISOString(),
+            structuredData: null,
+          },
+          assistantMessage: {
+            id: assistantMessage.id,
+            conversationId: assistantMessage.conversationId,
+            role: assistantMessage.role,
+            content: assistantMessage.content,
+            createdAt: assistantMessage.createdAt.toISOString(),
+            structuredData: assistantMessage.structuredData ?? null,
+          },
+          planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+          intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+          actionDebug: { planAction: execPlan.action, source: "action_guarantee_layer" },
+        });
+        return;
+      }
+      break;
+    } // end case "ACTION_CHOICE_CARD"
+
+    // ── SAFETY_REFUSAL ────────────────────────────────────────────────────────
+    // Request would cause physical harm — return a safe redirect message.
+    case "SAFETY_REFUSAL": {
+      const refusalMessage = execPlan.safetyRefusal?.message ??
+        "I can't design sessions intended to cause pain or injury. Let me know if you want to increase intensity safely.";
+      const [assistantMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id,
+        role: "assistant",
+        content: refusalMessage,
+        structuredData: JSON.stringify({ _type: "safety_refusal" }),
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      res.json({
+        userMessage: {
+          id: userMessage.id,
+          conversationId: userMessage.conversationId,
+          role: userMessage.role,
+          content: userMessage.content,
+          createdAt: userMessage.createdAt.toISOString(),
+          structuredData: null,
+        },
+        assistantMessage: {
+          id: assistantMessage.id,
+          conversationId: assistantMessage.conversationId,
+          role: assistantMessage.role,
+          content: assistantMessage.content,
+          createdAt: assistantMessage.createdAt.toISOString(),
+          structuredData: assistantMessage.structuredData ?? null,
+        },
+        planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
+        intentDebug: { type: intentResult.type, confidence: intentResult.confidence, editSubtype: intentResult.editSubtype ?? null },
+        actionDebug: { planAction: execPlan.action, source: "action_guarantee_layer" },
+      });
+      return;
+    } // end case "SAFETY_REFUSAL"
 
     // ── REBUILD_PROGRAM / GUIDANCE / NO_OP ───────────────────────────────────
     // Fall through to the SAVE check and standard AI path below.
@@ -3637,11 +3730,20 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     pendingClarificationTargetProgramId: activePendingClarification?.targetProgramId ?? null,
     pendingClarificationCount: pendingClarificationCountSSE,
   });
-  const execPlan = _antiLoopResultSSE.plan;
   if (_antiLoopResultSSE.shouldClearPending && activePendingClarification) {
     resolvePendingClarification(activePendingClarification.id, "expired").catch(() => {});
     activePendingClarification = null;
   }
+
+  // ── Action Guarantee Layer (SSE path) ─────────────────────────────────────
+  const _guaranteeResultSSE = applyActionGuaranteeLayer(_antiLoopResultSSE.plan, {
+    message: effectiveMessage,
+    activeProgramId: (activeSystem as any)?.id ?? null,
+    program: latestStructuredProgram,
+    conversationId: params.data.id as number,
+    pendingClarificationCount: pendingClarificationCountSSE,
+  });
+  const execPlan = _guaranteeResultSSE.plan;
 
   logger.info(
     {
@@ -4120,6 +4222,48 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
       break; // end case "ASK_CLARIFICATION"
     } // end case "ASK_CLARIFICATION"
+
+    // ── ACTION_CHOICE_CARD (SSE path) ─────────────────────────────────────────
+    // Ambiguous destructive target — show structured choices, never a free-text question.
+    case "ACTION_CHOICE_CARD": {
+      const choiceCard = execPlan.choiceCard;
+      if (choiceCard) {
+        const choiceLines = choiceCard.choices.map((c, i) => `${i + 1}. ${c.label}`).join("\n");
+        const choiceContent = `${choiceCard.prompt}\n\n${choiceLines}`;
+        const [assistantMessage] = await db.insert(messagesTable).values({
+          conversationId: params.data.id,
+          role: "assistant",
+          content: choiceContent,
+          structuredData: JSON.stringify({ _type: "action_choice_card", ...choiceCard }),
+        }).returning();
+        await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+          stripeStorage.incrementMessageCount(userId).catch(() => {});
+        }
+        done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
+        return;
+      }
+      break;
+    } // end case "ACTION_CHOICE_CARD" (SSE)
+
+    // ── SAFETY_REFUSAL (SSE path) ─────────────────────────────────────────────
+    // Request would cause physical harm — return a safe redirect message.
+    case "SAFETY_REFUSAL": {
+      const refusalMessage = execPlan.safetyRefusal?.message ??
+        "I can't design sessions intended to cause pain or injury. Let me know if you want to increase intensity safely.";
+      const [assistantMessage] = await db.insert(messagesTable).values({
+        conversationId: params.data.id,
+        role: "assistant",
+        content: refusalMessage,
+        structuredData: JSON.stringify({ _type: "safety_refusal" }),
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
+        stripeStorage.incrementMessageCount(userId).catch(() => {});
+      }
+      done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }));
+      return;
+    } // end case "SAFETY_REFUSAL" (SSE)
 
     // ── REBUILD_PROGRAM / GUIDANCE / NO_OP ───────────────────────────────────
     case "REBUILD_PROGRAM":
