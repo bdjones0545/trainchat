@@ -76,6 +76,14 @@ export const OPENAI_MODELS = {
    * Completes the first full model modernization pass.
    */
   SHARE_MOMENTS: "gpt-4.1",
+
+  /**
+   * Lightweight LLM intent interpreter that runs before the deterministic
+   * execution planner. Classifies user messages into structured JSON so the
+   * planner can skip fragile regex branches for high-confidence results.
+   * Uses gpt-4.1-mini for speed (target ≤ 800 ms p50) and low cost.
+   */
+  INTENT_INTERPRETER: "gpt-4.1-mini",
 } as const;
 
 export type OpenAIModelKey = keyof typeof OPENAI_MODELS;

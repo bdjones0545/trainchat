@@ -1,0 +1,88 @@
+Add an LLM Intent Interpreter layer to TrainChat to reduce regex patching.
+
+Goal:
+Stop relying on endless regex patches for natural conversation. Add a lightweight AI router that converts user messages into structured intent JSON before the deterministic execution planner.
+
+Architecture:
+User message → LLM Intent Interpreter → StructuredIntent JSON → existing planner/mutation engine → Action Guarantee Layer
+
+Do not let the LLM directly mutate programs.
+Do not let the LLM write database changes.
+The LLM only classifies and rewrites the user message into structured JSON.
+
+Create:
+server/intent/llm-intent-interpreter.ts
+
+Input:
+{
+  rawMessage,
+  activeProgramExists,
+  recentReferences,
+  pendingClarification,
+  currentProgramSummary,
+  conversationContext
+}
+
+Output:
+{
+  isActionable: boolean,
+  actionType: "create_program" | "modify_program" | "answer_question" | "clarify" | "safety",
+  intentFamily: string,
+  contextType: "sport" | "goal" | "equipment" | "duration" | "phase" | "pain" | "fatigue" | "style" | "exercise" | "session" | "program" | "unknown",
+  value: string | null,
+  scope: "full_program" | "day" | "session" | "exercise" | "unknown",
+  targetType: "program" | "day" | "session" | "exercise" | null,
+  targetLabel: string | null,
+  confidence: number,
+  needsClarification: boolean,
+  clarificationQuestion: string | null,
+  interpretedCommand: string,
+  defaultScopeUsed: boolean,
+  safetyConcern: string | null
+}
+
+Rules:
+- If activeProgramExists and the message implies a reasonable program change, set isActionable true.
+- Default scope to full_program for sport, goal, equipment, duration, phase, fatigue, pain, style, intensity, or general training context.
+- Only ask clarification when no safe useful action exists.
+- Never ask “which exercise?” unless the user explicitly refers to an exercise or a recent exercise reference is required.
+- If user says “football”, interpret as “Refine current program for football.”
+- If user says “weight loss”, interpret as “Refine current program toward weight loss.”
+- If user says “too long”, interpret as “Shorten the current program sessions.”
+- If user says “knees hurt”, interpret as “Modify the current program to reduce knee stress.”
+- If user says “replace that” and no recent exercise exists, return actionType ACTION_CHOICE_CARD or needsClarification true.
+- Return JSON only.
+
+Integration:
+1. Run the interpreter before regex-heavy classification.
+2. If confidence >= 0.75 and isActionable = true:
+   - feed interpretedCommand + structured fields into buildExecutionPlan
+   - skip fragile regex branches where possible
+3. If confidence 0.45–0.74:
+   - use existing deterministic planner plus Action Guarantee Layer
+4. If confidence < 0.45:
+   - use existing planner normally
+5. Keep existing regex rules as fallbacks, not primary logic.
+
+Add dev log:
+console.log("[LLM Intent Interpreter]", {
+  rawMessage,
+  interpretedCommand,
+  actionType,
+  intentFamily,
+  contextType,
+  scope,
+  confidence,
+  needsClarification
+});
+
+Acceptance tests:
+- “football” → modify_program, sport, full_program
+- “make it for hockey” → modify_program, sport, full_program
+- “weight loss” → modify_program, goal, full_program
+- “too long” → modify_program, duration, full_program
+- “I’m cooked” → modify_program, fatigue, full_program
+- “knees hurt” → modify_program, pain, full_program
+- “replace that” with no recent exercise → choice/clarify
+- no repeated clarification loops
+- no TypeScript errors.

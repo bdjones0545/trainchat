@@ -34,6 +34,7 @@ import {
   buildConstraintReinforcementDirective,
   type HardConstraints,
 } from "./constraint-memory";
+import { runLLMIntentInterpreter, type LLMContextType } from "./intent/llm-intent-interpreter";
 
 // ─── Execution Action Types ───────────────────────────────────────────────────
 
@@ -306,6 +307,37 @@ const VAGUE_IMPROVEMENT_PATTERNS: RegExp[] = [
   /\bjust make it better\b/i,
 ];
 
+// ─── LLM Intent Interpreter Helpers ───────────────────────────────────────────
+
+/**
+ * Builds a brief, token-efficient summary of the active program for the
+ * LLM intent interpreter. Returns null when no program is active.
+ */
+function buildProgramSummary(program: ProgramStructure | null): string | null {
+  if (!program) return null;
+  const name = (program as any).programName ?? (program as any).name ?? "Active Program";
+  const days = (program as any).days as Array<{ name?: string; dayNumber?: number }> | undefined;
+  if (!days?.length) return name;
+  const dayList = days.map((d) => d.name ?? `Day ${d.dayNumber ?? "?"}`).join(", ");
+  return `${name} — ${days.length} days: ${dayList}`;
+}
+
+/**
+ * Maps the LLM contextType to a deterministic IntentFamily.
+ * The mapping covers the most unambiguous cases; unknown/exercise/program
+ * contextTypes fall back to normalizeToIntentFamily on the interpretedCommand.
+ */
+const CONTEXT_TYPE_TO_INTENT_FAMILY: Partial<Record<LLMContextType, IntentFamily>> = {
+  sport:     "sport_context_update",
+  goal:      "conditioning_focus",
+  equipment: "equipment_constraint",
+  duration:  "reduce_time",
+  phase:     "sport_context_update",
+  pain:      "injury_modification",
+  fatigue:   "readiness_low",
+  style:     "athletic_performance_focus",
+};
+
 // ─── Entry Point ──────────────────────────────────────────────────────────────
 
 export async function buildExecutionPlan({
@@ -417,6 +449,160 @@ export async function buildExecutionPlan({
     );
 
     return plan;
+  }
+
+  // ── STEP 0.5: LLM Intent Interpreter ─────────────────────────────────────────
+  // Lightweight AI router (gpt-4.1-mini, ≤2.5 s timeout) that converts the user
+  // message into structured intent JSON BEFORE the deterministic planner runs.
+  //
+  // INVARIANTS — the interpreter NEVER writes to the DB or mutates the program.
+  //   confidence ≥ 0.75 + isActionable + full-program → return plan immediately
+  //   confidence ≥ 0.75 + isActionable + create_program → REBUILD_PROGRAM
+  //   confidence ≥ 0.75 + isActionable + answer_question → GUIDANCE
+  //   confidence ≥ 0.75 + safety concern → SAFETY_REFUSAL
+  //   confidence 0.45–0.74 + isActionable → rewrite message, run deterministic planner
+  //   confidence < 0.45 or error → pass through unchanged
+  //   exercise-scoped or day-scoped intents at any confidence → always fall through
+  //   (exercise/day routing in the deterministic planner is more reliable)
+  {
+    const interpreterResult = await runLLMIntentInterpreter({
+      rawMessage: message,
+      activeProgramExists: !!program,
+      pendingClarification: pendingClarification
+        ? { pendingAspect: pendingClarification.pendingAspect, clarificationQuestion: pendingClarification.clarificationQuestion }
+        : null,
+      currentProgramSummary: buildProgramSummary(program),
+      conversationContext: null,
+      recentReferences: null,
+      focusMode: focusMode ?? null,
+    });
+
+    if (interpreterResult) {
+      console.log("[LLM Intent Interpreter]", {
+        rawMessage: message.slice(0, 80),
+        interpretedCommand: interpreterResult.interpretedCommand.slice(0, 80),
+        actionType: interpreterResult.actionType,
+        intentFamily: interpreterResult.intentFamily,
+        contextType: interpreterResult.contextType,
+        scope: interpreterResult.scope,
+        confidence: interpreterResult.confidence,
+        needsClarification: interpreterResult.needsClarification,
+        pendingClarificationDiscarded: !!pendingClarification && interpreterResult.isActionable && interpreterResult.scope === "full_program",
+      });
+
+      const { confidence, isActionable, actionType, scope: interpScope, contextType } = interpreterResult;
+      const isFullProgramScope = interpScope === "full_program" || interpScope === "unknown";
+      const isExerciseOrDayScope = interpScope === "exercise" || interpScope === "day" || interpScope === "session";
+
+      // ── High-confidence full-program modify → immediate APPLY_MUTATION ──────
+      if (
+        confidence >= 0.75 &&
+        isActionable &&
+        actionType === "modify_program" &&
+        isFullProgramScope &&
+        !isExerciseOrDayScope &&
+        program
+      ) {
+        const mappedFamily =
+          (CONTEXT_TYPE_TO_INTENT_FAMILY[contextType] as IntentFamily | undefined) ??
+          normalizeToIntentFamily(interpreterResult.interpretedCommand, focusMode).family;
+
+        // Safety valve: if the mapped family is clarification_required, fall through
+        if (mappedFamily !== "clarification_required") {
+          const interpreterPlan: ExecutionPlan = {
+            action: "APPLY_MUTATION",
+            intentFamily: mappedFamily,
+            scope: { type: "program" },
+            defaultScopeUsed: true,
+            mutation: {
+              type: "transform",
+              params: {
+                transformation: mappedFamily,
+                contextType,
+                context: interpreterResult.value ?? interpreterResult.interpretedCommand,
+                interpretedCommand: interpreterResult.interpretedCommand,
+                defaultScopeUsed: true,
+              },
+            },
+            reasoning: `[LLMInterpreter/high] confidence=${confidence.toFixed(2)} contextType=${contextType} → ${mappedFamily} full-program mutation`,
+          };
+
+          logger.info(
+            { conversationId, userId, mappedFamily, contextType, confidence, pendingClarificationDiscarded: !!pendingClarification },
+            "[LLMIntentInterpreter] High-confidence full-program modify — returning APPLY_MUTATION plan"
+          );
+
+          return interpreterPlan;
+        }
+      }
+
+      // ── High-confidence create_program → REBUILD_PROGRAM ───────────────────
+      if (confidence >= 0.75 && isActionable && actionType === "create_program") {
+        const rebuildPlan: ExecutionPlan = {
+          action: "REBUILD_PROGRAM",
+          intentFamily: "new_program_request",
+          scope: { type: "program" },
+          reasoning: `[LLMInterpreter/high] confidence=${confidence.toFixed(2)} → create_program detected`,
+        };
+
+        logger.info(
+          { conversationId, userId, confidence },
+          "[LLMIntentInterpreter] High-confidence create_program — REBUILD_PROGRAM"
+        );
+
+        return rebuildPlan;
+      }
+
+      // ── High-confidence answer_question → GUIDANCE ──────────────────────────
+      if (confidence >= 0.75 && actionType === "answer_question") {
+        const guidancePlan: ExecutionPlan = {
+          action: "GUIDANCE",
+          intentFamily: "coaching_question",
+          scope: { type: "program" },
+          reasoning: `[LLMInterpreter/high] confidence=${confidence.toFixed(2)} → answer_question`,
+        };
+
+        logger.info(
+          { conversationId, userId, confidence },
+          "[LLMIntentInterpreter] High-confidence answer_question — GUIDANCE"
+        );
+
+        return guidancePlan;
+      }
+
+      // ── High-confidence safety → SAFETY_REFUSAL ─────────────────────────────
+      if (confidence >= 0.75 && actionType === "safety" && interpreterResult.safetyConcern) {
+        const safetyPlan: ExecutionPlan = {
+          action: "SAFETY_REFUSAL",
+          intentFamily: "clarification_required",
+          scope: { type: "program" },
+          reasoning: `[LLMInterpreter/high] safety concern: ${interpreterResult.safetyConcern}`,
+        };
+
+        logger.info(
+          { conversationId, userId, safetyConcern: interpreterResult.safetyConcern },
+          "[LLMIntentInterpreter] Safety concern detected — SAFETY_REFUSAL"
+        );
+
+        return safetyPlan;
+      }
+
+      // ── Medium-confidence or exercise-scoped → rewrite message only ─────────
+      // The deterministic planner (Steps 1–4) runs on the rewritten message.
+      // This improves pattern matching without bypassing safety checks.
+      if (
+        confidence >= 0.45 &&
+        isActionable &&
+        !isExerciseOrDayScope &&
+        interpreterResult.interpretedCommand !== message
+      ) {
+        logger.info(
+          { conversationId, userId, confidence, originalMessage: message.slice(0, 80), rewrittenMessage: interpreterResult.interpretedCommand.slice(0, 80) },
+          "[LLMIntentInterpreter] Medium-confidence — rewrote message for deterministic planner"
+        );
+        message = interpreterResult.interpretedCommand;
+      }
+    }
   }
 
   // ── STEP 1: Handle clarification followup first ─────────────────────────────
