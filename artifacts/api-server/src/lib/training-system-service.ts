@@ -1942,7 +1942,8 @@ export async function createTrainingSystemFromProgram(
 export async function upsertTrainingSystemFromProgram(
   userId: number,
   program: ChatProgram,
-  focusMode?: string | null
+  focusMode?: string | null,
+  conversationId?: number | null
 ): Promise<{ system: typeof trainingSystems.$inferSelect; isUpdate: boolean }> {
   if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
     throw new Error("Program must have at least one training day");
@@ -1955,7 +1956,7 @@ export async function upsertTrainingSystemFromProgram(
 
   // ── No active system for this focus → create fresh ────────────────────────
   if (!existingSystem) {
-    const system = await createTrainingSystemFromProgram(userId, program, null, resolvedFocusMode);
+    const system = await createTrainingSystemFromProgram(userId, program, conversationId ?? null, resolvedFocusMode);
     return { system, isUpdate: false };
   }
 
@@ -1981,6 +1982,7 @@ export async function upsertTrainingSystemFromProgram(
       overarchingGoal: program.description ?? program.programName,
       trainingStyle: program.splitType ?? phaseConfig.phaseName,
       weeklyFrequency: daysPerWeek,
+      ...(conversationId != null ? { conversationId } : {}),
       metadata: {
         source: "chat_edit",
         focusMode: resolvedFocusMode,

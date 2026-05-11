@@ -1119,6 +1119,7 @@ function ProgramTab({
       const editResult = await customFetch<{
         changeLogEntry?: ChangeLogEntry | null;
         changeSummary?: string;
+        appliedCount?: number;
         swapContract?: {
           actionType: string;
           confirmed: boolean;
@@ -1154,19 +1155,26 @@ function ProgramTab({
       if (directEditElapsed < 300) {
         await new Promise<void>((r) => setTimeout(r, 300 - directEditElapsed));
       }
-      console.log("[LiveProgramPanel:MutationSuccess]", { action, exerciseName, exerciseId, changeLogEntry: editResult?.changeLogEntry ?? null });
       queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
       queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
       queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
       queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
-      console.log("[LiveProgramPanel:InvalidateQueries]", ["training-system-week", "live-panel-week-ids", "week-view-select", "training-system-today", "training-system-active"]);
       updateChangesCache(editResult?.changeLogEntry ?? null);
-      queryClient.refetchQueries({ queryKey: ["training-system-history", "changes"] }).then(() => {
-        console.log("[LiveProgramPanel:RefetchComplete]", { action, exerciseName });
-      });
+      queryClient.refetchQueries({ queryKey: ["training-system-history", "changes"] });
       onSidebarMutation?.();
       setPendingRefinement(null);
+
+      if ((editResult?.appliedCount ?? 1) === 0) {
+        setPanelEditError("No safe change found — try describing what you want in chat.");
+        toast({
+          title: "No change applied",
+          description: "No safe modification was found for that action. Describe what you want in the chat for a custom edit.",
+          duration: 4000,
+        });
+        return;
+      }
+
       triggerSuccessOverlay(
         isSwapLike ? "Exercise swapped"
         : action === "easier" ? "Made easier"

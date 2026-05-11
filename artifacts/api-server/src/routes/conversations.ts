@@ -1656,7 +1656,7 @@ Keep it helpful and intelligent, never promotional.`;
 
     if (programToSave) {
       try {
-        const result = await upsertTrainingSystemFromProgram(userId, programToSave);
+        const result = await upsertTrainingSystemFromProgram(userId, programToSave, undefined, params.data.id);
         savedSystemId = result.system.id;
         saveSuccess = true;
         const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
@@ -3063,10 +3063,10 @@ Keep it helpful and intelligent, never promotional.`;
       let savedSystem: { id: number; [key: string]: any };
       let isUpdate: boolean;
       if (isNewProgramBuild) {
-        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, null, nonStreamFocusMode);
+        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, params.data.id, nonStreamFocusMode);
         isUpdate = false;
       } else {
-        const result = await upsertTrainingSystemFromProgram(userId, structuredData, nonStreamFocusMode);
+        const result = await upsertTrainingSystemFromProgram(userId, structuredData, nonStreamFocusMode, params.data.id);
         savedSystem = result.system;
         isUpdate = result.isUpdate;
       }
@@ -4282,7 +4282,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     if (programToSave) {
       try {
-        const result = await upsertTrainingSystemFromProgram(userId, programToSave);
+        const result = await upsertTrainingSystemFromProgram(userId, programToSave, undefined, params.data.id);
         savedSystemId = result.system.id;
         saveSuccess = true;
         const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
@@ -5441,10 +5441,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       let savedSystem: { id: number; [key: string]: any };
       let isUpdate: boolean;
       if (isNewProgramBuildSSE) {
-        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, null, streamFocusMode);
+        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, params.data.id, streamFocusMode);
         isUpdate = false;
       } else {
-        const result = await upsertTrainingSystemFromProgram(userId, structuredData, streamFocusMode);
+        const result = await upsertTrainingSystemFromProgram(userId, structuredData, streamFocusMode, params.data.id);
         savedSystem = result.system;
         isUpdate = result.isUpdate;
       }
