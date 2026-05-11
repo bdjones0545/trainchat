@@ -1297,10 +1297,14 @@ export default function Chat() {
         setLatestProgram(null);
       }
     } else {
-      // No program messages in this conversation — always clear.
-      // (The previous code only cleared when messages.length === 0, which left
-      // ghost programs visible when switching between conversations.)
-      setLatestProgram(null);
+      // No program messages in this conversation — clear ghost drafts.
+      // GUARD: if a session draft is registered (sessionDraftMsgIdRef.current !== null),
+      // messages may be transiently empty while the query refetches immediately after
+      // a successful save. Clearing here would destroy the just-built latestProgram
+      // before the messages query catches up. Only clear when no draft is registered.
+      if (sessionDraftMsgIdRef.current === null) {
+        setLatestProgram(null);
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages, hasActiveSystem, dbSystemProgram, isSaved]);
