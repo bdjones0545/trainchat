@@ -969,6 +969,28 @@ function ProgramTab({
     queryClient.refetchQueries({ queryKey: changesQueryKey }).catch(() => {});
   }
 
+  // ── Shared post-mutation cache refresh ───────────────────────────────────
+  // Uses refetchQueries (not invalidateQueries) so the fetch is forced
+  // immediately, guaranteeing the panel re-renders with fresh DB data in the
+  // same event loop cycle rather than relying on a scheduled background refetch.
+  async function refetchProgramData() {
+    await Promise.all([
+      // conversationId drives activeSystem → weekData enablement in chat.tsx
+      ...(conversationId != null
+        ? [queryClient.refetchQueries({ queryKey: ["training-system-conv", conversationId] })]
+        : [queryClient.invalidateQueries({ queryKey: ["training-system-conv"] })]),
+      // Primary rendering source for the current week
+      queryClient.refetchQueries({ queryKey: ["training-system-week"] }),
+      // Exercise-ID map for the next direct edit
+      queryClient.refetchQueries({ queryKey: ["live-panel-week-ids"] }),
+      // Alt-week view (non-current weeks)
+      queryClient.refetchQueries({ queryKey: ["week-view-select"] }),
+    ]);
+    // Secondary caches — background invalidation is sufficient
+    queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+    queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+  }
+
   // ── Direct block-level refine — bypasses chat, targets selected block ──────
   async function handleDirectBlockRefine(chip: GlobalChip, key: string) {
     if (trainingSystemId == null || buildingState?.isBuilding || !!pendingRefinement) return;
@@ -995,11 +1017,7 @@ function ProgramTab({
       const elapsed = Date.now() - start;
       if (elapsed < 300) await new Promise<void>((r) => setTimeout(r, 300 - elapsed));
 
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
-      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      await refetchProgramData();
       updateChangesCache(result.changeLogEntry ?? null);
 
       setPendingRefinement(null);
@@ -1058,11 +1076,7 @@ function ProgramTab({
       const elapsed = Date.now() - start;
       if (elapsed < 300) await new Promise<void>((r) => setTimeout(r, 300 - elapsed));
 
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
-      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      await refetchProgramData();
       updateChangesCache(result.changeLogEntry ?? null);
 
       setPanelMutating(null);
@@ -1155,11 +1169,7 @@ function ProgramTab({
       if (directEditElapsed < 300) {
         await new Promise<void>((r) => setTimeout(r, 300 - directEditElapsed));
       }
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
-      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      await refetchProgramData();
       updateChangesCache(editResult?.changeLogEntry ?? null);
       queryClient.refetchQueries({ queryKey: ["training-system-history", "changes"] });
       onSidebarMutation?.();
@@ -1319,12 +1329,8 @@ function ProgramTab({
         await new Promise<void>((r) => setTimeout(r, 300 - elapsed));
       }
 
-      // Immediate cache invalidation for all week-data keys
-      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
-      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
-      queryClient.invalidateQueries({ queryKey: ["week-view-select"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
-      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      // Forced refetch of all primary rendering queries
+      await refetchProgramData();
 
       // Phase 5: Predicate-based invalidation to catch any key variant + exact key
       const changesQueryKey = ["training-system-history", "changes"] as const;
