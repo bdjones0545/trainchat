@@ -1,0 +1,47 @@
+Bug: Right sidebar / Live Program buttons are routing through the main chat again instead of using their direct deterministic action endpoints.
+
+Problem:
+When pressing sidebar buttons like Improve My Plan, Check-In, refine chips, exercise actions, or Live Program actions, they appear in / flow through the main chat message pipeline.
+
+Expected:
+Sidebar actions should execute through direct program mutation/edit endpoints and update the Live Program panel without being treated like normal user chat messages.
+
+Investigate:
+- Any shared submitUserMessage() usage introduced during the recent Laser Skill / idle UI work
+- Sidebar button onClick handlers accidentally calling the main chat input submit path
+- Refine chip handlers falling back to chat message creation
+- LiveProgramPanel actions using conversation send instead of direct mutation/edit APIs
+- Whether action source metadata was removed or ignored
+- Whether the mobile drawer passes the correct action handlers
+
+Fix:
+- Restore deterministic sidebar action path:
+  - quick actions → /api/training-system/mutate or /api/training-system/edit
+  - refine chips → structured edit/mutation endpoint
+  - check-in → check-in endpoint or dedicated action handler
+  - program actions → direct mutation helper
+- Do not create a visible chat bubble for sidebar actions unless explicitly intended
+- Do not send sidebar button text into the main conversation pipeline
+- After successful sidebar action, refetch/invalidate:
+  ["training-system-conv", activeConvoId]
+  relevant change/history/adapted queries
+- Preserve SSE/chat submit only for actual typed or voice chat messages
+- Add source guards:
+  source: "chat_input" uses submitUserMessage()
+  source: "sidebar_action" uses directMutationHandler()
+  source: "live_program_action" uses liveProgramActionHandler()
+
+Add DEV logs:
+- action label
+- action source
+- endpoint used
+- activeConvoId
+- whether chat message was created
+
+Acceptance test:
+1. Press Improve My Plan from sidebar.
+2. No user chat bubble should be created.
+3. Direct mutation/edit endpoint should run.
+4. Program panel should update.
+5. Change history should record the action.
+6. Typed chat messages should still go through normal chat pipeline.

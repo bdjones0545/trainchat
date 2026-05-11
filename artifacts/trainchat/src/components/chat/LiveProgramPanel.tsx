@@ -588,7 +588,7 @@ interface ExerciseAction {
   label: string;
   Icon: LucideIcon;
   buildMessage: (name: string) => string;
-  direct?: "easier" | "harder" | "swap";
+  direct?: "easier" | "harder" | "swap" | "equipment";
 }
 
 const EXERCISE_ACTIONS: ExerciseAction[] = [
@@ -614,6 +614,7 @@ const EXERCISE_ACTIONS: ExerciseAction[] = [
     label: "Equipment",
     Icon: Wrench,
     buildMessage: (n) => `Replace ${n} with an equivalent exercise that fits my available equipment`,
+    direct: "equipment",
   },
   {
     label: "Explain",
@@ -1097,15 +1098,17 @@ function ProgramTab({
   // ── Direct exercise edit — bypasses chat, calls edit API deterministically ─
   async function handleDirectExerciseEdit(
     exerciseName: string,
-    action: "easier" | "harder" | "swap",
+    action: "easier" | "harder" | "swap" | "equipment",
     actionKey: string,
     exerciseIdHint?: number,
   ) {
     if (buildingState?.isBuilding) return;
     setPanelEditError(null);
+    const isSwapLike = action === "swap" || action === "equipment";
     const request =
       action === "easier" ? `Make ${exerciseName} easier`
       : action === "harder" ? `Make ${exerciseName} harder`
+      : action === "equipment" ? `Replace ${exerciseName} with an equivalent exercise that fits my available equipment`
       : `Swap ${exerciseName} with something similar`;
 
     const exerciseId = exerciseIdHint ?? exerciseIdMap.get(exerciseName.toLowerCase());
@@ -1165,7 +1168,7 @@ function ProgramTab({
       onSidebarMutation?.();
       setPendingRefinement(null);
       triggerSuccessOverlay(
-        action === "swap" ? "Exercise swapped"
+        isSwapLike ? "Exercise swapped"
         : action === "easier" ? "Made easier"
         : "Made harder"
       );
@@ -1179,14 +1182,15 @@ function ProgramTab({
       // (e.g. the mutation was misclassified), fall back to a neutral label and log a warning.
       const swapContract = editResult?.swapContract ?? null;
       const swapConfirmed =
-        action === "swap" &&
+        isSwapLike &&
         swapContract?.actionType === "replace_exercise" &&
         swapContract.confirmed === true &&
         swapContract.updatedExercise != null;
 
-      if (action === "swap" && !swapConfirmed) {
+      if (isSwapLike && !swapConfirmed) {
         console.warn("[LiveProgramPanel:SwapContractViolation]", {
           exerciseName,
+          action,
           swapContract,
           reason: !swapContract
             ? "no_contract_in_response"
@@ -1199,14 +1203,14 @@ function ProgramTab({
       // Highlight + scroll to the edited exercise
       const replacementName = swapConfirmed ? swapContract!.replacementExercise ?? exerciseName : exerciseName;
       const label =
-        action === "swap" && swapConfirmed
+        isSwapLike && swapConfirmed
           ? `${exerciseName} → ${replacementName}`
           : action === "easier" ? "Made easier"
           : action === "harder" ? "Made harder"
-          : action === "swap" ? "Swap requested"
+          : isSwapLike ? "Swap requested"
           : "Updated";
       // Highlight the replacement exercise name (which may differ from the original after a swap)
-      const highlightName = action === "swap" && swapConfirmed ? replacementName : exerciseName;
+      const highlightName = isSwapLike && swapConfirmed ? replacementName : exerciseName;
       setHighlightedNames(new Set([highlightName]));
       setInlineLabels(new Map([[highlightName, label]]));
       if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
