@@ -1,5 +1,6 @@
 import { Dumbbell, Calendar, Target, Zap, ArrowRight } from "lucide-react";
 import CoachReasoningCallout from "./CoachReasoningCallout";
+import { EdgeTraceCard } from "@/components/laser-skill";
 
 interface BuildMeta {
   frequency: number;
@@ -66,6 +67,7 @@ export default function BuildSummaryCard({ data, onViewProgram }: Props) {
   const frequency = meta.frequency;
 
   return (
+    <EdgeTraceCard borderRadius="0.75rem">
     <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 border-b border-primary/10">
         <Dumbbell className="w-3.5 h-3.5 text-primary flex-shrink-0" />
@@ -125,5 +127,6 @@ export default function BuildSummaryCard({ data, onViewProgram }: Props) {
         <ArrowRight className="w-3 h-3" />
       </button>
     </div>
+    </EdgeTraceCard>
   );
 }

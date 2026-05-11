@@ -13,6 +13,7 @@
 import { useRef } from "react";
 import type { BuildStage } from "@/hooks/useStreamMessage";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import { LaserScanLine, ArchitectPlanningDot } from "@/components/laser-skill";
 
 // ─── Modal Mode ───────────────────────────────────────────────────────────────
 
@@ -312,12 +313,13 @@ export default function AgentThinking({
 
       {/* Card */}
       <div
-        className="bg-card border border-border/80 rounded-2xl rounded-tl-sm overflow-hidden max-w-[280px] w-full"
+        className="bg-card border border-border/80 rounded-2xl rounded-tl-sm overflow-hidden max-w-[280px] w-full relative"
         style={{
           animation: isActiveStage ? "card-glow-pulse 2.4s ease-in-out infinite" : undefined,
           borderColor: isActiveStage ? "rgba(var(--primary-rgb, 99 102 241) / 0.22)" : undefined,
         }}
       >
+        <LaserScanLine active={isActiveStage} stage={buildStage} containerHeight={180} />
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="px-4 pt-3 pb-2.5 flex items-start gap-2.5">
           <div className="relative flex-shrink-0 mt-0.5">
@@ -367,6 +369,11 @@ export default function AgentThinking({
               status={getStepStatus(i, steps, buildStage)}
             />
           ))}
+          {isActiveStage && (
+            <div className="pt-0.5">
+              <ArchitectPlanningDot stage={buildStage} />
+            </div>
+          )}
         </div>
 
         {/* ── Failure states ───────────────────────────────────────────────── */}

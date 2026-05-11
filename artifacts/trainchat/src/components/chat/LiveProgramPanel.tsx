@@ -29,6 +29,7 @@ import SystemAdjustmentsPanel from "./SystemAdjustmentsPanel";
 import ProgramShareModal from "@/components/share/ProgramShareModal";
 import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
 import { ProgramVoiceTextInput } from "@/components/ui/ProgramVoiceTextInput";
+import { LaserScanLine, PrecisionGlowLine } from "@/components/laser-skill";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -251,12 +252,15 @@ function DaySkeleton({ dayNum, showExercises, delayMs, shimmer }: {
 
   return (
     <div
-      className="bg-card border border-border/60 rounded-xl overflow-hidden"
+      className="bg-card border border-border/60 rounded-xl overflow-hidden relative"
       style={{
         animation: `fadeSlideIn 0.25s ease both`,
         animationDelay: `${delayMs}ms`,
       }}
     >
+      {shimmer && (
+        <LaserScanLine active={true} stage="applying" containerHeight={showExercises ? 120 : 52} />
+      )}
       <div className="flex items-center justify-between p-3">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2">
@@ -335,7 +339,10 @@ function BuildingFromScratch({ stage, actionType }: { stage: BuildStage | null; 
       `}</style>
 
       {/* Panel header — premium build state */}
-      <div className="p-4 border-b border-border flex-shrink-0 bg-primary/3">
+      <div className="p-4 border-b border-border flex-shrink-0 bg-primary/3 relative overflow-hidden">
+        {(phase === "content" || phase === "refine") && (
+          <LaserScanLine active={true} stage={stage} containerHeight={72} />
+        )}
         {/* Status indicator row */}
         <div className="flex items-center gap-2 mb-3">
           <div className="relative flex-shrink-0">
@@ -2695,8 +2702,8 @@ function ProgramTab({
                           undefined;
                         const volAnim = exDiff === "volume" ? "vol-flash 1.6s ease forwards" : undefined;
                         return (
+                          <div key={exIdx}>
                           <div
-                            key={exIdx}
                             ref={(el) => {
                               if (el) exerciseRefs.current.set(ex.name, el);
                               else exerciseRefs.current.delete(ex.name);
@@ -2905,6 +2912,11 @@ function ProgramTab({
                                 />
                               </div>
                             )}
+                          </div>
+                          <PrecisionGlowLine
+                            active={exDiff === "added" || exDiff === "swapped"}
+                            color={exDiff === "added" ? "primary" : "primary"}
+                          />
                           </div>
                         );
                       })}

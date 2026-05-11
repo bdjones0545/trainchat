@@ -269,6 +269,71 @@
   }
 }
 
+/* ─── Laser Skill animations ──────────────────────────────────────────────── */
+
+/* Continuous vertical scan — runs during AI generation phases */
+@keyframes ls-scan {
+  0%   { opacity: 0;   transform: translateY(-2px); }
+  8%   { opacity: 1; }
+  92%  { opacity: 1; }
+  100% { opacity: 0;   transform: translateY(var(--ls-scan-h, 200px)); }
+}
+
+/* Single-pass confirmation sweep — runs once, then stops */
+@keyframes ls-sweep {
+  0%   { opacity: 0;   transform: translateY(-2px); }
+  12%  { opacity: 0.9; }
+  88%  { opacity: 0.9; }
+  100% { opacity: 0;   transform: translateY(var(--ls-sweep-h, 100px)); }
+}
+
+/* Exercise insertion precision beam — sweeps in from left then fades */
+@keyframes ls-insert {
+  0%   { opacity: 0;   transform: scaleX(0); }
+  22%  { opacity: 1;   transform: scaleX(1); }
+  72%  { opacity: 0.5; transform: scaleX(1); }
+  100% { opacity: 0;   transform: scaleX(1); }
+}
+
+/* Edge trace — horizontal beam (top / bottom) */
+@keyframes ls-trace-h {
+  0%   { opacity: 0;   transform: scaleX(0); }
+  40%  { opacity: 0.7; transform: scaleX(1); }
+  100% { opacity: 0;   transform: scaleX(1); }
+}
+
+/* Edge trace — vertical beam (right / left) */
+@keyframes ls-trace-v {
+  0%   { opacity: 0;   transform: scaleY(0); }
+  40%  { opacity: 0.7; transform: scaleY(1); }
+  100% { opacity: 0;   transform: scaleY(1); }
+}
+
+/* Architect planning pulse dot */
+@keyframes ls-architect-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.85); }
+  50%       { opacity: 1;   transform: scale(1.15); }
+}
+
+@keyframes ls-architect-in {
+  from { opacity: 0; transform: translateX(-4px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Honor prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  .ls-scan,
+  .ls-sweep,
+  .ls-insert,
+  .ls-edge-t,
+  .ls-edge-r,
+  .ls-edge-b,
+  .ls-edge-l {
+    animation: none !important;
+    opacity: 0 !important;
+  }
+}
+
 /* ─── System Core animations ──────────────────────────────────────────────── */
 
 @keyframes system-core-pulse {

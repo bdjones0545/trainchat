@@ -1,6 +1,7 @@
 import { CheckCircle2, ArrowRight, Zap, AlertTriangle, Info, Eye } from "lucide-react";
 import { useLocation } from "wouter";
 import CoachReasoningCallout from "./CoachReasoningCallout";
+import { VerificationSweep } from "@/components/laser-skill";
 
 interface ChangedIds {
   exercises: number[];
@@ -111,7 +112,10 @@ export default function SystemUpdateCard({ data, onShowChange }: Props) {
   }
 
   return (
-    <div className={`mt-3 rounded-xl border ${config.borderColor} ${config.bgColor} overflow-hidden`}>
+    <div className={`mt-3 rounded-xl border ${config.borderColor} ${config.bgColor} overflow-hidden relative`}>
+      {data.verificationStatus === "verified" && (
+        <VerificationSweep active={true} containerHeight={160} />
+      )}
       <div className={`flex items-center gap-2 px-3 py-2 border-b ${config.headerBorder}`}>
         <Icon className={`w-3.5 h-3.5 ${config.iconColor} flex-shrink-0`} />
         <span className={`text-[11px] font-bold ${config.accentColor} uppercase tracking-widest`}>
