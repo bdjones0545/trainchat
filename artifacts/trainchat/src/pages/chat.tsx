@@ -766,12 +766,24 @@ export default function Chat() {
   // The program is "in system" if explicitly saved this session OR if we're showing the
   // DB-backed live program (displayProgramSource !== "draft").
   //
-  // IMPORTANT: Do NOT use `!latestProgram` here. Any AI refinement stream sets
-  // `latestProgram` transiently, which would collapse isInSystem to false and break ALL
-  // exercise direct actions for the rest of the session. `displayProgramSource` (computed
-  // by resolveProgramState just above) is the single authoritative answer to "are we
-  // showing a live DB-canonical program vs an unsaved draft?".
-  const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem && displayProgramSource !== "draft");
+  // isInSystem drives the routing decision for ALL panel action buttons:
+  // true  → direct deterministic API  (no chat bubble, no stream)
+  // false → chat pipeline             (creates a message, shows stream)
+  //
+  // The `displayProgramSource !== "draft"` guard was removed because it causes a
+  // self-perpetuating routing bug: when the backend returns systemEdit.applied=false
+  // (e.g. a noop edit — exercise already at target difficulty), the CASE A cleanup
+  // block in handleSend never runs, leaving latestProgram permanently set as a "draft".
+  // This collapses isInSystem to false and routes every subsequent panel button click
+  // through chat — which in turn generates more noop/draft responses, keeping the trap
+  // alive indefinitely.
+  //
+  // Correct guard: once hasActiveSystem=true the user has a confirmed DB system; direct
+  // API routes look up exercises by name in that system and work correctly regardless of
+  // whether a stale latestProgram is still set. The only case where direct routing must
+  // be blocked is when there is NO system yet (first-time build) or the user explicitly
+  // started a new-build session — both already covered by the existing guards.
+  const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem);
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -1139,13 +1151,20 @@ export default function Chat() {
     const _hasUnsavedDraft = sessionDraftMsgIdRef.current !== null && !isSaved;
 
     if (hasActiveSystem && dbSystemProgram) {
-      if (_hasUnsavedDraft) {
-        // New program draft in progress — keep it visible; don't let the old DB
-        // program overwrite the freshly generated one.
+      if (_hasUnsavedDraft && streamJustFinishedRef.current) {
+        // A stream JUST finished with a new program draft — keep it visible while
+        // weekData / activeSystem refetch catches up. This window is bounded by the
+        // streamJustFinished timeout (5–8 s). Once the timeout fires the flag is
+        // cleared and the next effect run lets dbSystemProgram take over.
+        //
+        // IMPORTANT: we do NOT block unconditionally on _hasUnsavedDraft because
+        // that created a self-perpetuating trap: noop edits (systemEdit.applied=false)
+        // never clear sessionDraftMsgIdRef, so _hasUnsavedDraft stays true forever,
+        // routing every subsequent panel button to chat indefinitely.
         if (import.meta.env.DEV) {
           console.log("[db system overwrite detected?]", {
             blocked: true,
-            reason: "hasUnsavedDraft",
+            reason: "hasUnsavedDraft + streamJustFinished",
             sessionDraftMsgId: sessionDraftMsgIdRef.current,
             isSaved,
             latestProgramName: latestProgram?.programName ?? null,
@@ -1153,6 +1172,21 @@ export default function Chat() {
           });
         }
         return;
+      }
+      if (_hasUnsavedDraft && !streamJustFinishedRef.current) {
+        // Stale draft (stream already finished) — clear it so the DB system takes
+        // over as canonical. This escapes the noop-edit routing trap.
+        if (import.meta.env.DEV) {
+          console.log("[db system overwrite detected?]", {
+            blocked: false,
+            reason: "stale draft cleared — streamJustFinished=false, DB wins",
+            sessionDraftMsgId: sessionDraftMsgIdRef.current,
+            isSaved,
+            latestProgramName: latestProgram?.programName ?? null,
+            dbSystemProgramName: dbSystemProgram.programName,
+          });
+        }
+        sessionDraftMsgIdRef.current = null;
       }
 
       // ── Sidebar propagation guard ─────────────────────────────────────────
@@ -1680,9 +1714,19 @@ export default function Chat() {
     // the session draft (sessionDraftMsgIdRef) so the sidebar can display it.
     // The flag is consumed on the next messages-effect run (or after 5s).
     if (!result.systemSaved && !result.systemEdit?.applied) {
-      // Conversational or draft response — may contain a program preview
+      // Conversational or draft response — may contain a program preview.
+      // Mark the stream window so the messages effect preserves the draft briefly.
+      // After 5 s, force-clear any lingering stale draft so the DB takes over.
+      // This is the safety net for noop edits (systemEdit.applied=false) where the
+      // CASE A cleanup never runs and sessionDraftMsgIdRef stays set indefinitely.
       streamJustFinishedRef.current = true;
-      setTimeout(() => { streamJustFinishedRef.current = false; }, 5000);
+      setTimeout(() => {
+        streamJustFinishedRef.current = false;
+        // Force-clear stale draft: functional update so we read the current value
+        // safely inside the callback (avoids stale closure on latestProgram).
+        sessionDraftMsgIdRef.current = null;
+        setLatestProgram((prev) => (prev !== null ? null : prev));
+      }, 5000);
     } else if (result.systemSaved) {
       // New program just saved to DB — also register the assistant message as the session
       // draft so the sidebar shows the program immediately while weekData loads from the DB.
