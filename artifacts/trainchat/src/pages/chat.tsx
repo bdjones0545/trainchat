@@ -1428,7 +1428,7 @@ export default function Chat() {
       hasActiveSystem,
       isInSystem,
       isSaved,
-      trainingSystemId: trainingSystemId ?? null,
+      trainingSystemId: activeSystem?.id ?? null,
       activeConvoId,
       isNewBuildSession,
       hasUnsavedDraft,
