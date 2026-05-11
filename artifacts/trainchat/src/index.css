@@ -334,6 +334,70 @@
   }
 }
 
+/* ─── Idle Intelligence Field ─────────────────────────────────────────────── */
+
+/* Dot grid slow drift */
+@keyframes ii-grid-drift {
+  0%, 100% { background-position: 0px 0px; }
+  33%       { background-position: 8px 5px; }
+  66%       { background-position: 4px 11px; }
+}
+
+/* Neural path breathing — opacity oscillation */
+@keyframes ii-path-breathe {
+  0%, 100% { opacity: 0.04; }
+  50%       { opacity: 0.13; }
+}
+
+/* Performance node pulse — opacity + scale */
+@keyframes ii-node-pulse {
+  0%, 100% { opacity: 0.10; transform: scale(0.88); }
+  50%       { opacity: 0.38; transform: scale(1.14); }
+}
+
+/* Center ambient glow breathe */
+@keyframes ii-ambient-breathe {
+  0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1);    }
+  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+}
+
+/* Occasional horizontal precision sweep — fires in first 7% of cycle, then waits */
+@keyframes ii-sweep {
+  0%   { opacity: 0; }
+  3%   { opacity: 0.55; }
+  7%   { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Input idle glow — breathes on the chat input when no messages exist */
+@keyframes ii-input-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0px hsl(var(--primary) / 0.08),
+      0 0 20px 4px hsl(var(--primary) / 0.04);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.12),
+      0 0 32px 8px hsl(var(--primary) / 0.08);
+  }
+}
+
+/* Apply drift/breathe to field children */
+.ii-grid    { animation: ii-grid-drift 28s ease-in-out infinite; }
+.ii-ambient { animation: ii-ambient-breathe 5.5s ease-in-out infinite; }
+
+/* Idle input ring */
+.ii-idle-input {
+  animation: ii-input-breathe 5s ease-in-out infinite;
+}
+
+/* Honor prefers-reduced-motion for idle intelligence */
+@media (prefers-reduced-motion: reduce) {
+  .ii-field * { animation: none !important; }
+  .ii-idle-input { animation: none !important; }
+}
+
 /* ─── System Core animations ──────────────────────────────────────────────── */
 
 @keyframes system-core-pulse {

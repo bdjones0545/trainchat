@@ -36,6 +36,7 @@ import StreakBadge from "@/components/chat/StreakBadge";
 import NeuralBadge from "@/components/gamification/NeuralBadge";
 import NeuralGrowthOverlay, { type NeuralAwardResult } from "@/components/gamification/NeuralGrowthOverlay";
 import SessionLogModal from "@/components/chat/SessionLogModal";
+import { IdleIntelligenceField } from "@/components/laser-skill/IdleIntelligenceField";
 import PaywallModal from "@/components/PaywallModal";
 import PricingModal from "@/components/PricingModal";
 import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
@@ -3397,7 +3398,8 @@ export default function Chat() {
               </div>
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — only shown when no messages AND no active submission ─── */
-              <div className="flex flex-col items-center justify-start px-4 pt-2 md:pt-[max(8dvh,_2rem)] pb-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+              <div className="relative flex flex-col items-center justify-start px-4 pt-2 md:pt-[max(8dvh,_2rem)] pb-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500 min-h-[78dvh]">
+                <IdleIntelligenceField isTyping={inputText.trim().length > 0} />
                 {/* System core — TrainChat logo with living glow field */}
                 <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
                   {/* Outer radial glow halo */}
@@ -3428,11 +3430,13 @@ export default function Chat() {
 
                 {/* ── All users: focus-mode state (handles no-system, draft, and live) ── */}
                 <>
-                    <h2 className="text-base font-semibold text-foreground mb-1">
-                      {getFocusModeConfig(focusMode).emptyStateHeadline}
+                    <h2 className="text-xl font-bold text-foreground mb-2 tracking-tight">
+                      Vibe Code Your Training
                     </h2>
-                    <p className="text-sm text-muted-foreground max-w-xs leading-relaxed mb-4">
-                      {getFocusModeConfig(focusMode).emptyStateSubline}
+                    <p className="text-xs text-muted-foreground/70 max-w-[270px] leading-relaxed mb-4">
+                      {displayProgramSource === "none"
+                        ? "TrainChat builds intelligent training systems around your goals, movement, sport, fatigue, and performance needs."
+                        : getFocusModeConfig(focusMode).emptyStateSubline}
                     </p>
 
                     {/* System status strip — derives exclusively from resolveProgramState output */}
@@ -3482,18 +3486,6 @@ export default function Chat() {
                           }}
                           onDismiss={() => setConvShowReturnHook(false)}
                         />
-                      </div>
-                    )}
-
-                    {/* Differentiation tagline — only shown when no active system */}
-                    {displayProgramSource === "none" && (
-                      <div className="flex flex-col items-center gap-0.5 mb-4 -mt-2">
-                        <p className="text-[11px] font-medium text-muted-foreground/60 max-w-[260px] text-center leading-relaxed">
-                          This isn't a workout. It's a training system.
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/40 max-w-[260px] text-center leading-relaxed">
-                          Built and adapted in real time.
-                        </p>
                       </div>
                     )}
 
@@ -3941,7 +3933,7 @@ export default function Chat() {
                   : voice.isListening
                     ? "border-blue-500/60 ring-2 ring-blue-500/15"
                     : "border-border focus-within:border-primary/60 focus-within:ring-primary/15"
-              }`}>
+              } ${messages.length === 0 && !stream.isActive ? "ii-idle-input" : ""}`}>
                 <textarea
                   ref={inputRef}
                   data-testid="input-message"
