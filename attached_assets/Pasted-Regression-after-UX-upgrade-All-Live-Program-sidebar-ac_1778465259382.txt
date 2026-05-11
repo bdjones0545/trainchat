@@ -1,0 +1,71 @@
+Regression after UX upgrade: All Live Program / sidebar action buttons are routing through the main chat pipeline.
+
+Observed:
+Exercise buttons and program action buttons now create visible chat bubbles and normal chat generation cards.
+
+Expected:
+Only typed/voice chat and explicitly conversational actions should enter the chat pipeline.
+
+Fix the action routing architecture globally.
+
+Direct routes:
+- Exercise Swap / Easier / Harder / Equipment → handleDirectExerciseEdit
+- Improve My Plan / refine chips → direct training-system edit/mutate endpoint
+- Program tab actions → direct program action handler
+- Check-In → dedicated check-in handler if available, not generic chat unless intentionally conversational
+
+Chat routes only:
+- Typed chat input
+- Voice chat input
+- Explain
+- Freeform refine text
+- Unsaved draft fallback
+
+Investigate:
+- Shared button component introduced during UX upgrade
+- New wrapper around action buttons calling submitUserMessage
+- Mobile drawer prop wiring
+- onSendMessage being passed as default fallback too high in the tree
+- action.direct being ignored
+- isSaved/systemId missing after layout refactor
+- activeConvoId not passed into drawer/panel
+- buttons inside LiveProgramPanel using label text as chat prompt
+
+Hard guard:
+Any action with `direct` or `endpoint` metadata must never call:
+- submitUserMessage
+- onSendMessage
+- handleSend
+- setOptimisticUserMsg
+- createConversationMessage
+
+Add centralized router:
+
+routeProgramAction(action) {
+  if (action.direct && systemId) return direct
+  if (action.endpoint && systemId) return endpoint
+  if (action.type === "explain") return chat
+  if (action.type === "freeform") return chat
+  if (!systemId) return chat_fallback
+}
+
+Add DEV logs for every button click:
+[ProgramActionRoute]
+{
+  source,
+  label,
+  type,
+  direct,
+  endpoint,
+  systemId,
+  conversationId,
+  route
+}
+
+Acceptance:
+1. Press Harder, Easier, Swap, Equipment from mobile drawer: no chat bubble.
+2. Press Improve My Plan: no chat bubble unless intentionally using chat.
+3. Press Check-In: follows dedicated handler.
+4. Press Explain: creates chat message.
+5. Typed chat still works normally.
+6. Program panel refreshes via ["training-system-conv", activeConvoId].

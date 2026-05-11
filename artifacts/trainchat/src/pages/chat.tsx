@@ -763,9 +763,15 @@ export default function Chat() {
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
 
-  // The program is "in system" if explicitly saved this session OR if
-  // we're showing the DB-backed program (no chat draft, system active, not a new build).
-  const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem && !latestProgram);
+  // The program is "in system" if explicitly saved this session OR if we're showing the
+  // DB-backed live program (displayProgramSource !== "draft").
+  //
+  // IMPORTANT: Do NOT use `!latestProgram` here. Any AI refinement stream sets
+  // `latestProgram` transiently, which would collapse isInSystem to false and break ALL
+  // exercise direct actions for the rest of the session. `displayProgramSource` (computed
+  // by resolveProgramState just above) is the single authoritative answer to "are we
+  // showing a live DB-canonical program vs an unsaved draft?".
+  const isInSystem = isSaved || (!isNewBuildSession && hasActiveSystem && displayProgramSource !== "draft");
 
   useEffect(() => {
     if (import.meta.env.DEV) {
@@ -4090,6 +4096,7 @@ export default function Chat() {
                   isPremium={isPremium}
                   hasActiveSystem={hasActiveSystem || !!latestProgram}
                   trainingSystemId={activeSystem?.id ?? undefined}
+                  conversationId={activeConvoId ?? undefined}
                   trainingGoal={activeSystem?.overarchingGoal ?? undefined}
                   newChangeSignal={newChangeSignal}
                   newProgramSignal={newProgramSignal}

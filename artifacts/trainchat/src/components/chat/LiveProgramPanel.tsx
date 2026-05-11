@@ -933,6 +933,55 @@ function ProgramTab({
     onClose?.();
   }
 
+  // ── Centralized action router ─────────────────────────────────────────────
+  // Every button click in the panel must call this before deciding the route.
+  // Routes: "direct" → handleDirectExerciseEdit / handleDirectSessionRefine
+  //         "endpoint" → dedicated non-chat endpoint
+  //         "chat" → intentionally conversational (Explain, freeform refine, typed input)
+  //         "chat_fallback" → no systemId, unsaved draft → chat as last resort
+  //
+  // Hard rule: any action that resolves to "direct" or "endpoint" must NEVER call
+  // sendRefinement / onSendMessage / handleSend / setOptimisticUserMsg.
+  function routeProgramAction(params: {
+    source: string;
+    label: string;
+    direct?: string;
+    endpoint?: string;
+    type?: string;
+  }): "direct" | "endpoint" | "chat" | "chat_fallback" {
+    const { source, label, direct, endpoint, type } = params;
+    let route: "direct" | "endpoint" | "chat" | "chat_fallback";
+
+    if (direct && trainingSystemId != null) {
+      route = "direct";
+    } else if (endpoint && trainingSystemId != null) {
+      route = "endpoint";
+    } else if (type === "explain") {
+      route = "chat";
+    } else if (type === "freeform") {
+      route = "chat";
+    } else if (!trainingSystemId) {
+      route = "chat_fallback";
+    } else {
+      route = "chat";
+    }
+
+    if (import.meta.env.DEV) {
+      console.log("[ProgramActionRoute]", {
+        source,
+        label,
+        type: type ?? null,
+        direct: direct ?? null,
+        endpoint: endpoint ?? null,
+        systemId: trainingSystemId ?? null,
+        conversationId: conversationId ?? null,
+        route,
+      });
+    }
+
+    return route;
+  }
+
   // ── Voice refine lifecycle ────────────────────────────────────────────────
 
   function handleRefineSubmit(msg: string) {
@@ -1034,7 +1083,7 @@ function ProgramTab({
     day: { dayNumber?: number; name?: string; sessionId?: number },
     key: string,
   ) {
-    if (!isSaved || buildingState?.isBuilding || !!panelMutating) return;
+    if (!trainingSystemId || buildingState?.isBuilding || !!panelMutating) return;
     setPanelEditError(null);
     setPanelMutating(key);
     const dayNum = day.dayNumber ?? dayIdx + 1;
@@ -2288,9 +2337,12 @@ function ProgramTab({
                   key={chip.label}
                   onClick={() => {
                     if (isDisabled || isLoading) return;
-                    // refineSource is always "program_refine_panel" — never fall back to chat.
-                    // If trainingSystemId is missing, fail fast rather than routing through NLP.
-                    if (trainingSystemId != null) {
+                    const chipRoute = routeProgramAction({
+                      source: "program_refine_panel",
+                      label: chip.label,
+                      direct: trainingSystemId != null ? "block_refine" : undefined,
+                    });
+                    if (chipRoute === "direct") {
                       handleDirectBlockRefine(chip, key);
                     }
                   }}
@@ -2641,17 +2693,25 @@ function ProgramTab({
                               <button
                                 key={action.label}
                                 onClick={() => {
-                                  // "Add Exercise" on a saved program → dedicated direct-mutate
+                                  // "Add Exercise" on a live system → dedicated direct-mutate
                                   // endpoint (no chat message, no chat failure bubble, immediate
                                   // cache invalidation on success).
-                                  if (action.button === "add_exercise" && isSaved) {
+                                  if (action.button === "add_exercise" && trainingSystemId != null) {
+                                    routeProgramAction({ source: "session_action", label: action.label, direct: "add_exercise" });
                                     handlePanelAddExercise(idx, day.dayNumber, key);
                                     return;
                                   }
-                                  // Saved program — use direct session refine (no chat)
-                                  if (isSaved) {
-                                    handleDirectSessionRefine(action, idx, day, key);
-                                    return;
+                                  // Live system — use direct session refine (no chat)
+                                  if (trainingSystemId != null) {
+                                    const sessionRoute = routeProgramAction({
+                                      source: "session_action",
+                                      label: action.label,
+                                      direct: "session_refine",
+                                    });
+                                    if (sessionRoute === "direct") {
+                                      handleDirectSessionRefine(action, idx, day, key);
+                                      return;
+                                    }
                                   }
                                   // Unsaved / preview — fall back to chat stream
                                   const sessionActionType: ButtonActionPayload["actionType"] =
@@ -2860,20 +2920,24 @@ function ProgramTab({
                                             category: (ex as any).category ?? undefined,
                                           },
                                         };
-                                        if (action.direct && isSaved) {
-                                          if (import.meta.env.DEV) {
-                                            console.log("[StructuredButtonAction]", {
-                                              source: exPayload.source,
-                                              actionType: exPayload.actionType,
-                                              displayText: exPayload.displayText,
-                                              exerciseName: ex.name,
-                                              dayIndex: idx,
-                                              exerciseIndex: exIdx,
-                                              path: "direct_edit",
+                                        const exRoute = routeProgramAction({
+                                          source: "exercise_action",
+                                          label: action.label,
+                                          direct: action.direct,
+                                          type: action.label === "Explain" ? "explain" : undefined,
+                                        });
+                                        if (exRoute === "direct") {
+                                          handleDirectExerciseEdit(ex.name, action.direct!, exActionKey, ex.id);
+                                        } else {
+                                          if (import.meta.env.DEV && action.direct && trainingSystemId != null) {
+                                            console.error("[ROUTING BUG] Exercise direct action fell through to chat!", {
+                                              label: action.label,
+                                              direct: action.direct,
+                                              isSaved,
+                                              trainingSystemId,
+                                              route: exRoute,
                                             });
                                           }
-                                          handleDirectExerciseEdit(ex.name, action.direct, exActionKey, ex.id);
-                                        } else {
                                           sendRefinement(action.buildMessage(ex.name), exActionKey, {
                                             dayIndex: idx,
                                             exerciseId: ex.name,
