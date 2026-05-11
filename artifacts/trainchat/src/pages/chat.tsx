@@ -1275,7 +1275,12 @@ export default function Chat() {
             })) : [],
           };
           setLatestProgram(safe);
-          setIsSaved(false);
+          // NOTE: do NOT call setIsSaved(false) here.
+          // The stream callback (line ~1685) already handles isSaved=false for
+          // genuine unsaved drafts. Calling setIsSaved(false) here fires even
+          // after systemSaved=true (which set isSaved=true at ~line 1988) because
+          // the conversationSystem query hasn't reloaded yet (hasActiveSystem=false),
+          // causing the effect to reach this draft path and undo the saved state.
           if (import.meta.env.DEV) {
             console.log("[Program committed to state] (messages effect)", {
               programName: safe.programName,
@@ -1419,25 +1424,6 @@ export default function Chat() {
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
     const content = (text ?? inputText).trim();
     if (!content || stream.isActive) return;
-    // ── CHAT ENTRY INSTRUMENTATION ─────────────────────────────────────────────
-    console.error("[CHAT_ENTRY_ATTEMPT]", {
-      callerFile: "chat.tsx",
-      callerFunction: "handleSend",
-      prompt: content.slice(0, 120),
-      source: (extraContext?.source as string) ?? "typed",
-      hasActiveSystem,
-      isInSystem,
-      isSaved,
-      trainingSystemId: activeSystem?.id ?? null,
-      activeConvoId,
-      isNewBuildSession,
-      hasUnsavedDraft,
-      displayProgramSource,
-      buttonPayloadActionType: (extraContext?.buttonPayload as any)?.actionType ?? null,
-      buttonPayloadInteractionType: (extraContext?.buttonPayload as any)?.interactionType ?? null,
-    });
-    console.trace("[CHAT_ENTRY_ATTEMPT] stack trace");
-
     const mismatch = detectFocusMismatch(focusMode, content);
     if (mismatch && !focusMismatch) {
       setFocusMismatch({ suggested: mismatch, text: content });
