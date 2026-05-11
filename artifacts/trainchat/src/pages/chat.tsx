@@ -1419,6 +1419,24 @@ export default function Chat() {
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
     const content = (text ?? inputText).trim();
     if (!content || stream.isActive) return;
+    // ── CHAT ENTRY INSTRUMENTATION ─────────────────────────────────────────────
+    console.error("[CHAT_ENTRY_ATTEMPT]", {
+      callerFile: "chat.tsx",
+      callerFunction: "handleSend",
+      prompt: content.slice(0, 120),
+      source: (extraContext?.source as string) ?? "typed",
+      hasActiveSystem,
+      isInSystem,
+      isSaved,
+      trainingSystemId: trainingSystemId ?? null,
+      activeConvoId,
+      isNewBuildSession,
+      hasUnsavedDraft,
+      displayProgramSource,
+      buttonPayloadActionType: (extraContext?.buttonPayload as any)?.actionType ?? null,
+      buttonPayloadInteractionType: (extraContext?.buttonPayload as any)?.interactionType ?? null,
+    });
+    console.trace("[CHAT_ENTRY_ATTEMPT] stack trace");
 
     const mismatch = detectFocusMismatch(focusMode, content);
     if (mismatch && !focusMismatch) {

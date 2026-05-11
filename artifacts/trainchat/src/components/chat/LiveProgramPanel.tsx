@@ -898,6 +898,32 @@ function ProgramTab({
     buttonPayload?: ButtonActionPayload,
   ) {
     if (!onSendMessage || buildingState?.isBuilding) return;
+    // ── CHAT ENTRY INSTRUMENTATION ────────────────────────────────────────────
+    const _debugState = {
+      callerFile: "LiveProgramPanel.tsx",
+      callerFunction: "sendRefinement",
+      prompt: message.slice(0, 80),
+      source: buttonPayload?.source ?? options?.interactionType ?? "unknown",
+      isSaved,
+      trainingSystemId: trainingSystemId ?? null,
+      programSource,
+      savedProgramId: savedProgramId ?? null,
+      key,
+      interactionType: options?.interactionType ?? null,
+      buttonAction: buttonPayload?.actionType ?? null,
+    };
+    console.error("[CHAT_ENTRY_ATTEMPT]", _debugState);
+    console.trace("[CHAT_ENTRY_ATTEMPT] stack trace");
+    // Visible toast so mobile users can see routing state without devtools
+    const _isDirectAction = ["make_easier", "make_harder", "swap_exercise", "replace_equipment", "make_session_harder", "make_session_easier", "add_exercise", "shorten_session"].includes(buttonPayload?.actionType ?? "");
+    if (_isDirectAction) {
+      toast({
+        title: "🔴 DEBUG: Direct action routed to CHAT",
+        description: `isSaved=${isSaved} | src=${programSource} | tsId=${trainingSystemId ?? "null"} | action=${buttonPayload?.actionType}`,
+        variant: "destructive",
+        duration: 15000,
+      });
+    }
     setPanelEditError(null);
     setPendingRefinement(key);
     setProcessingStartTime(Date.now());
