@@ -74,8 +74,11 @@ function classifyExercise(exercise: { name: string; category: string }) {
   const isTrunk          = cat === "trunk";
   const isMobilityOrPrep = cat === "warmup" || cat === "activation" || cat === "recovery";
 
-  // Power/explosive movements — Olympic lifts, jumps, plyometrics
-  const isPowerByName = /\b(box jump|broad jump|depth jump|trap bar jump|jump squat|plyometric push.?up|bound|hurdle hop|power clean|hang clean|hang power clean|power snatch|hang snatch|push press|push jerk|split jerk|med ball slam|medicine ball slam|explosive push|dumbbell jump squat)\b/.test(n);
+  // Power/explosive movements — Olympic lifts, jumps, plyometrics, medicine ball power work.
+  // The second pattern allows an optional qualifier word between "ball" and the action verb
+  // so variants like "Medicine Ball Chest Pass" and "Med Ball Rotational Throw" are captured.
+  const isPowerByName = /\b(box jump|broad jump|depth jump|trap bar jump|jump squat|plyometric push.?up|bound|hurdle hop|power clean|hang clean|hang power clean|power snatch|hang snatch|push press|push jerk|split jerk|med ball slam|medicine ball slam|explosive push|dumbbell jump squat|wall ball)\b/.test(n) ||
+    /\bmed(icine)? ball (?:\w+ )?(throw|toss|pass)\b/.test(n);
 
   // Core / anti-rotation detection by name
   const isCoreByName = /\b(pallof|ab wheel|plank|dead bug|bird dog|hollow|crunch|russian twist|leg raise|woodchop|anti.?rotation|cable crunch|ab rollout|side plank|copenhagen)\b/.test(n);
@@ -85,7 +88,7 @@ function classifyExercise(exercise: { name: string; category: string }) {
   // functionally primary compound lifts that should receive primary-strength prescriptions.
   // Intentionally excludes single-leg / dumbbell variants (Bulgarian Split Squat, RFESS)
   // which legitimately belong in the secondary slot.
-  const isPrimaryByName = /\b(back squat|front squat|overhead squat|conventional deadlift|sumo deadlift|trap bar deadlift|barbell deadlift|barbell bench press|barbell overhead press|military press|barbell row|pendlay row|weighted pull.?up|weighted chin.?up|barbell hip thrust)\b/.test(n);
+  const isPrimaryByName = /\b(back squat|front squat|overhead squat|safety bar squat|conventional deadlift|sumo deadlift|trap bar deadlift|barbell deadlift|barbell bench press|barbell overhead press|military press|barbell row|pendlay row|weighted pull.?up|weighted chin.?up|barbell hip thrust)\b/.test(n);
 
   const isPrimary = isCatPrimary || isPrimaryByName;
   const isPower   = isCatPower;
@@ -167,8 +170,11 @@ export function getPrescriptionForExerciseTransformation(
     case "speed_focus": {
       if (isMobilityOrPrep)   return {};
       if (isCoreOrTrunk)      return { reps: "8-12", rest: "90 sec" };                  // supportive trunk
-      if (isAccessoryOrAux)   return { reps: "8-12", rest: "90 sec" };                  // stay supportive
+      // isPowerExercise is checked before isAccessoryOrAux so that power-by-name exercises
+      // (e.g. Med Ball Slam stored as "accessory") get the full power protocol, not a
+      // generic accessory prescription. Accessories that are not power movements stay supportive.
       if (isPowerExercise || isPower) return { sets: 4, reps: "2-5", rest: "2-4 min" }; // Olympic/plyo: full power protocol
+      if (isAccessoryOrAux)   return { reps: "8-12", rest: "90 sec" };                  // non-power accessories stay supportive
       if (isSecondary)        return { sets: 3, reps: "4-6", rest: "90-120 sec" };      // secondary → speed-strength range
       if (isPrimary)          return { sets: 4, reps: "3-6", rest: "2-3 min" };         // primary shifts to bar-speed focus
       return { reps: "3-5", rest: "90 sec" };
@@ -251,12 +257,18 @@ export function getPrescriptionForExerciseTransformation(
 /**
  * After applying prescriptions, verify correctness and repair obvious violations.
  *
- * Violations detected and repaired:
- *  - endurance transformation but any exercise still shows 3–6 reps
- *  - strength transformation but core/accessory/mobility exercises show 3–6 reps
- *  - strength transformation but primary lifts show > 8 reps (too high for strength focus)
- *  - power transformation but accessories show < 6 reps (incorrectly forced into power range)
- *  - hypertrophy transformation but power/plyo exercises show 15+ reps
+ * Violations detected and repaired per transformation:
+ *  endurance    — any exercise still in 3–6 rep strength ranges
+ *  strength     — core/accessory/mobility in 3–6 range; primary lifts above 8 reps
+ *  power        — accessories forced into 1–3 rep power ranges
+ *  hypertrophy  — power/plyo exercises at 15+ reps; mobility with any reps set
+ *  lower_impact — power exercises in high-rep endurance ranges; primaries in low-rep strength ranges
+ *  home_gym     — primary/power exercises in 3–6 barbell-strength ranges post-swap
+ *  recovery     — primary/power exercises in very low rep ranges (1–5)
+ *  reduce_time  — primary/power exercises with endurance-range reps (reps must never change)
+ *
+ * All repairs emit a structured log: exerciseId, exerciseName, oldReps, newReps,
+ * transformation, reason — for full production observability.
  *
  * Returns the number of exercises repaired.
  */
@@ -269,14 +281,18 @@ async function verifyAndRepairPrescriptions(
   const isStrength    = ["strength", "strength_focus", "increase_difficulty"].includes(transformation);
   const isPower       = ["power", "power_explosive_focus", "speed_focus"].includes(transformation);
   const isHypertrophy = ["hypertrophy", "hypertrophy_focus", "muscle_growth", "increase_volume"].includes(transformation);
+  const isLowerImpact = transformation === "lower_impact";
+  const isHomeGym     = ["home_gym", "limited_space"].includes(transformation);
+  const isRecovery    = ["recovery", "recovery_focus", "fatigue_management", "decrease_difficulty", "decrease_volume", "desk_reset"].includes(transformation);
+  const isReduceTime  = transformation === "reduce_time";
 
   // Low-rep strength ranges (2–6 reps) — too intense for accessories/core/mobility
   const LOW_REP_RE      = /^[2-6]$|^[23]-[456]$|^3-6$|^4-6$|^2-4$|^2-5$/;
-  // High-rep ranges (above 8) — too high for primary strength work  
+  // High-rep ranges (above 8) — too high for primary strength work
   const HIGH_FOR_STR_RE = /^[89]$|^[1-9]\d+$|^[89]-\d+$|^1[0-9]-\d+$|^[2-9]\d-\d+$/;
-  // High-rep hypertrophy ranges (15+ reps)
+  // High-rep hypertrophy / endurance ranges (15+ reps)
   const HIGH_REP_RE     = /^1[5-9]$|^[2-9]\d$|^1[5-9]-\d+$|^[2-9]\d-\d+$/;
-  // Very low power ranges (1–3 reps) — too low for accessories
+  // Very low power ranges (1–3 reps) — too low for accessories / recovery
   const VERY_LOW_RE     = /^[1-3]$|^1-[23]$|^2-3$/;
 
   for (const ex of exercises) {
@@ -289,6 +305,10 @@ async function verifyAndRepairPrescriptions(
       const fix = getPrescriptionForExerciseTransformation(ex, transformation);
       if (fix.reps) {
         await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+        logger.info(
+          { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "endurance_low_rep_violation" },
+          "[verifyAndRepairPrescriptions] Repaired",
+        );
         repaired++;
       }
     } else if (isStrength) {
@@ -297,6 +317,10 @@ async function verifyAndRepairPrescriptions(
         const fix = getPrescriptionForExerciseTransformation(ex, transformation);
         if (fix.reps) {
           await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "strength_supporting_role_low_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
           repaired++;
         }
       } else if (cls.isPrimary && !cls.isPowerExercise && HIGH_FOR_STR_RE.test(reps)) {
@@ -304,6 +328,10 @@ async function verifyAndRepairPrescriptions(
         const fix = getPrescriptionForExerciseTransformation(ex, transformation);
         if (fix.reps) {
           await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "strength_primary_high_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
           repaired++;
         }
       }
@@ -313,6 +341,10 @@ async function verifyAndRepairPrescriptions(
         const fix = getPrescriptionForExerciseTransformation(ex, transformation);
         if (fix.reps) {
           await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "power_accessory_very_low_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
           repaired++;
         }
       }
@@ -322,12 +354,88 @@ async function verifyAndRepairPrescriptions(
         const fix = getPrescriptionForExerciseTransformation(ex, transformation);
         if (fix.reps) {
           await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "hypertrophy_power_high_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
           repaired++;
         }
       }
       // Mobility/prep must not be converted into generic hypertrophy sets
       if (cls.isMobilityOrPrep && reps !== "") {
         await db.update(sessionExercises).set({ reps: null }).where(eq(sessionExercises.id, ex.id));
+        logger.info(
+          { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: null, transformation, reason: "hypertrophy_mobility_reps_violation" },
+          "[verifyAndRepairPrescriptions] Repaired",
+        );
+        repaired++;
+      }
+    } else if (isLowerImpact) {
+      // lower_impact: power/plyometric exercises must not have high-rep endurance ranges.
+      // They should be 6–8 reps (controlled strength quality, not explosive, not conditioning).
+      if (cls.isPowerExercise && HIGH_REP_RE.test(reps)) {
+        const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+        if (fix.reps) {
+          await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "lower_impact_power_high_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
+          repaired++;
+        }
+      }
+      // lower_impact: primary exercises must not remain in low-rep strength ranges —
+      // the session is deloaded, not intensified.
+      if (cls.isPrimary && LOW_REP_RE.test(reps)) {
+        const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+        if (fix.reps) {
+          await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "lower_impact_primary_low_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
+          repaired++;
+        }
+      }
+    } else if (isHomeGym) {
+      // home_gym: primary/power exercises must not remain in barbell-strength (3–6) rep ranges
+      // after swapping to dumbbell/bodyweight equivalents that work in a 6–10 range.
+      if ((cls.isPrimary || cls.isPower) && LOW_REP_RE.test(reps)) {
+        const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+        if (fix.reps) {
+          await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "home_gym_primary_barbell_range_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
+          repaired++;
+        }
+      }
+    } else if (isRecovery) {
+      // recovery: no primary or power exercise should be in very low rep ranges (1–5).
+      // CNS-demanding work defeats the recovery intent of the session.
+      if ((cls.isPrimary || cls.isPowerExercise) && VERY_LOW_RE.test(reps)) {
+        const fix = getPrescriptionForExerciseTransformation(ex, transformation);
+        if (fix.reps) {
+          await db.update(sessionExercises).set({ reps: fix.reps }).where(eq(sessionExercises.id, ex.id));
+          logger.info(
+            { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: fix.reps, transformation, reason: "recovery_primary_very_low_rep_violation" },
+            "[verifyAndRepairPrescriptions] Repaired",
+          );
+          repaired++;
+        }
+      }
+    } else if (isReduceTime) {
+      // reduce_time: exercise reps must never change — only rest periods are compressed.
+      // If a primary or power exercise has landed in an endurance-range (15+), something
+      // went wrong upstream; restore to a moderate strength range as a safety net.
+      if ((cls.isPrimary || cls.isPowerExercise) && HIGH_REP_RE.test(reps)) {
+        const repairReps = "5-8";
+        await db.update(sessionExercises).set({ reps: repairReps }).where(eq(sessionExercises.id, ex.id));
+        logger.info(
+          { exerciseId: ex.id, exerciseName: ex.name, oldReps: reps, newReps: repairReps, transformation, reason: "reduce_time_reps_must_not_change" },
+          "[verifyAndRepairPrescriptions] Repaired",
+        );
         repaired++;
       }
     }
@@ -361,6 +469,10 @@ async function verifyAndRepairPrescriptions(
             if (fix.rest !== undefined) patch.rest = fix.rest;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await db.update(sessionExercises).set(patch as any).where(eq(sessionExercises.id, ex.id));
+            logger.info(
+              { exerciseId: ex.id, exerciseName: ex.name, oldReps, newReps: fix.reps ?? null, transformation, reason: "hypertrophy_accessory_volume_safety_net" },
+              "[verifyAndRepairPrescriptions] Repaired",
+            );
             repaired++;
           }
         }
@@ -498,7 +610,7 @@ const FOCUS_EXERCISES: Record<string, Record<string, string[]>> = {
   },
 };
 
-function mapTransformationToFocusKey(transformation: string): string {
+export function mapTransformationToFocusKey(transformation: string): string {
   switch (transformation) {
     case "power":
     case "power_explosive_focus":
@@ -516,8 +628,12 @@ function mapTransformationToFocusKey(transformation: string): string {
     case "endurance":
     case "endurance_focus":
     case "conditioning_focus":
-    case "reduce_time":
       return "endurance";
+    // reduce_time compresses rest periods only — exercise identity is preserved.
+    // Returning "no_swap" yields an empty focus map, so swapExercisesForFocus
+    // also has an explicit early return guard for this case.
+    case "reduce_time":
+      return "no_swap";
     case "lower_impact":
       return "lower_impact";
     case "home_gym":
@@ -623,6 +739,10 @@ async function swapExercisesForFocus(
   session: { exercises: Array<{ id: number; name: string; category: string }> },
   transformation: string,
 ): Promise<number> {
+  // Shorter Sessions: only rest periods are compressed — exercise identity must be
+  // preserved. Back Squat stays Back Squat; no endurance-focused swaps may occur.
+  if (transformation === "reduce_time") return 0;
+
   const focusKey = mapTransformationToFocusKey(transformation);
   const focusMap = FOCUS_EXERCISES[focusKey] ?? {};
   let swapCount = 0;
