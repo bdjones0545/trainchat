@@ -40,6 +40,7 @@ import { SupportModal, type SupportType } from "@/components/chat/SupportModal";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
+import { clearAuthState } from "@/lib/routing";
 
 // ─── Data fetching ────────────────────────────────────────────────────────────
 
@@ -654,9 +655,15 @@ export default function SettingsPage() {
       if (!res.ok) {
         throw new Error(data.error ?? "Failed to delete account. Please try again.");
       }
-      // Clear all cached data and redirect to login
+      // Clear auth-derived localStorage/sessionStorage flags so no stale state
+      // survives the redirect (onboarding markers, guest session cache, etc.).
+      clearAuthState();
+      // Evict all React Query caches — user, program, conversation queries — so
+      // nothing can rehydrate an authenticated state after the hard redirect.
       queryClient.clear();
-      navigate("/login");
+      // Hard-navigate with replace so the browser history entry for this page is
+      // overwritten. Back-button and reload cannot return to an authenticated route.
+      window.location.replace("/login");
     } catch (err: any) {
       setDeleteError(err.message);
       setDeleteLoading(false);

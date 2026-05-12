@@ -448,8 +448,15 @@ router.delete("/account", requireAuth, async (req, res): Promise<void> => {
       "[SettingsAudit:Delete] Account deleted — all data cascaded"
     );
 
-    // ── 4. Destroy session ────────────────────────────────────────────────────
-    req.session.destroy(() => {
+    // ── 4. Destroy session and clear cookie ──────────────────────────────────
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        logger.warn({ destroyErr, userId }, "[SettingsAudit:Delete] Session destroy error after account deletion");
+      }
+      // Explicitly expire the session cookie so the browser stops sending it.
+      // Without this the client keeps the stale cookie ID and could trigger
+      // a bootstrap race on the next page load.
+      res.clearCookie("connect.sid", { path: "/" });
       res.json({ success: true, subscriptionCanceled });
     });
   } catch (err) {
