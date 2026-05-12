@@ -336,7 +336,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 });
 
 router.post("/auth/logout", (req, res): void => {
-  req.session.destroy(() => {
+  req.session.destroy((err) => {
+    if (err) {
+      logger.warn({ err }, "auth: session destroy error during logout");
+    }
+    // Explicitly expire the session cookie on the client so the browser stops
+    // sending it. Without this the browser keeps the old cookie and the next
+    // bootstrap/me call can re-authenticate the user from a stale session ID.
+    res.clearCookie("connect.sid", { path: "/" });
     res.json({ success: true });
   });
 });

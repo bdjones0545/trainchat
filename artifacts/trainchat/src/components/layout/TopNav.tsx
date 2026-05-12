@@ -4,6 +4,7 @@ import { useLogout } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import { clearAuthState } from "@/lib/routing";
 
 interface Props {
   userName: string;
@@ -16,12 +17,26 @@ export default function TopNav({ userName, isAnonymous = false, extraContent }: 
   const queryClient = useQueryClient();
   const logout = useLogout();
 
+  function performClientLogout() {
+    // Clear auth-derived localStorage/sessionStorage flags (onboarding, guest cache, etc.)
+    clearAuthState();
+    // Wipe all React Query caches — program data, conversations, user queries — so
+    // nothing stale can rehydrate an authenticated state after redirect.
+    queryClient.clear();
+    // Replace the current history entry so the back-button cannot return to an
+    // authenticated route after signing out.
+    setLocation("/login");
+    // Hard-navigate to flush any in-memory state that SPA routing cannot reach.
+    // Use replace so the back-button lands on /login, not the protected page.
+    window.location.replace("/login");
+  }
+
   function handleLogout() {
     logout.mutate(undefined, {
-      onSuccess: () => {
-        queryClient.clear();
-        setLocation("/login");
-      },
+      onSuccess: performClientLogout,
+      // Even if the API call fails, clear all client-side auth state so the user
+      // is not left in a broken half-authenticated limbo.
+      onError: performClientLogout,
     });
   }
 
