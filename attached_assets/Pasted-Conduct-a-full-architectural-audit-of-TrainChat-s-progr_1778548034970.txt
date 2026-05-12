@@ -1,0 +1,165 @@
+Conduct a full architectural audit of TrainChat’s program refinement and transformation system.
+
+Goal:
+Verify that ALL refinement pathways (main chat, refine chips, active program actions, sidebar actions, voice commands, and mutation endpoints) route through the SAME deterministic transformation architecture and produce consistent coaching outcomes.
+
+Audit Scope:
+
+1. Refinement Entry Points
+Audit every pathway that can modify a training system:
+- Main chat refinement requests
+- “Refine This Program” chips
+- Active program sidebar actions
+- Live Program drawer actions
+- Voice commands
+- Direct exercise edits
+- Session-level refinements
+- Block-level refinements
+- Improve My Plan actions
+- Check-in adaptations
+- AI-generated mutation paths
+- SSE/non-SSE execution paths
+
+Verify:
+- All routes eventually funnel into the same transformation engine
+- No legacy prompt-only mutation paths bypass the validator
+- No separate “lightweight” refinement logic exists for specific UI surfaces
+- No UI-specific coaching behavior differences exist
+
+2. Shared Transformation Engine
+Verify all pathways use:
+- classifyExercise
+- getPrescriptionForExerciseTransformation
+- mapTransformationToFocusKey
+- swapExercisesForFocus
+- verifyAndRepairPrescriptions
+- shared deterministic role classification
+- shared validation/repair logic
+
+Confirm there is ONE canonical transformation pipeline.
+
+3. Exercise Classification Audit
+Verify:
+- Canonical barbell compounds are always promoted to primary_strength regardless of DB category
+- Power exercises are correctly identified even with inconsistent metadata
+- Single-leg, dumbbell, rehab, mobility, and accessory work are not incorrectly promoted
+- Name-aware classification cannot accidentally over-promote exercises
+
+Check for edge cases:
+- Trap Bar Deadlift
+- Safety Bar Squat
+- RFESS
+- Dumbbell Bench
+- Sled Push/Prowler
+- Medball throws
+- Sprint drills
+- Carries
+- Band-resisted jumps
+
+4. Transformation Intent Consistency
+Audit all refinement intents:
+- More Strength
+- More Explosive
+- More Endurance
+- Shorter Sessions
+- Lower Impact
+- Home Gym
+- Recovery
+- Desk Reset
+- Limited Space
+- Easier
+- Harder
+
+Verify:
+- Prescriptions align with exercise role
+- Main lifts are protected appropriately
+- Accessories are not over-promoted
+- Plyometrics do not become fatigue work
+- Mobility/prep are not converted into loading work
+- Session identity is preserved
+- Global refinements do not flatten all exercises into identical prescriptions
+
+5. Exercise Swap Logic
+Verify:
+- Exercise swaps are conditional and intentional
+- Swaps preserve movement pattern and session role
+- Swaps occur only when prescription adjustments are insufficient
+- Lower Impact and Home Gym correctly prioritize exercise replacement
+- Excessive/random swaps are prevented
+
+Audit movement-family preservation:
+- squat
+- hinge
+- horizontal push/pull
+- vertical push/pull
+- locomotion
+- rotation
+- anti-rotation
+- plyometric
+- sprint/change-of-direction
+
+6. Validation & Repair Layer
+Verify:
+- Strength primaries >8 reps are repaired
+- Power exercises are repaired if assigned fatigue prescriptions
+- Accessories are repaired if incorrectly collapsed into power ranges
+- Mobility/prep misuse is prevented
+- Invalid rest/intensity pairings are corrected
+
+Add audit logs for:
+- repairs applied
+- transformations rejected
+- suspicious classifications
+- excessive swap counts
+- role conflicts
+
+7. Persistence & Hydration Consistency
+Verify all refinement paths:
+- persist to DB correctly
+- retain conversationId linkage
+- refetch the correct React Query keys
+- update Live Program immediately
+- survive refresh/reload
+- preserve activeSystem consistency
+
+Check:
+- latestProgram vs activeSystem transitions
+- draft-state cleanup
+- post-stream hydration
+- direct edit synchronization
+
+8. UI Consistency
+Verify:
+- Main chat refinements produce the same quality transformations as refine chips
+- Sidebar actions behave consistently with chat requests
+- Voice commands map to the same transformation engine
+- Mobile drawer and desktop sidebar use identical logic
+
+9. Anti-Regression Tests
+Create automated or DEV-only validation scenarios for:
+- “Make this more strength focused”
+- “Make this more explosive”
+- “Lower impact”
+- “Home gym version”
+- “Shorter sessions”
+- “Make this easier”
+- “Make this harder”
+
+Verify:
+- no chat bubble regressions
+- no stale draft regressions
+- no hydration delays
+- no no-op silent failures
+- no incorrect exercise-role flattening
+
+10. Final Deliverable
+Produce:
+- architecture map of all refinement pathways
+- list of any bypasses/inconsistencies
+- validation failures
+- role-classification edge cases
+- mutation synchronization risks
+- recommendations for consolidation or hardening
+
+Goal:
+TrainChat should behave like a unified coaching architecture — not separate UI-specific mutation systems.
