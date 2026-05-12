@@ -1,0 +1,82 @@
+Refine This Program buttons need intent-specific prescription and exercise-transformation rules.
+
+Problem:
+The “More Strength” global refinement updated the whole program, but prescriptions are not strength-appropriate. Example: many exercises became 8–15 reps, which is too broad/high for primary strength work.
+
+Fix:
+Create deterministic prescription targets for each global refine chip.
+
+GLOBAL RULE:
+Do not apply the same rep range globally.
+Use exercise role classification:
+- primary_strength
+- secondary_strength
+- power
+- accessory
+- mobility
+- core
+- conditioning
+- prep
+
+Refinement hierarchy:
+1. Adjust sets/reps/rest/intensity first
+2. Progress/regress the exercise variation if needed
+3. Swap/change the exercise only if the current exercise cannot properly satisfy the new training emphasis
+4. Preserve session structure and movement pattern whenever possible
+
+Exercise swap rule:
+Changing exercises IS allowed during global refinements, but only when it improves alignment with the requested training goal.
+
+Examples:
+- Single-leg bridge → Hip Thrust / Barbell Hip Thrust
+- Goblet Squat → Front Squat
+- Band Row → Chest-Supported Row
+- Bodyweight Split Squat → RFESS
+
+Important:
+Preserve the original movement pattern and session role whenever possible.
+Do NOT randomly overhaul the program.
+
+More Strength:
+- Primary compound lifts: 3–6 reps, 3–5 sets, 2–4 min rest
+- Secondary strength lifts: 5–8 reps, 2–4 sets, 90–180 sec rest
+- Accessories/prehab/core: 8–15 reps allowed
+- Power/plyos: keep low reps, high quality, full rest
+- Mobility/prep: do not convert into loaded strength work
+
+More Explosive:
+- Olympic/power/plyo/throw/sprint actions: 2–5 reps, full rest, high intent
+- Strength lifts may shift toward speed-strength
+- Accessories remain supportive, not explosiveness-focused for no reason
+
+More Endurance:
+- Higher density, shorter rests, higher reps where appropriate
+- Maintain safety and technical quality for complex lifts
+
+Shorter Sessions:
+- Reduce redundant volume first
+- Preserve primary lifts and session intent
+- Remove low-value accessory redundancy before touching key lifts
+
+Lower Impact:
+- Replace high-impact actions with lower-impact equivalents
+- Preserve the adaptation goal
+
+Home Gym Version:
+- Replace exercises based on realistic home-gym equipment assumptions
+- Preserve movement pattern and training role
+
+Validation layer:
+After refinement, run a deterministic prescription validator.
+
+Flag:
+- primary strength lifts above 8 reps
+- plyometrics prescribed as fatigue work
+- mobility/prep turned into loaded strength work
+- accessories given primary-lift rest/loading schemes
+- excessive random exercise swaps
+- loss of session identity
+
+Acceptance:
+Press “More Strength.”
+Program should become meaningfully more strength-focused while preserving coaching logic, movement roles, and session structure.
