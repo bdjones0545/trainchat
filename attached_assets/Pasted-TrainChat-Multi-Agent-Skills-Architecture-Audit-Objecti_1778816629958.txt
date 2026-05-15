@@ -1,0 +1,366 @@
+TrainChat — Multi-Agent + Skills Architecture Audit
+
+Objective:
+Perform a full architectural audit of TrainChat’s agents, orchestration layers, reasoning systems, and skill architecture.
+
+Goal:
+Determine whether the intelligence system is:
+- modular,
+- efficient,
+- coherent,
+- scalable,
+- understandable,
+- and delivering visible user value.
+
+Core Principle:
+TrainChat is no longer a single chatbot.
+It is evolving into:
+a persistent multi-agent performance intelligence system.
+
+This audit should identify:
+- agent overlap,
+- orchestration sprawl,
+- hidden complexity,
+- duplicated reasoning,
+- token inefficiencies,
+- underutilized skills,
+- and opportunities for cleaner intelligence boundaries.
+
+==================================================
+AUDIT CATEGORY 1 — AGENT RESPONSIBILITY CLARITY
+==================================================
+
+Audit every major agent/system.
+
+Examples:
+- Coach Atlas
+- Architect Vale
+- Research Librarian
+- Intent Interpreter
+- Mutation Verifier
+- Prediction/Forecast systems
+- Adaptation systems
+- Memory systems
+- Reasoning engine
+- Progression intelligence
+- Readiness systems
+- Proactive intelligence systems
+
+For each:
+- define exact responsibilities
+- define boundaries
+- define inputs/outputs
+- define ownership of decisions
+- identify overlap/conflict
+
+Questions:
+- Which systems have overlapping responsibilities?
+- Which systems duplicate reasoning?
+- Which systems should merge?
+- Which systems are overloaded?
+- Which systems are too vague conceptually?
+
+Goal:
+Every intelligence layer should have:
+clear purpose and ownership.
+
+==================================================
+AUDIT CATEGORY 2 — SKILL INVENTORY + VALUE ANALYSIS
+==================================================
+
+Catalog every skill/capability in the system.
+
+Examples:
+- program generation
+- refinement
+- progression planning
+- fatigue adaptation
+- forecasting
+- behavioral pattern detection
+- proactive coaching
+- memory continuity
+- focus-lane orchestration
+- readiness adaptation
+- coaching explanation
+- mutation reasoning
+- longitudinal tracking
+- exercise selection
+- phase progression
+- constraint handling
+- session reconstruction
+- recovery safeguards
+
+For each skill evaluate:
+- user-visible value
+- uniqueness
+- token cost
+- orchestration complexity
+- retention impact
+- differentiation impact
+- frequency of use
+
+Questions:
+- Which skills are highest leverage?
+- Which are invisible to users?
+- Which are expensive but low impact?
+- Which create “coach presence”?
+- Which are mostly backend sophistication with minimal UX effect?
+
+Goal:
+Prioritize skills that materially increase:
+- perceived intelligence
+- coaching quality
+- retention
+- differentiation
+
+==================================================
+AUDIT CATEGORY 3 — ORCHESTRATION COMPLEXITY
+==================================================
+
+Audit the orchestration layer itself.
+
+Trace:
+- generation flows
+- mutation flows
+- refinement flows
+- forecasting flows
+- proactive flows
+- sidebar mutation flows
+- voice flows
+
+For each flow:
+- number of reasoning passes
+- number of model calls
+- deterministic vs LLM stages
+- hidden reasoning layers
+- fallback chains
+- retries
+- validators
+- verifiers
+
+Questions:
+- Which flows are too complex?
+- Which flows contain duplicated reasoning?
+- Which flows are fragile?
+- Which flows are difficult to debug?
+- Which flows are hidden but expensive?
+
+Goal:
+Reduce orchestration sprawl while preserving intelligence quality.
+
+==================================================
+AUDIT CATEGORY 4 — AGENT VISIBILITY VS INVISIBILITY
+==================================================
+
+Audit which agents are:
+- user-visible
+- semi-visible
+- completely invisible
+
+Questions:
+- Which invisible systems should surface more?
+- Which visible systems create perceived intelligence?
+- Which systems are over-exposed?
+- Does the architecture feel coherent externally?
+- Does the user understand the AI structure enough to trust it?
+
+Examples:
+- Architect Vale visibility
+- adaptation reasoning
+- progression model visibility
+- recovery safeguard signaling
+- coaching philosophy signaling
+
+Goal:
+Users should FEEL the intelligence architecture,
+without overwhelming technical complexity.
+
+==================================================
+AUDIT CATEGORY 5 — DETERMINISTIC VS LLM DECISIONS
+==================================================
+
+Audit every major reasoning path.
+
+Questions:
+- Which logic should remain LLM-driven?
+- Which should become deterministic?
+- Which should become retrieval/tool-based?
+- Which should become hybrid?
+
+Examples:
+Likely deterministic:
+- progression calculations
+- fatigue thresholds
+- readiness scoring
+- adaptation triggers
+- exercise metadata
+- phase chronology
+
+Likely LLM-driven:
+- coaching language
+- nuanced refinement
+- identity-driven onboarding
+- behavioral interpretation
+- motivational continuity
+
+Goal:
+Use LLM reasoning ONLY where ambiguity or human nuance creates value.
+
+==================================================
+AUDIT CATEGORY 6 — MEMORY + CONTEXT ARCHITECTURE
+==================================================
+
+Audit:
+- memory ownership
+- memory injection
+- cross-agent memory usage
+- context duplication
+- memory lifecycle
+- context reconstruction
+
+Questions:
+- Which agents need full memory?
+- Which only need summaries?
+- Is context duplicated between agents?
+- Is the architecture reconstructing athlete identity too often?
+- Which memory layers are highest ROI?
+
+Evaluate:
+- memory transparency
+- confidence thresholds
+- retrieval quality
+- decay strategy
+- active athlete-state representation
+
+Goal:
+Memory should feel:
+persistent,
+relevant,
+and efficient.
+
+==================================================
+AUDIT CATEGORY 7 — SKILL EXPRESSION VS HIDDEN INTELLIGENCE
+==================================================
+
+Audit the difference between:
+- intelligence that exists internally
+vs
+- intelligence users actually perceive.
+
+Questions:
+- Which sophisticated systems are invisible?
+- Which systems create the strongest perception of intelligence?
+- Which skills should surface more visibly?
+- Which hidden systems are expensive but emotionally low-impact?
+
+Examples:
+- adaptation systems
+- forecasting systems
+- reasoning engine outputs
+- progression intelligence
+- recovery safeguards
+- behavior pattern detection
+
+Goal:
+Increase perceived intelligence per unit complexity.
+
+==================================================
+AUDIT CATEGORY 8 — FAILURE MODES + RESILIENCE
+==================================================
+
+Audit:
+- agent failure handling
+- orchestration recovery
+- fallback systems
+- retry systems
+- degraded-state behavior
+- partial failure handling
+
+Questions:
+- What happens if an agent fails?
+- What happens if Architect Vale times out?
+- Can the system gracefully degrade?
+- Are retries causing hidden cost explosions?
+- Are mutation verifiers recoverable?
+- Can memory corruption create cascading issues?
+
+Goal:
+The system should remain:
+stable,
+predictable,
+and trustworthy under failure conditions.
+
+==================================================
+AUDIT CATEGORY 9 — LONG-TERM SCALABILITY
+==================================================
+
+Audit whether the architecture can scale:
+- technically
+- organizationally
+- economically
+- cognitively
+
+Questions:
+- Is the architecture becoming too complex?
+- Can new skills be added cleanly?
+- Are orchestration boundaries maintainable?
+- Can new developers understand the system?
+- Are prompts becoming unmanageable?
+- Is there agent sprawl risk?
+- Are there too many hidden intelligence layers?
+
+Goal:
+TrainChat should scale into:
+a maintainable intelligence platform,
+not an increasingly tangled orchestration graph.
+
+==================================================
+AUDIT CATEGORY 10 — STRATEGIC DIFFERENTIATION
+==================================================
+
+Determine which agents/skills form the TRUE moat.
+
+Questions:
+- Which intelligence systems are genuinely differentiated?
+- Which create long-term defensibility?
+- Which create “coach presence”?
+- Which are hard to replicate?
+- Which are merely impressive internally?
+
+Identify:
+- highest leverage intelligence systems
+- strongest retention drivers
+- strongest emotional attachment drivers
+- strongest coaching continuity systems
+- strongest adaptation systems
+
+Goal:
+Clarify what TrainChat’s real intelligence advantage actually is.
+
+==================================================
+FINAL DELIVERABLES
+==================================================
+
+Provide:
+- full agent map
+- responsibility overlaps
+- orchestration bottlenecks
+- underutilized skills
+- over-engineered systems
+- highest leverage systems
+- hidden token drains
+- determinism opportunities
+- memory optimization opportunities
+- visibility opportunities
+- failure risks
+- long-term architecture risks
+- moat analysis
+- roadmap priorities
+
+Final assessment should answer:
+
+1. Is the multi-agent architecture coherent?
+2. Which agents/skills actually matter most to users?
+3. Which systems are hidden complexity without proportional value?
+4. Where is orchestration becoming too expensive or fragile?
+5. What is TrainChat’s true long-term intelligence moat?
