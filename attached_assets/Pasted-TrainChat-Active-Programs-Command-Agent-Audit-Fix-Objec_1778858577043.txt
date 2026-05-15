@@ -1,0 +1,209 @@
+TrainChat — Active Programs Command Agent Audit + Fix
+
+Objective:
+Audit and fix the command agent flow inside Active Programs.
+
+Current bug:
+When a user selects a command such as:
+- More intense
+- More explosive
+- Less volume
+- Shorter
+- Travel mode
+- Rest day
+
+The UI enters the full-screen loading state:
+
+“Adjusting session difficulty…”
+“Agent is adjusting your program…”
+
+But it never completes, never returns to the panel, and no visible program change appears.
+
+==================================================
+AUDIT THE FULL FLOW
+==================================================
+
+Trace the entire command path:
+
+1. Command button click
+2. Selected scope:
+   - Today
+   - This Week
+   - Full Block
+3. Payload construction
+4. Active system/program ID resolution
+5. Conversation ID handling
+6. Focus mode handling
+7. API endpoint call
+8. Mutation execution
+9. Response contract
+10. React Query invalidation/refetch
+11. Success state
+12. Error state
+13. Loading state cleanup
+14. UI return/navigation behavior
+
+==================================================
+LIKELY FAILURE AREAS
+==================================================
+
+Investigate:
+
+- loading state is set but never cleared
+- endpoint request never fires
+- endpoint returns unexpected shape
+- mutation succeeds but frontend does not handle success
+- mutation fails silently
+- missing activeSystemId
+- missing conversationId
+- scope mismatch
+- command type mismatch
+- focusMode mismatch
+- no finally block
+- no timeout recovery
+- React Query refetch not targeting the correct key
+- full-screen processing route has no exit condition
+
+==================================================
+REQUIRED FIXES
+==================================================
+
+1. Add defensive async handling
+
+Wrap command mutation in:
+
+try {
+  setProcessing(true)
+  run mutation
+} catch {
+  show error
+} finally {
+  setProcessing(false)
+}
+
+Loading state must clear on:
+- success
+- failure
+- timeout
+- invalid payload
+- empty response
+
+2. Add timeout protection
+
+If command mutation takes longer than 20–30 seconds:
+- exit loading state
+- show recoverable error:
+  “Atlas couldn’t finish that edit. Try again or use chat.”
+
+3. Validate payload before entering loading state
+
+Required fields:
+- activeSystemId
+- command type
+- selected scope
+- focusMode
+- current program context
+- user/session auth state
+- conversationId if required by endpoint
+
+If any are missing:
+- do not enter processing mode
+- show actionable error
+
+4. Standardize endpoint response
+
+Command mutation endpoint should return:
+
+{
+  success: boolean,
+  systemId: string,
+  changeLogId?: string,
+  summary?: string,
+  changedTargets?: any[],
+  receipt?: any,
+  error?: string
+}
+
+Frontend should not depend on ambiguous shapes.
+
+5. Success behavior
+
+On success:
+- close full-screen loading state
+- return to Active Program / Program Panel
+- refetch correct queries:
+  - active training system
+  - conversation-scoped training system
+  - training-system library
+  - change logs / receipts
+- show success toast:
+  “Atlas updated your session.”
+- highlight changed sessions/exercises if available
+
+6. Failure behavior
+
+On failure:
+- close full-screen loading state
+- show clear error:
+  “Atlas couldn’t apply that command.”
+- include reason if available
+- do not leave optimistic UI stuck
+- preserve user’s current panel state
+
+7. Add logging
+
+Log:
+- command selected
+- scope selected
+- payload sent
+- endpoint called
+- response received
+- mutation result
+- query invalidations triggered
+- loading cleanup fired
+- errors/timeouts
+
+==================================================
+TEST CASES
+==================================================
+
+Test every command:
+
+- More intense
+- More explosive
+- Less volume
+- Shorter
+- Travel mode
+- Rest day
+
+Test every scope:
+
+- Today
+- This Week
+- Full Block
+
+Test edge cases:
+
+- no active system
+- guest user
+- missing conversation
+- slow endpoint
+- endpoint 500
+- invalid focus mode
+- command produces no changes
+- user closes modal mid-request
+- repeated taps
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+- No command can trap the user on an indefinite loading screen
+- Every command either succeeds visibly or fails visibly
+- Loading state always clears
+- DB state and UI state stay synchronized
+- Success returns user to the program panel
+- Program changes are visible after success
+- Errors are actionable
+- All scopes behave correctly
+- Logs make future failures easy to diagnose
