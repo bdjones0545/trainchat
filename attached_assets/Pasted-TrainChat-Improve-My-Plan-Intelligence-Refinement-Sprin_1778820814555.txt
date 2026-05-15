@@ -1,0 +1,332 @@
+TrainChat — Improve My Plan Intelligence Refinement Sprint
+Goal: Evolve “Improve My Plan” from a static onboarding wizard into a visible athlete-intelligence calibration system deeply integrated with Atlas, Behavioral Intelligence, Forecasting, Progression Intelligence, and longitudinal memory.
+
+PRIORITY P0 — Intelligence Visibility + Coaching Presence
+
+T001 — Rename + Reframe the Flow
+Current label:
+- “Improve My Plan”
+
+Replace with intelligence-first framing:
+Primary recommendation:
+- “Teach Atlas About You”
+
+Secondary subtitle:
+- “The more I understand your training, recovery, and lifestyle, the smarter your coaching becomes.”
+
+Update all entry points:
+- modal title
+- CTA launch buttons
+- empty states
+- onboarding references
+- completion confirmation copy
+
+Goal:
+This should feel like calibrating an intelligent coach, not editing settings.
+
+---
+
+T002 — Atlas Presence Throughout the Flow
+Inject contextual coaching commentary into every onboarding step.
+
+Pattern:
+Each section gets:
+- one short “Why Atlas asks this” explanation,
+- dynamically tied to the current field.
+
+Examples:
+
+Training age:
+“Your training age changes how aggressively I progress strength and volume.”
+
+Schedule consistency:
+“I use this to decide how adaptive your plan needs to be week to week.”
+
+Recovery questions:
+“This helps me predict fatigue before performance drops.”
+
+Implementation:
+- lightweight deterministic copy map
+- keyed by section id
+- rendered beneath section headers
+- subtle visual style (muted cyan coaching tone)
+
+Goal:
+The user should feel coached during onboarding, not surveyed.
+
+---
+
+T003 — Precision Score Redesign
+Current:
+- completion percentage only
+
+Replace with:
+COACHING PRECISION SYSTEM
+
+Precision now measures:
+1. Context completeness
+2. Behavioral stability
+3. Longitudinal consistency
+4. Recovery confidence
+5. Adaptation certainty
+6. Memory confidence
+
+New tiers:
+0–25:
+“Basic Coaching”
+Generic adaptations only
+
+26–50:
+“Context-Aware Coaching”
+Better exercise and recovery decisions
+
+51–75:
+“Adaptive Coaching”
+Atlas can personalize progression and fatigue management
+
+76–100:
+“Performance Intelligence”
+Longitudinal adaptation, predictive recovery, and athlete-specific coaching
+
+Implementation:
+- new calculateCoachingPrecision()
+- onboarding contributes initial baseline
+- readiness/check-ins update dynamically
+- behavioral consistency modifies score
+- confidence-weighted memory entries contribute
+
+Goal:
+Precision becomes “coach certainty,” not form completion.
+
+---
+
+T004 — Post-Onboarding Intelligence Reveal
+After onboarding completion:
+Generate a “What Atlas Learned” summary card.
+
+Structure:
+- “Atlas now understands:”
+- training level
+- recovery profile
+- schedule reliability
+- coaching style
+- progression tolerance
+- injury constraints
+- adaptation tendencies
+
+Then:
+Show:
+“Here’s what changed in your system”
+
+Examples:
+- “Volume progression slowed slightly to match recovery capacity”
+- “Exercise complexity increased for your training age”
+- “Autoregulation added because your schedule varies week to week”
+
+Implementation:
+- deterministic synthesis layer
+- compares pre/post onboarding system assumptions
+- rendered as an animated onboarding completion summary
+
+Goal:
+The user must SEE the intelligence impact immediately.
+
+---
+
+PRIORITY P1 — Behavioral + Longitudinal Intelligence
+
+T005 — Behavioral Athlete Profiling
+Add new onboarding dimensions:
+
+New fields:
+- scheduleConsistency
+- recoveryConsistency
+- coachingStylePreference
+- autoregulationComfort
+- motivationStyle
+- confidenceUnderFatigue
+- trainingAggression
+- exerciseConfidence
+
+Storage:
+trainingSystems.metadata.athleteProfile
+
+Inject into:
+- Atlas prompt context
+- Behavioral Intelligence
+- Progression Intelligence
+- adaptation sensitivity rules
+
+Goal:
+Capture HOW the athlete behaves, not just who they are.
+
+---
+
+T006 — Dynamic Precision Evolution
+Precision should evolve after onboarding.
+
+Add dynamic scoring updates from:
+- readiness consistency
+- adherence trends
+- volatility score
+- forecast confidence
+- recovery pattern memory confidence
+- behavioral pattern stability
+
+Examples:
+Consistent check-ins:
++ precision
+
+Chaotic recovery volatility:
+- precision
+
+Strong adherence over 6 weeks:
++ precision
+
+Implementation:
+- coachingPrecisionHistory
+- dynamic recalculation service
+- rolling confidence updates
+
+Goal:
+The system should feel like it is continuously learning the athlete.
+
+---
+
+T007 — Athlete DNA Synthesis Layer
+Create:
+buildAthleteDNA()
+
+Synthesizes:
+- onboarding
+- readiness trends
+- adaptation responsiveness
+- behavioral signals
+- memory patterns
+- progression outcomes
+
+Outputs:
+recoveryIdentity
+fatigueIdentity
+progressionIdentity
+coachingIdentity
+adherenceIdentity
+adaptationResponsiveness
+
+Example outputs:
+- “High-output / poor-recovery athlete”
+- “Stable responder to wave progression”
+- “High compliance but high fatigue volatility”
+- “Responds well to autoregulation”
+
+Inject into:
+- Atlas context
+- Forecast engine
+- progression selection
+- adaptation strategy
+
+Goal:
+Create a persistent athlete identity model over time.
+
+---
+
+PRIORITY P2 — Intelligence Visibility + Retention
+
+T008 — Athlete Profile Surface
+Create a visible:
+“Athlete Intelligence Profile”
+
+Accessible from:
+- Program Panel
+- Settings
+- Improve My Plan entry
+
+Sections:
+- Recovery Identity
+- Progression Style
+- Current Adaptation State
+- Coaching Preferences
+- Longitudinal Trends
+- Precision Score
+- Current Block Philosophy
+
+Goal:
+Users should visibly see:
+“Atlas knows me.”
+
+---
+
+T009 — Longitudinal Intelligence Timeline
+Create:
+Athlete Evolution Timeline
+
+Tracks:
+- onboarding changes
+- adaptation events
+- readiness shifts
+- progression changes
+- recovery interventions
+- milestone achievements
+- memory formations
+
+Examples:
+“Atlas detected declining recovery patterns”
+“Progression slowed to preserve output quality”
+“Wave progression increased after recovery stabilized”
+
+Goal:
+Make the intelligence history visible and emotionally sticky.
+
+---
+
+T010 — Atlas-Led Recalibration Conversations
+At meaningful confidence shifts:
+Atlas proactively initiates recalibration.
+
+Examples:
+- “Your recovery patterns have changed over the last month.”
+- “You’ve adapted faster than expected.”
+- “Your schedule consistency improved — I can progress more aggressively now.”
+
+Triggers:
+- precision changes
+- trend shifts
+- adaptation responsiveness changes
+- behavioral identity evolution
+
+Goal:
+The athlete model should feel alive and evolving.
+
+---
+
+ARCHITECTURAL NOTES
+
+Do NOT:
+- create additional agents
+- add unnecessary orchestration layers
+- inflate prompt size excessively
+
+Prefer:
+- deterministic synthesis
+- compact memory summaries
+- confidence-weighted injections
+- lightweight longitudinal aggregation
+
+Maintain:
+- low-token deterministic architecture philosophy
+- visible intelligence over hidden complexity
+- explanation-first coaching
+
+SUCCESS CRITERIA
+
+The Improve My Plan system should evolve from:
+“onboarding settings”
+
+Into:
+“continuous athlete intelligence calibration.”
+
+The user should feel:
+- Atlas understands them,
+- Atlas is learning over time,
+- their coaching precision evolves,
+- and their training system becomes increasingly individualized as the relationship develops.
