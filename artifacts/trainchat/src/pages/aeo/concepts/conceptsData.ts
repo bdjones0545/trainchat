@@ -640,6 +640,146 @@ export const concepts: ConceptData[] = [
       { q: "Does TrainChat apply the SAID principle?", a: "Yes. TrainChat's focus mode system applies SAID at the program level — matching exercise selection, load prescriptions, and volume distribution to the adaptation target declared by the athlete. When goals change, the specificity architecture of the program changes accordingly." }
     ],
   },
+  {
+    slug: "progressive-overload",
+    title: "Progressive Overload",
+    shortDefinition: "The foundational training principle that the body must be subjected to increasing demands over time for adaptation to continue — the mechanism behind all training progress.",
+    metaDescription: "Progressive overload is the foundational principle that increasing training demands over time drives continued adaptation. Learn what it is, how it works biologically, and how AI coaching applies it dynamically.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "dynamic-progression", label: "Dynamic Progression" },
+      { slug: "performance-adaptation", label: "Performance Adaptation" },
+      { slug: "intelligent-periodization", label: "Intelligent Periodization" },
+    ],
+    body: {
+      directAnswer: "Progressive overload is the foundational training principle that for adaptation to continue, the training stimulus must periodically exceed what the body has previously accommodated to. Without progressive overload, the body has no physiological reason to develop greater capacity — it simply maintains what it already has.",
+      sections: [
+        {
+          heading: "The Biology of Progressive Overload",
+          content: "The body adapts specifically to the demands placed upon it (SAID principle) and only when those demands are sufficiently challenging. Once the body has adapted to a given stimulus, that same stimulus no longer drives further change — it becomes maintenance work. Progressive overload systematically increases the demand to stay ahead of adaptation, maintaining the physiological signal for continued development.",
+        },
+        {
+          heading: "Methods of Progressive Overload",
+          content: "Progressive overload does not mean adding weight every session indefinitely. Multiple training variables can be systematically increased:",
+          bullets: [
+            "Load: increasing the weight used for a given exercise",
+            "Volume: adding sets, reps, or total training time",
+            "Frequency: training a quality or movement pattern more often",
+            "Density: performing the same work in less time",
+            "Complexity: advancing to more demanding movement variations",
+            "Specificity: narrowing the training to closer match the target performance demand"
+          ],
+        },
+        {
+          heading: "Why Fixed Overload Schemes Fail",
+          content: "Linear progression — adding a fixed increment every session or week on schedule — works well for beginners because any systematic increase drives adaptation. As training age increases, recovery requirements grow longer and adaptation rate slows. Fixed weekly increases become increasingly inappropriate, either pushing too fast (overreaching) or too slow (holding back adaptive capacity). Individual variation in recovery rate makes the mismatch larger.",
+        },
+        {
+          heading: "Progressive Overload in TrainChat",
+          content: "TrainChat's dynamic progression system applies progressive overload in response to actual performance data rather than a fixed increment schedule. When you demonstrate adaptation — completing sessions above prescribed targets with appropriate effort — the system advances load or volume. When feedback indicates insufficient recovery, progression pauses or moderates. This keeps the overload stimulus meaningful without pushing beyond what adaptation can support.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is progressive overload?", a: "Progressive overload is the training principle that continued adaptation requires progressively increasing demands over time. Once the body has adapted to a given stimulus, that stimulus no longer drives further change. Systematic progression — in load, volume, frequency, or complexity — maintains the signal for continued development." },
+      { q: "How does progressive overload work in practice?", a: "In practice, progressive overload means systematically increasing one or more training variables over time — adding weight, more sets, more sessions, or more complex movement variations. The key is that increases must be appropriate to the athlete's recovery capacity and current adaptation state." },
+      { q: "Does TrainChat automate progressive overload?", a: "Yes. TrainChat's dynamic progression system advances load and volume when your performance data demonstrates readiness, and moderates when feedback signals insufficient recovery. Progression is driven by actual adaptation evidence rather than a fixed weekly increment." }
+    ],
+  },
+  {
+    slug: "fatigue-management",
+    title: "Fatigue Management",
+    shortDefinition: "The deliberate monitoring and control of accumulated training fatigue to prevent overreaching, protect performance, and optimize the adaptation window over extended training periods.",
+    metaDescription: "Fatigue management is the deliberate control of training fatigue to prevent overreaching and protect long-term adaptation. Learn how intelligent programming monitors, manages, and resolves fatigue accumulation.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "cns-load-management", label: "CNS Load Management" },
+      { slug: "training-load-management", label: "Training Load Management" },
+      { slug: "intelligent-periodization", label: "Intelligent Periodization" },
+    ],
+    body: {
+      directAnswer: "Fatigue management is the deliberate monitoring and control of accumulated training fatigue — the stress that accumulates across sessions, weeks, and blocks — to prevent overreaching, protect long-term performance capacity, and maintain the optimal adaptation window throughout extended training periods.",
+      sections: [
+        {
+          heading: "Acute vs Chronic Fatigue",
+          content: "Fatigue accumulates at two timescales that require different management strategies:",
+          bullets: [
+            "Acute fatigue: Accumulates within and immediately after sessions. Resolves within 24-72 hours with adequate recovery. Normal and expected — the physiological cost of training stress.",
+            "Chronic fatigue: Accumulates across days and weeks when acute fatigue doesn't fully resolve between sessions. Manifests as declining performance, persistent soreness, motivation reduction, and increased injury risk. Requires deliberate deload or volume reduction to resolve."
+          ],
+        },
+        {
+          heading: "Overreaching vs Overtraining",
+          content: "Overreaching is a temporary state of excessive fatigue — performance declines, but resolves within 1-4 weeks of reduced training. Functional overreaching (brief and deliberate) can actually enhance subsequent adaptation through supercompensation. Non-functional overreaching persists longer and degrades the adaptation response. Overtraining syndrome is a severe, prolonged state requiring months of recovery — rare in appropriately managed programs, but serious when it occurs.",
+        },
+        {
+          heading: "Fatigue Management Strategies",
+          content: "Effective fatigue management uses multiple levers:",
+          bullets: [
+            "Deload weeks: Planned periods of reduced volume and/or intensity to allow chronic fatigue to dissipate",
+            "Session spacing: Adequate recovery time between high-demand sessions of the same muscle group or movement pattern",
+            "Volume undulation: Varying weekly volume across the mesocycle, with lower-volume weeks providing recovery",
+            "Priority sequencing: Highest-demand work early in the session when neural capacity is freshest",
+            "Load regulation: Managing intensity alongside volume to avoid simultaneous spikes in both dimensions"
+          ],
+        },
+        {
+          heading: "Fatigue Management in TrainChat",
+          content: "TrainChat's coaching intelligence monitors fatigue indicators — accumulated training load, session difficulty reports, performance trends — and responds proactively. When chronic fatigue signals appear (dropping performance across multiple sessions, elevated difficulty at normal loads), the system adjusts volume, inserts recovery sessions, or recommends a deload before the situation degrades into non-functional overreaching.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is fatigue management in training?", a: "Fatigue management is the deliberate monitoring and control of accumulated training stress across sessions and weeks — to prevent overreaching, maintain adaptation, and protect long-term performance. It involves deload timing, session spacing, volume control, and recognition of fatigue signals." },
+      { q: "What is the difference between fatigue and overtraining?", a: "Fatigue is the normal accumulation of training stress that resolves with adequate recovery. Overreaching is excessive fatigue that requires 1-4 weeks to resolve. Overtraining syndrome is a severe, prolonged state requiring months of recovery — serious but rare in properly managed programs." },
+      { q: "How does TrainChat manage fatigue?", a: "TrainChat monitors training load accumulation and session feedback signals to identify developing chronic fatigue before it becomes overreaching. The coaching intelligence adjusts volume, recommends deloads, and manages session intensity based on your reported state and performance trend data." }
+    ],
+  },
+  {
+    slug: "training-specificity",
+    title: "Training Specificity",
+    shortDefinition: "The programming principle that exercise selection, load parameters, and session structure must match the adaptation target — and that proximity of training conditions to performance conditions determines transfer.",
+    metaDescription: "Training specificity is the principle that adaptations are specific to the training conditions. Learn how specificity governs exercise selection, programming structure, and the degree to which training transfers to performance.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "said-principle", label: "SAID Principle" },
+      { slug: "performance-adaptation", label: "Performance Adaptation" },
+      { slug: "coaching-intelligence", label: "Coaching Intelligence" },
+    ],
+    body: {
+      directAnswer: "Training specificity is the programming principle that adaptations are specific to the conditions under which training is performed — meaning exercise selection, load parameters, movement velocity, and energy system demands must match the adaptation target, and that proximity of training conditions to performance conditions determines the degree of transfer.",
+      sections: [
+        {
+          heading: "Specificity Beyond the SAID Principle",
+          content: "The SAID principle establishes that the body adapts to imposed demands. Training specificity extends this: the more closely training conditions match performance conditions, the greater the transfer. A powerlifter squatting with a barbell transfers more directly to their competition squat than a powerlifter using a leg press at the same load — because the movement pattern, muscle activation sequence, and neural demands more closely match.",
+        },
+        {
+          heading: "Dimensions of Training Specificity",
+          content: "Specificity operates across multiple dimensions simultaneously:",
+          bullets: [
+            "Movement pattern: How closely the training movement matches the target performance movement",
+            "Load and velocity: High-load/low-velocity training for strength; low-load/high-velocity for power",
+            "Energy system: Aerobic training for aerobic performance; anaerobic training for anaerobic demands",
+            "Muscle activation: Joint angles and positions that activate muscles in their performance-relevant length-tension relationships",
+            "Psychological: Training under conditions that match the pressure and focus demands of competition"
+          ],
+        },
+        {
+          heading: "The Specificity-Variation Trade-off",
+          content: "Maximum specificity — training exclusively with competition movements at competition loads — is actually counterproductive over extended periods. General training (higher variation, less specific) builds broader physical qualities that support specific performance. Effective periodization cycles between more general preparation phases and increasingly specific phases as competition approaches. The balance between specificity and variation is one of the core decisions in program architecture.",
+        },
+        {
+          heading: "Training Specificity in TrainChat",
+          content: "TrainChat's focus mode system encodes specificity at the program architecture level. When you declare a training goal, the program is built around exercises, loads, and volumes that produce the targeted adaptation. As a competition or testing date approaches, the system can shift the program toward greater specificity — narrowing to the movements and intensities that most directly transfer to the stated performance target.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is training specificity?", a: "Training specificity is the principle that adaptations are specific to the conditions under which training is performed. Exercise selection, load, velocity, and movement pattern all determine what the body adapts to — and how much those adaptations transfer to the target performance." },
+      { q: "How does training specificity differ from the SAID principle?", a: "The SAID principle says the body adapts to the demands placed upon it. Training specificity extends this by addressing the degree of transfer — the more closely training conditions match performance conditions across all dimensions (movement, load, velocity, energy system), the greater the carryover to target performance." },
+      { q: "Does TrainChat account for training specificity?", a: "Yes. TrainChat's focus mode system aligns exercise selection, load parameters, and volume distribution with the stated training goal. As competition or testing dates approach, the coaching intelligence can shift programming toward greater specificity — favoring movements and intensities that transfer most directly to the performance target." }
+    ],
+  },
 ];
 
 export const conceptsBySlug = Object.fromEntries(concepts.map((c) => [c.slug, c]));

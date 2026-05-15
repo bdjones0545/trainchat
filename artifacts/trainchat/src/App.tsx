@@ -43,6 +43,9 @@ import ContentHubPage from "@/pages/aeo/ContentHubPage";
 import AiCoachingVsPersonalTrainer from "@/pages/aeo/AiCoachingVsPersonalTrainer";
 import MethodologyPage from "@/pages/aeo/MethodologyPage";
 import TrainingPhilosophyPage from "@/pages/aeo/TrainingPhilosophyPage";
+import DoctrinePage from "@/pages/aeo/DoctrinePage";
+import AdaptiveCoachingArchitecture from "@/pages/aeo/AdaptiveCoachingArchitecture";
+import MutationFirstProgramming from "@/pages/aeo/MutationFirstProgramming";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -348,6 +351,11 @@ function Router() {
       {/* Phase 4 — Methodology & Philosophy */}
       <Route path="/methodology" component={MethodologyPage} />
       <Route path="/training-philosophy" component={TrainingPhilosophyPage} />
+
+      {/* Phase 5 — Doctrine & Framework Pages */}
+      <Route path="/doctrine" component={DoctrinePage} />
+      <Route path="/adaptive-coaching-architecture" component={AdaptiveCoachingArchitecture} />
+      <Route path="/mutation-first-programming" component={MutationFirstProgramming} />
 
       <Route component={NotFound} />
     </Switch>
