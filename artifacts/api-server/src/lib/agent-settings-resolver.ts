@@ -43,6 +43,52 @@ export interface CoachBehaviorSettings {
   autoAdjustRecommendations: boolean;
   /** If true: read+write long-term memory. If false: stateless responses only. */
   memoryPersonalization: boolean;
+
+  /**
+   * Coaching voice preference.
+   * "direct"     → performance-focused, blunt, no padding
+   * "supportive" → encouraging, warm, motivational (default)
+   * "analytical" → data-driven, educational, clinical
+   */
+  coachingStyle: "direct" | "supportive" | "analytical";
+
+  /**
+   * How much reasoning and context Atlas provides.
+   * "minimal"  → conclusions only, no rationale
+   * "balanced" → brief rationale when it adds value (default)
+   * "detailed" → full explanation of decisions and periodization logic
+   */
+  explanationDepth: "minimal" | "balanced" | "detailed";
+
+  /**
+   * Training progression aggression.
+   * "conservative"  → prioritize recovery, stability, and sustainability
+   * "balanced"      → standard progression with appropriate recovery (default)
+   * "aggressive"    → bias toward overload and progression
+   * "competition"   → maximize performance while maintaining safety floor
+   */
+  trainingAggression: "conservative" | "balanced" | "aggressive" | "competition";
+
+  /**
+   * Require explicit user approval before applying structural program changes.
+   * Structural = phase shifts, program rebuilds, focus mode changes.
+   */
+  requireApprovalStructural: boolean;
+
+  /**
+   * Require explicit user approval before scheduling deload weeks.
+   */
+  requireApprovalDeload: boolean;
+
+  /**
+   * Allow Atlas to auto-adapt training based on readiness check-ins.
+   */
+  adaptFromReadiness: boolean;
+
+  /**
+   * Allow Atlas to auto-adapt training when sessions are missed.
+   */
+  adaptFromMissedSessions: boolean;
 }
 
 // ─── Training Preferences (from DB profile) ──────────────────────────────────
@@ -92,6 +138,13 @@ const DEFAULT_BEHAVIOR: CoachBehaviorSettings = {
   proactiveInsights: true,
   autoAdjustRecommendations: true,
   memoryPersonalization: true,
+  coachingStyle: "supportive",
+  explanationDepth: "balanced",
+  trainingAggression: "balanced",
+  requireApprovalStructural: false,
+  requireApprovalDeload: false,
+  adaptFromReadiness: true,
+  adaptFromMissedSessions: true,
 };
 
 // ─── Resolver ─────────────────────────────────────────────────────────────────
@@ -123,13 +176,18 @@ export async function resolveAgentSettingsContext(
   const profileLoaded = profileRow !== null;
 
   // ── 2. Merge behavior settings ──────────────────────────────────────────────
-  // Client-sent settings take precedence over defaults.
-  // If the client sends no settings (e.g. server-to-server call), use defaults.
   const behaviorSettings: CoachBehaviorSettings = {
     conciseResponses: clientSettings?.conciseResponses ?? DEFAULT_BEHAVIOR.conciseResponses,
     proactiveInsights: clientSettings?.proactiveInsights ?? DEFAULT_BEHAVIOR.proactiveInsights,
     autoAdjustRecommendations: clientSettings?.autoAdjustRecommendations ?? DEFAULT_BEHAVIOR.autoAdjustRecommendations,
     memoryPersonalization: clientSettings?.memoryPersonalization ?? DEFAULT_BEHAVIOR.memoryPersonalization,
+    coachingStyle: clientSettings?.coachingStyle ?? DEFAULT_BEHAVIOR.coachingStyle,
+    explanationDepth: clientSettings?.explanationDepth ?? DEFAULT_BEHAVIOR.explanationDepth,
+    trainingAggression: clientSettings?.trainingAggression ?? DEFAULT_BEHAVIOR.trainingAggression,
+    requireApprovalStructural: clientSettings?.requireApprovalStructural ?? DEFAULT_BEHAVIOR.requireApprovalStructural,
+    requireApprovalDeload: clientSettings?.requireApprovalDeload ?? DEFAULT_BEHAVIOR.requireApprovalDeload,
+    adaptFromReadiness: clientSettings?.adaptFromReadiness ?? DEFAULT_BEHAVIOR.adaptFromReadiness,
+    adaptFromMissedSessions: clientSettings?.adaptFromMissedSessions ?? DEFAULT_BEHAVIOR.adaptFromMissedSessions,
   };
 
   // ── 3. Derive execution permission ──────────────────────────────────────────
@@ -167,6 +225,13 @@ export async function resolveAgentSettingsContext(
       proactiveInsights: ctx.behavior.proactiveInsights,
       autoAdjustRecommendations: ctx.behavior.autoAdjustRecommendations,
       memoryPersonalization: ctx.behavior.memoryPersonalization,
+      coachingStyle: ctx.behavior.coachingStyle,
+      explanationDepth: ctx.behavior.explanationDepth,
+      trainingAggression: ctx.behavior.trainingAggression,
+      requireApprovalStructural: ctx.behavior.requireApprovalStructural,
+      requireApprovalDeload: ctx.behavior.requireApprovalDeload,
+      adaptFromReadiness: ctx.behavior.adaptFromReadiness,
+      adaptFromMissedSessions: ctx.behavior.adaptFromMissedSessions,
       executionPermission: ctx.behavior.executionPermission,
       goal: ctx.training.goal,
       sport: ctx.training.sport,
@@ -191,7 +256,7 @@ export async function resolveAgentSettingsContext(
 
 /**
  * Builds behavior instruction block for the AI system prompt.
- * Controls response style, proactive behavior, and mutation authority.
+ * Controls response style, proactive behavior, coaching voice, aggression, and mutation authority.
  * Injected into every AI call.
  */
 export function buildBehaviorInstructions(ctx: AgentSettingsContext): string {
@@ -206,12 +271,80 @@ export function buildBehaviorInstructions(ctx: AgentSettingsContext): string {
 - Program confirmations: one line + direct to program panel. No elaboration.
 - Even for complex topics: state the conclusion first, skip the journey.`);
   } else {
-    lines.push(`## RESPONSE STYLE — STANDARD MODE [user preference: detailed]
+    const depthMap = {
+      minimal: `## RESPONSE DEPTH — MINIMAL [user preference: conclusions only]
+- State the answer or action directly. No rationale unless asked.
+- Skip the 'why'. The user wants outcomes, not explanations.
+- Bullet points over paragraphs. Numbers over narrative.`,
+      balanced: `## RESPONSE STYLE — STANDARD MODE [user preference: balanced]
 - Provide educational depth when it adds value.
 - Explain the 'why' behind key programming decisions briefly.
 - More rationale is welcome when discussing periodization, injury management, or adaptation.
-- Still eliminate filler — every sentence must carry information.`);
+- Still eliminate filler — every sentence must carry information.`,
+      detailed: `## RESPONSE DEPTH — DETAILED [user preference: full reasoning]
+- Provide thorough context and reasoning for programming decisions.
+- Explain periodization logic, exercise selection rationale, and adaptation mechanisms.
+- Use your full coaching knowledge — the user wants to understand the system.
+- Walk through your thinking when relevant. This user values education.`,
+    };
+    lines.push(depthMap[ctx.behavior.explanationDepth] ?? depthMap.balanced);
   }
+
+  // ── Coaching style / voice ─────────────────────────────────────────────────
+  if (ctx.behavior.coachingStyle === "direct") {
+    lines.push(`## COACHING VOICE — DIRECT & PERFORMANCE-FOCUSED [user preference]
+- Communicate with precision and economy. No softening, no filler.
+- Lead with the performance outcome, not the emotional frame.
+- Skip motivational padding — this user knows why they train.
+- Corrections: direct and specific. "That's wrong, here's why, here's the fix."
+- Reinforcement: acknowledge what's working, move on.
+- Sentence structure: short, active voice, action-first.`);
+  } else if (ctx.behavior.coachingStyle === "analytical") {
+    lines.push(`## COACHING VOICE — ANALYTICAL & EDUCATIONAL [user preference]
+- Lead with data, mechanisms, and evidence.
+- Frame decisions in terms of systems: load, adaptation, recovery, performance curves.
+- Explain *why* something works or doesn't — mechanisms matter.
+- Use specific numbers, ranges, and thresholds rather than vague guidance.
+- Reinforcement: reference observed trends or data points.
+- This user values understanding the model, not just the prescription.`);
+  } else {
+    lines.push(`## COACHING VOICE — SUPPORTIVE & ENCOURAGING [user preference]
+- Balance honesty with encouragement — truth delivered warmly.
+- Acknowledge effort and progress before pivoting to improvements.
+- Use motivational framing when appropriate, but anchor it in real coaching value.
+- Corrections: specific and constructive, never harsh.
+- Reinforcement: genuine and specific — not generic praise.`);
+  }
+
+  // ── Training aggression ────────────────────────────────────────────────────
+  if (ctx.behavior.trainingAggression === "conservative") {
+    lines.push(`## PROGRESSION PHILOSOPHY — CONSERVATIVE [user preference]
+CRITICAL: This user prioritizes recovery, sustainability, and injury prevention over rapid progression.
+- Favor sub-maximal loads (70–80% of capacity) over pushing limits.
+- Default to longer adaptation periods before increasing load.
+- When in doubt: reduce, not increase. Protect long-term capacity.
+- Autoregulation thresholds: back off at first signs of accumulated fatigue.
+- Structural changes: only when the user is clearly handling current load well.
+- Deload frequency: err toward more frequent, shorter deloads.`);
+  } else if (ctx.behavior.trainingAggression === "aggressive") {
+    lines.push(`## PROGRESSION PHILOSOPHY — AGGRESSIVE [user preference]
+This user tolerates and seeks high training stimulus. They can handle more.
+- Bias toward progressive overload — advance load, volume, or density when adaptations show.
+- Push close to but not through failure. Performance over comfort.
+- Autoregulation thresholds: hold load through normal fatigue; only back off at clear breakdown.
+- Structural changes: move faster through progressions when the user is responding well.
+- Deload: use strategically, not conservatively. Short and purposeful.`);
+  } else if (ctx.behavior.trainingAggression === "competition") {
+    lines.push(`## PROGRESSION PHILOSOPHY — COMPETITION MODE [user preference]
+This user is in a performance phase. Every session counts.
+- Maximize performance output within safety constraints.
+- Programming: peak-focused. Intensity and specificity over variety.
+- Recovery: managed actively, not passively. Protect competition readiness.
+- Autoregulation: intelligent, not conservative. Preserve sharpness.
+- Structural changes: require strong evidence; stability is competitive advantage.
+- Safety floor: never compromise. Injury prevention is non-negotiable in comp prep.`);
+  }
+  // "balanced" is the default — no additional block needed
 
   // ── Proactive insights ─────────────────────────────────────────────────────
   if (!ctx.behavior.proactiveInsights) {
@@ -233,6 +366,29 @@ IMPORTANT: The user has turned off auto-adjust recommendations.
 - Only proceed with mutation after the user explicitly confirms.
 - Example: "I'd recommend replacing the Romanian Deadlift with a Trap Bar Deadlift here for your knee. Want me to make that swap?"
 This mode applies to ALL mutation paths — edit engine, specialist layer, and AI-generated edits.`);
+  } else {
+    // Granular approval constraints even in auto-apply mode
+    const approvalLines: string[] = [];
+    if (ctx.behavior.requireApprovalStructural) {
+      approvalLines.push("- STRUCTURAL changes (phase shifts, program rebuilds, focus mode changes): ALWAYS require explicit user confirmation before applying.");
+    }
+    if (ctx.behavior.requireApprovalDeload) {
+      approvalLines.push("- DELOAD weeks: propose and describe, then ask 'Want me to schedule this deload?' before applying.");
+    }
+    if (approvalLines.length > 0) {
+      lines.push(`## MUTATION APPROVAL — GRANULAR GATES [user preference]\nMinor adjustments can be applied automatically. However:\n${approvalLines.join("\n")}`);
+    }
+
+    const adaptLines: string[] = [];
+    if (!ctx.behavior.adaptFromReadiness) {
+      adaptLines.push("- Do NOT automatically adapt programming based on readiness check-in scores. Acknowledge the check-in but preserve current program structure unless explicitly asked.");
+    }
+    if (!ctx.behavior.adaptFromMissedSessions) {
+      adaptLines.push("- Do NOT automatically compress or restructure the program when sessions are missed. Note the missed session but hold the plan.");
+    }
+    if (adaptLines.length > 0) {
+      lines.push(`## ADAPTATION GATES — USER PREFERENCE\n${adaptLines.join("\n")}`);
+    }
   }
 
   return lines.join("\n\n");

@@ -435,6 +435,13 @@ export function useStreamMessage(): UseStreamMessageResult {
         proactiveInsights: localStorage.getItem("coach_proactive") !== "false",
         autoAdjustRecommendations: localStorage.getItem("coach_autoadjust") !== "false",
         memoryPersonalization: localStorage.getItem("coach_memory") !== "false",
+        coachingStyle: (localStorage.getItem("coach_style") ?? "supportive") as "direct" | "supportive" | "analytical",
+        explanationDepth: (localStorage.getItem("coach_depth") ?? "balanced") as "minimal" | "balanced" | "detailed",
+        trainingAggression: (localStorage.getItem("coach_aggression") ?? "balanced") as "conservative" | "balanced" | "aggressive" | "competition",
+        requireApprovalStructural: localStorage.getItem("coach_approval_structural") === "true",
+        requireApprovalDeload: localStorage.getItem("coach_approval_deload") === "true",
+        adaptFromReadiness: localStorage.getItem("coach_readiness_adapt") !== "false",
+        adaptFromMissedSessions: localStorage.getItem("coach_missed_adapt") !== "false",
       };
 
       try {

@@ -107,7 +107,7 @@ export default function TopNav({ userName, isAnonymous = false, extraContent }: 
       <div className="flex items-center gap-2">
         {!isAnonymous && (
           <button
-            onClick={() => setLocation("/billing")}
+            onClick={() => setLocation("/settings")}
             className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
             title="Settings"
           >

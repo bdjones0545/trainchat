@@ -13,6 +13,7 @@ import GuestStart from "@/pages/guest-start";
 import AdminDashboard from "@/pages/admin";
 import SystemPage from "@/pages/system";
 import BillingPage from "@/pages/billing";
+import SettingsPage from "@/pages/settings";
 import BillingSuccess from "@/pages/billing-success";
 import BillingCancelled from "@/pages/billing-cancelled";
 import PrivacyPage from "@/pages/privacy";
@@ -257,12 +258,15 @@ function Router() {
       <Route path="/onboarding">{() => <Redirect to="/chat" />}</Route>
       {/* /chat serves both authenticated (full agent) and guest (limited agent) users */}
       <Route path="/chat" component={ChatPage} />
-      <Route path="/billing">
+      <Route path="/settings">
         {() => (
           <AuthGuard>
-            <BillingPage />
+            <SettingsPage />
           </AuthGuard>
         )}
+      </Route>
+      <Route path="/billing">
+        {() => <Redirect to="/settings" />}
       </Route>
       <Route path="/billing/success" component={BillingSuccess} />
       <Route path="/billing/cancelled" component={BillingCancelled} />

@@ -1,0 +1,327 @@
+TrainChat — Settings Intelligence Control Center Sprint
+
+Objective:
+Transform Settings from a generic account/preferences page into the control center for the user's relationship with Atlas.
+
+Core Principle:
+Settings should feel like:
+- where the athlete shapes how Atlas coaches,
+- what Atlas remembers,
+- how aggressively Atlas adapts,
+- and how proactive/intelligent the system becomes.
+
+The page should reinforce:
+persistent athlete intelligence.
+
+==================================================
+P0 — INFORMATION ARCHITECTURE REFRAME
+==================================================
+
+Rename route:
+- /billing → /settings
+
+Reorganize sections in this order:
+
+1. Athlete Identity
+2. Atlas Intelligence
+3. Coaching Behavior
+4. Adaptation + Recovery
+5. Memory + Privacy
+6. Notifications + Coaching Presence
+7. Subscription + Usage
+8. Safety + Constraints
+9. Danger Zone
+
+Goal:
+The page should feel identity-first, not billing-first.
+
+==================================================
+P0 — COACH MEMORY VISIBILITY
+==================================================
+
+Integrate CoachMemoryPanel directly into Settings.
+
+Requirements:
+- Add dedicated "What Atlas Knows About You" section
+- Reuse existing memory categories and confidence badges
+- Add lastUpdated timestamp to every memory
+- Add source label prominence
+- Add empty states for categories with no memories
+
+New actions:
+- Edit memory
+- Delete memory
+- Mark as resolved
+- Downgrade confidence
+
+Behavior:
+- “Resolved” should preserve history but stop active prompt injection
+- Memories marked resolved remain visible in a subdued style
+- Resolved injury/pain memories should move into a “Resolved Constraints” subsection
+
+==================================================
+P0 — INJURY + CONSTRAINT LIFECYCLE
+==================================================
+
+Create explicit safety state system.
+
+Add states:
+- Active
+- Monitor
+- Resolved
+
+Apply to:
+- injuries
+- pain_pattern memories
+- movement restrictions
+
+UI:
+- Dedicated “Safety + Constraints” section
+- Separate from normal preferences
+- High visual prominence
+- Timeline-style cards preferred
+
+New actions:
+- Mark healed
+- Reduce restriction level
+- Remove permanently
+
+Resolver behavior:
+- Active → full prompt enforcement
+- Monitor → soft caution injection
+- Resolved → excluded from adaptation logic but retained historically
+
+==================================================
+P1 — TRAINING AGGRESSION CONTROL
+==================================================
+
+Expose trainingAggression in Settings UI.
+
+UI:
+Slider or segmented control:
+- Conservative
+- Balanced
+- Aggressive
+- Competition Mode
+
+Inject into:
+- progression logic
+- autoregulation thresholds
+- readiness adaptations
+- progression intelligence
+- mutation aggressiveness
+
+Atlas prompt injection examples:
+- Conservative → prioritize recovery and stability
+- Aggressive → bias progression and overload
+- Competition → maximize performance progression while maintaining safety
+
+==================================================
+P1 — COACHING STYLE SYSTEM
+==================================================
+
+Expose coachingStylePreference.
+
+UI options:
+- Direct & Performance-Focused
+- Supportive & Encouraging
+- Analytical & Educational
+
+Inject into:
+buildBehaviorInstructions()
+
+Atlas response behavior should visibly change:
+- sentence structure
+- explanation depth
+- motivation style
+- correction style
+- reinforcement style
+
+Also add:
+Explanation Depth control:
+- Minimal
+- Balanced
+- Detailed
+
+==================================================
+P1 — COACHING PRECISION VISIBILITY
+==================================================
+
+Surface coachingPrecisionScore prominently.
+
+New component:
+"Atlas Intelligence Score"
+
+Display:
+- percentage score
+- tier label
+- trend direction
+- “Atlas understands you better than X days ago”
+
+Tie into:
+- Athlete DNA
+- calibration system
+- memory completeness
+- training consistency
+- check-in frequency
+
+Add:
+“Improve Precision” CTA
+which deep-links into Teach Atlas About You.
+
+==================================================
+P1 — AGENT VISIBILITY PANEL
+==================================================
+
+Create lightweight “Atlas Systems Active” card.
+
+DO NOT expose technical architecture.
+
+Instead surface coaching intelligence states:
+
+Examples:
+- Memory Tracking: Active
+- Recovery Monitoring: Active
+- Forecasting Confidence: High
+- Athlete DNA Calibration: 74%
+- Adaptation Engine: Adaptive
+- Readiness Monitoring: Enabled
+
+Use:
+- subtle status pills
+- confidence indicators
+- concise coaching language
+
+Goal:
+Make the intelligence visible without overwhelming users.
+
+==================================================
+P2 — ADAPTATION CONTROL EXPANSION
+==================================================
+
+Add granular adaptation permissions.
+
+Current:
+- autoAdjustRecommendations on/off
+
+Replace with:
+- Auto-apply minor adjustments
+- Require approval for structural changes
+- Require approval for deload weeks
+- Auto-adjust based on readiness
+- Auto-adjust based on missed sessions
+
+Create mutation severity tiers:
+- minor
+- moderate
+- structural
+
+Resolver should route accordingly.
+
+==================================================
+P2 — MEMORY PRIVACY CONTROLS
+==================================================
+
+Add selective memory clearing.
+
+Examples:
+- Forget injury history
+- Forget behavioral patterns
+- Forget training preferences
+- Forget readiness trends
+
+DO NOT force global wipe.
+
+Add:
+Export My Data
+Remove “Coming soon”
+
+Export should include:
+- memories
+- training logs
+- readiness history
+- calibration profile
+- adaptation history
+- conversation-linked coaching insights
+
+==================================================
+P2 — NOTIFICATION + PROACTIVE COACHING CONTROLS
+==================================================
+
+Create proactive coaching settings.
+
+Controls:
+- Pre-session brief
+- Missed session check-ins
+- Weekly coaching recap
+- Forecast alerts
+- Recovery warnings
+- Plateau detection alerts
+
+Cadence:
+- Immediate
+- Daily
+- Weekly
+
+Add:
+training time preferences
+so Atlas timing becomes intelligent.
+
+==================================================
+P2 — MOBILE SETTINGS UX
+==================================================
+
+Improve mobile navigation.
+
+Requirements:
+- sticky section navigation
+- collapsible groups
+- keyboard-safe layouts
+- swipe-protected destructive actions
+- simplified spacing hierarchy
+
+CoachMemoryPanel must NOT require nested slide panels on mobile.
+
+==================================================
+P3 — SETTINGS AS INTELLIGENCE HUB
+==================================================
+
+Add top-level Settings overview card.
+
+Example:
+
+"Atlas currently understands:
+• Your recovery profile
+• Shoulder injury history
+• Aggressive training preference
+• Strength-focused goals
+• High autoregulation comfort"
+
+Add:
+- last adaptation summary
+- last calibration date
+- readiness trend
+- intelligence growth trend
+
+Goal:
+The Settings homepage itself should communicate:
+persistent coaching continuity.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+After this sprint:
+
+Settings should no longer feel like:
+- billing/preferences/admin.
+
+It should feel like:
+- the operating system for the athlete’s relationship with Atlas.
+
+Users should clearly understand:
+- what Atlas knows,
+- how Atlas coaches,
+- how Atlas adapts,
+- what intelligence systems are active,
+- and how to shape their coaching experience over time.

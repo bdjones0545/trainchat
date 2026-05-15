@@ -31,6 +31,14 @@ export const userMemoriesTable = pgTable("user_memories", {
   // Human-readable coaching summary (injected into AI prompt)
   detail: text("detail").notNull(),
 
+  /**
+   * Lifecycle status for memory entries.
+   * - "active"   → full prompt injection (default)
+   * - "monitor"  → soft caution injected; not hard constraint
+   * - "resolved" → excluded from prompt injection; retained historically
+   */
+  status: text("status").notNull().default("active"),
+
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -42,3 +50,4 @@ export const insertUserMemorySchema = createInsertSchema(userMemoriesTable).omit
 });
 export type InsertUserMemory = z.infer<typeof insertUserMemorySchema>;
 export type UserMemory = typeof userMemoriesTable.$inferSelect;
+export type MemoryStatus = "active" | "monitor" | "resolved";
