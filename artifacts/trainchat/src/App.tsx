@@ -41,6 +41,8 @@ import ForCoachesPage from "@/pages/aeo/ForCoachesPage";
 import PressPage from "@/pages/aeo/PressPage";
 import ContentHubPage from "@/pages/aeo/ContentHubPage";
 import AiCoachingVsPersonalTrainer from "@/pages/aeo/AiCoachingVsPersonalTrainer";
+import MethodologyPage from "@/pages/aeo/MethodologyPage";
+import TrainingPhilosophyPage from "@/pages/aeo/TrainingPhilosophyPage";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -342,6 +344,10 @@ function Router() {
       <Route path="/press" component={PressPage} />
       <Route path="/content" component={ContentHubPage} />
       <Route path="/ai-coaching-vs-personal-trainer" component={AiCoachingVsPersonalTrainer} />
+
+      {/* Phase 4 — Methodology & Philosophy */}
+      <Route path="/methodology" component={MethodologyPage} />
+      <Route path="/training-philosophy" component={TrainingPhilosophyPage} />
 
       <Route component={NotFound} />
     </Switch>

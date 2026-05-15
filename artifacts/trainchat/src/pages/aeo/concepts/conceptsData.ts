@@ -418,6 +418,228 @@ export const concepts: ConceptData[] = [
       { q: "Is TrainChat a living training system?", a: "Yes. TrainChat is designed from the ground up as a living training system — with persistent training memory, real-time workout mutation, coaching intelligence, and a live program panel that reflects the current state of your program at all times." },
     ],
   },
+  {
+    slug: "motor-learning",
+    title: "Motor Learning",
+    shortDefinition: "The process by which the nervous system acquires, refines, and automates movement skills through structured practice — and why programming must account for skill stage, not just load.",
+    metaDescription: "Motor learning is the process by which movement skills are acquired and automated. Learn how motor learning principles shape exercise selection, progression, and programming decisions in AI coaching.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "performance-adaptation", label: "Performance Adaptation" },
+      { slug: "coaching-intelligence", label: "Coaching Intelligence" },
+      { slug: "intelligent-periodization", label: "Intelligent Periodization" },
+    ],
+    body: {
+      directAnswer: "Motor learning is the process by which the nervous system acquires, refines, and automates movement skills through practice. In athletic programming, it explains why exercise selection and progression must account for skill acquisition stage — not just physiological load capacity.",
+      sections: [
+        {
+          heading: "The Three Stages of Motor Learning",
+          content: "Fitts and Posner's classic model describes motor learning as a three-stage progression:",
+          bullets: [
+            "Cognitive stage: Movement is effortful, conscious, and error-prone. High variability between repetitions. This is where beginners live for most exercises.",
+            "Associative stage: Movement becomes more consistent. Errors are detected and corrected. Practice is still deliberate but less exhausting.",
+            "Autonomous stage: Movement is automatic and efficient. Cognitive attention is freed for strategic decisions. Performance under fatigue and stress improves dramatically."
+          ],
+        },
+        {
+          heading: "Why Motor Learning Matters for Programming",
+          content: "Beginner athletes are in the cognitive stage for most movements simultaneously — every new exercise is a skill acquisition challenge layered on top of a physical stress. Loading a movement a beginner hasn't yet automated adds injury risk and limits the training stimulus (because form breakdown limits load). Experienced athletes who have automated their primary movement patterns can absorb much higher loads because the neural efficiency is already established.",
+        },
+        {
+          heading: "Practice Variability and Skill Acquisition",
+          content: "Research on contextual interference shows that variable practice — performing multiple skills in an interleaved sequence — produces slower initial acquisition but superior long-term retention and transfer compared to blocked practice (one skill at a time). For athletic populations, this means some programming variability is beneficial for long-term movement development, even if it slows early gains.",
+        },
+        {
+          heading: "Motor Learning in TrainChat's Coaching Intelligence",
+          content: "TrainChat's coaching intelligence adjusts exercise complexity recommendations based on training history signals. Movement patterns are introduced progressively — simpler variations first, with complexity added as mastery is demonstrated. For experienced athletes, the system maintains the primary movement patterns that have been automated while adding variation to drive continued adaptation.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is motor learning in fitness?", a: "Motor learning is the process by which the nervous system acquires and automates movement skills through practice. It explains why exercises need to be learned before they can be effectively loaded — and why programming must account for skill acquisition stage, not just physical capacity." },
+      { q: "How does motor learning affect exercise programming?", a: "Beginners are in the cognitive stage for most movements — exercises are effortful, inconsistent, and require conscious attention. This affects how much load is appropriate, which exercises to select, and how quickly to progress. Advanced athletes with automated movement patterns can absorb much higher loads and more training stress." },
+      { q: "Does TrainChat account for motor learning stages?", a: "Yes. TrainChat's exercise selection and progression logic considers training history — more experienced athletes get more complex movement progressions, while beginners build on simpler patterns before advancing. The coaching intelligence layer avoids overloading movements that haven't been adequately learned." }
+    ],
+  },
+  {
+    slug: "cns-load-management",
+    title: "CNS Load Management",
+    shortDefinition: "The programming practice of monitoring and managing the neural demand of training — recognizing that high-intensity, maximal-effort work taxes the central nervous system beyond what muscle soreness reveals.",
+    metaDescription: "CNS load management is the practice of tracking and managing the neural demand of training across the week. Learn why CNS fatigue is invisible compared to muscle soreness and how it shapes intelligent programming.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "adaptive-programming", label: "Adaptive Programming" },
+      { slug: "intelligent-periodization", label: "Intelligent Periodization" },
+      { slug: "training-load-management", label: "Training Load Management" },
+    ],
+    body: {
+      directAnswer: "CNS load management is the programming practice of monitoring and managing the neural demand of training — recognizing that heavy compound work, maximal efforts, and explosive training place central nervous system stress that does not correspond to muscle soreness and requires dedicated recovery time.",
+      sections: [
+        {
+          heading: "Why CNS Fatigue Is Invisible",
+          content: "Muscle soreness (DOMS) is a reliable indicator of local tissue stress. CNS fatigue is not visible in the same way — an athlete with significant neural fatigue can feel fine musculoskeletally while their neural drive, motor unit recruitment, and rate coding capacity are significantly compromised. This mismatch between perceived readiness and actual neural capacity is one of the most common causes of accumulated overreaching.",
+        },
+        {
+          heading: "Which Training Creates the Highest CNS Demand",
+          content: "Not all training stresses the CNS equally. High CNS demand movements include:",
+          bullets: [
+            "Maximal and near-maximal strength efforts (>90% 1RM)",
+            "Explosive and ballistic work (Olympic lifts, jumps, throws)",
+            "High-velocity resistance training",
+            "Heavy compound movements (squat, deadlift, press) at high intensities",
+            "Competition or testing events"
+          ],
+        },
+        {
+          heading: "Lower CNS Demand Training",
+          content: "Hypertrophy-range work (moderate loads, higher reps), isolation exercises, slow-tempo movements, and aerobic conditioning place relatively lower neural demand. This is why intelligent programming alternates high and low CNS demand days — preserving neural recovery without sacrificing training volume.",
+        },
+        {
+          heading: "CNS Load Management in TrainChat",
+          content: "TrainChat's coaching intelligence spaces high-CNS demand sessions across the week, avoids consecutive days of maximal neural effort, and reads fatigue signals to identify accumulated CNS stress before it becomes overreaching. When you report that performance is dropping on movements you've been executing well, that signal is evaluated in the context of CNS load distribution — not just total volume.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is CNS fatigue in training?", a: "CNS fatigue is the accumulation of stress in the central nervous system from high-intensity, maximal-effort, and explosive training. Unlike muscle soreness, CNS fatigue is not easily felt — athletes can feel physically fresh while neural capacity is significantly compromised." },
+      { q: "How does CNS fatigue affect performance?", a: "CNS fatigue reduces neural drive, motor unit recruitment, and rate coding capacity — meaning the muscles can't be activated as effectively even when they've recovered locally. This shows up as unexpected performance drops, reduced explosiveness, and difficulty reaching effort levels that were recently manageable." },
+      { q: "How does TrainChat manage CNS load?", a: "TrainChat's coaching intelligence spaces high-demand sessions, avoids consecutive maximal effort days, and watches for feedback signals that indicate accumulated neural fatigue. When CNS stress appears elevated, the system adjusts load and intensity to allow neural recovery before the next high-demand session." }
+    ],
+  },
+  {
+    slug: "training-load-management",
+    title: "Training Load Management",
+    shortDefinition: "The systematic monitoring and management of training stress over time — balancing sufficient stimulus for adaptation against the accumulation of fatigue that increases injury risk and degrades performance.",
+    metaDescription: "Training load management is the systematic balancing of training stimulus against fatigue accumulation. Learn the acute:chronic workload ratio, injury risk implications, and how AI coaching applies load management principles.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "adaptive-programming", label: "Adaptive Programming" },
+      { slug: "dynamic-progression", label: "Dynamic Progression" },
+      { slug: "cns-load-management", label: "CNS Load Management" },
+    ],
+    body: {
+      directAnswer: "Training load management is the systematic monitoring and control of training stress over time — ensuring sufficient stimulus for adaptation while preventing the accumulation of fatigue that elevates injury risk and degrades performance. It operates through tracking both acute (recent) and chronic (established) load to manage the relationship between them.",
+      sections: [
+        {
+          heading: "The Acute:Chronic Workload Ratio",
+          content: "The acute:chronic workload ratio (ACWR) — developed by Tim Gabbett and colleagues — compares recent training load (typically 1-week average) to established load capacity (typically 4-week average). Research shows that spikes in the acute:chronic ratio — sudden increases in load relative to established baseline — are associated with elevated injury incidence. The 'danger zone' for many populations is an ACWR above 1.5.",
+        },
+        {
+          heading: "The Training-Injury Prevention Paradox",
+          content: "Gabbett's research identified an important counterintuitive finding: high chronic training loads are actually protective against injury, while rapid acute load spikes are the primary risk factor. This means the solution to injury prevention is not reducing load — it's building chronic load capacity gradually so that the same absolute load represents a lower relative spike.",
+        },
+        {
+          heading: "Components of Training Load",
+          content: "Training load is multidimensional — it includes:",
+          bullets: [
+            "Volume: total sets, reps, distance, or time",
+            "Intensity: load relative to maximum capacity (% 1RM, RPE, % VO2max)",
+            "Frequency: sessions per week, recovery time between sessions",
+            "Density: work-to-rest ratios within sessions",
+            "Complexity: neural demand, technical difficulty, movement novelty"
+          ],
+        },
+        {
+          heading: "Training Load Management in TrainChat",
+          content: "TrainChat's coaching intelligence monitors load across all dimensions and flags hazardous load spikes before executing them. When a requested change would create an acute:chronic ratio spike — more volume than the training history supports — the system stages the progression to stay within safe load-increase thresholds. Rapid jumps that look reasonable in isolation are evaluated against established training history.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is training load management?", a: "Training load management is the systematic monitoring and control of training stress over time — balancing sufficient stimulus for adaptation against the fatigue accumulation that increases injury risk. It uses metrics like the acute:chronic workload ratio to guide load progression decisions." },
+      { q: "What is the acute:chronic workload ratio?", a: "The acute:chronic workload ratio compares recent training load (typically 1-week average) to established load capacity (typically 4-week rolling average). Ratios above 1.5 — meaning recent load is 50% higher than the established baseline — are associated with elevated injury risk across multiple sports." },
+      { q: "Does TrainChat use load management principles?", a: "Yes. TrainChat's coaching intelligence evaluates load changes against training history before executing them. Requests that would create hazardous acute load spikes are staged — implementing the change progressively rather than immediately — to stay within safe progression thresholds." }
+    ],
+  },
+  {
+    slug: "supercompensation",
+    title: "Supercompensation",
+    shortDefinition: "The physiological process by which the body rebuilds to a higher level of capacity after a training stimulus — and the programming principle of timing the next stimulus to coincide with this elevated state.",
+    metaDescription: "Supercompensation is the process by which the body rebuilds to a higher capacity after training. Learn how this principle underlies all training progress and how adaptive programming optimizes supercompensation timing.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "performance-adaptation", label: "Performance Adaptation" },
+      { slug: "dynamic-progression", label: "Dynamic Progression" },
+      { slug: "intelligent-periodization", label: "Intelligent Periodization" },
+    ],
+    body: {
+      directAnswer: "Supercompensation is the physiological process by which the body rebuilds to a higher level of capacity following a training stimulus and adequate recovery — and the programming principle of timing the next training stimulus to coincide with this elevated state rather than applying it during fatigue or after the supercompensation window has closed.",
+      sections: [
+        {
+          heading: "The Supercompensation Cycle",
+          content: "The supercompensation cycle has four phases that follow every training stimulus:",
+          bullets: [
+            "Fatigue phase: Immediately after training, performance capacity is reduced. Recovery resources are being allocated.",
+            "Recovery phase: The body repairs damaged tissue and replenishes depleted energy stores, returning to baseline.",
+            "Supercompensation phase: The body overshoots baseline — rebuilding to a higher capacity than existed before the stimulus.",
+            "Involution: If no new stimulus arrives, the elevated capacity returns to baseline over time."
+          ],
+        },
+        {
+          heading: "The Timing Problem",
+          content: "Supercompensation makes training timing critical. Apply the next stimulus during the fatigue phase (too early), and you accumulate fatigue without capturing the adaptation benefit. Wait too long and the supercompensation window closes — you return to baseline and the stimulus's benefit is lost. The goal of periodization is to time successive stimuli to land during the supercompensation window.",
+        },
+        {
+          heading: "Why Supercompensation Timing Is Individual",
+          content: "The duration of each supercompensation phase varies between individuals — influenced by training status, recovery quality, nutrition, sleep, and age. A 22-year-old athlete with high recovery capacity may supercompensate in 48 hours. A 40-year-old masters athlete may need 72–96 hours for the same stimulus. Fixed programming schedules don't account for this variation; adaptive programming does.",
+        },
+        {
+          heading: "Supercompensation in TrainChat",
+          content: "TrainChat's dynamic progression and adaptive session scheduling attempt to align stimulus timing with individual supercompensation patterns. When feedback signals indicate that sessions are arriving during the fatigue phase (accumulating soreness, dropping performance), the system adjusts session spacing. When performance is consistently plateaued without fatigue signals, stimulus timing may be too conservative — and the program advances.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is supercompensation?", a: "Supercompensation is the physiological process where the body rebuilds to a higher capacity after a training stimulus and adequate recovery — temporarily exceeding the pre-training baseline. This elevated state is the target for the next training stimulus to drive continued adaptation." },
+      { q: "Why does supercompensation timing matter for training?", a: "If the next training stimulus arrives too early (during fatigue) or too late (after the supercompensation window closes), the adaptation benefit is reduced or lost. Effective programming times successive stimuli to land during the supercompensation window — which varies by individual." },
+      { q: "How does TrainChat optimize supercompensation?", a: "TrainChat monitors feedback signals — performance trends, reported fatigue, session difficulty — to identify whether stimulus timing is landing in the supercompensation window. Session spacing and load progression adjust based on these signals rather than a fixed calendar assumption about recovery duration." }
+    ],
+  },
+  {
+    slug: "said-principle",
+    title: "SAID Principle",
+    shortDefinition: "Specific Adaptation to Imposed Demands — the foundational training principle that the body adapts specifically to the demands placed upon it, making specificity of training a non-negotiable programming constraint.",
+    metaDescription: "The SAID principle (Specific Adaptation to Imposed Demands) is the foundational principle that training adaptations are specific to the stress applied. Learn what SAID means and why it governs every programming decision.",
+    category: "Exercise Science",
+    relatedConcepts: [
+      { slug: "performance-adaptation", label: "Performance Adaptation" },
+      { slug: "adaptive-programming", label: "Adaptive Programming" },
+      { slug: "coaching-intelligence", label: "Coaching Intelligence" },
+    ],
+    body: {
+      directAnswer: "The SAID Principle — Specific Adaptation to Imposed Demands — states that the body adapts specifically to the demands placed upon it. Training for strength produces strength adaptations. Training for power produces power adaptations. This specificity principle makes goal-aligned exercise selection a non-negotiable programming constraint, not a preference.",
+      sections: [
+        {
+          heading: "What SAID Means in Practice",
+          content: "SAID has direct implications for every programming decision:",
+          bullets: [
+            "Strength development requires training with heavy loads that stress the neuromuscular system at high force outputs",
+            "Power development requires training with high-velocity movements that stress rate of force development",
+            "Hypertrophy requires training with sufficient mechanical tension and metabolic stress in the target muscle groups",
+            "Endurance requires sustained aerobic stress that forces cardiovascular and metabolic adaptation",
+            "Skill transfer requires practicing movements that match the target performance pattern — not just related movements"
+          ],
+        },
+        {
+          heading: "The Limits of Transfer",
+          content: "SAID also implies that transfer between training modalities is limited and specific. General fitness training develops general fitness. Sport-specific training develops sport-specific capacity. Athletes who train exclusively in the gym and expect direct transfer to their sport performance are misapplying the principle — the adaptations are real, but they transfer only along specific dimensions that match the imposed demands.",
+        },
+        {
+          heading: "SAID and Program Design",
+          content: "SAID is the reason exercise selection matters as much as load progression. A program that applies progressive overload to exercises that don't match the training goal will produce real adaptations — just not the targeted ones. Matching the training demand to the adaptation target is the specificity problem that coaching intelligence must solve for each athlete.",
+        },
+        {
+          heading: "SAID in TrainChat's Coaching Intelligence",
+          content: "TrainChat's focus mode system implements SAID at the program architecture level. When you declare a training goal — strength, hypertrophy, athleticism, conditioning — the program's exercise selection, load prescriptions, and volume distribution are structured to impose the demands that produce the targeted adaptation. Goal shifts restructure the entire specificity architecture, not just individual exercises.",
+        },
+      ],
+    },
+    faqs: [
+      { q: "What is the SAID principle?", a: "SAID stands for Specific Adaptation to Imposed Demands. It's the foundational training principle that the body adapts specifically to the demands placed upon it — strength training produces strength, power training produces power, endurance training produces endurance. This specificity principle governs exercise selection and program design." },
+      { q: "How does the SAID principle affect exercise selection?", a: "SAID means exercises must be chosen to match the adaptation target — not just to 'work the muscle' in a general sense. A leg press develops quad strength differently than a barbell squat because the imposed demands are different. For sport-specific athletes, the demand-adaptation specificity must extend to the movement patterns and energy systems of the target performance." },
+      { q: "Does TrainChat apply the SAID principle?", a: "Yes. TrainChat's focus mode system applies SAID at the program level — matching exercise selection, load prescriptions, and volume distribution to the adaptation target declared by the athlete. When goals change, the specificity architecture of the program changes accordingly." }
+    ],
+  },
 ];
 
 export const conceptsBySlug = Object.fromEntries(concepts.map((c) => [c.slug, c]));

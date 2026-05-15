@@ -76,7 +76,7 @@
     <priority>0.85</priority>
   </url>
 
-  <!-- Concept Library -->
+  <!-- Concept Library (Phase 2 — original 9) -->
   <url>
     <loc>https://www.trainchat.ai/concepts</loc>
     <changefreq>monthly</changefreq>
@@ -128,6 +128,33 @@
     <priority>0.85</priority>
   </url>
 
+  <!-- Concept Library (Phase 4 — 5 research-adjacent concepts) -->
+  <url>
+    <loc>https://www.trainchat.ai/concepts/motor-learning</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/concepts/cns-load-management</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/concepts/training-load-management</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/concepts/supercompensation</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/concepts/said-principle</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+
   <!-- Glossary -->
   <url>
     <loc>https://www.trainchat.ai/glossary</loc>
@@ -135,7 +162,7 @@
     <priority>0.85</priority>
   </url>
 
-  <!-- Authority / Entity Pages -->
+  <!-- Phase 3 — Entity Authority Pages -->
   <url>
     <loc>https://www.trainchat.ai/research</loc>
     <changefreq>monthly</changefreq>
@@ -160,6 +187,18 @@
     <loc>https://www.trainchat.ai/content</loc>
     <changefreq>monthly</changefreq>
     <priority>0.75</priority>
+  </url>
+
+  <!-- Phase 4 — Methodology & Philosophy -->
+  <url>
+    <loc>https://www.trainchat.ai/methodology</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/training-philosophy</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
   </url>
 
   <!-- Support / Brand Pages -->
