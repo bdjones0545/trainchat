@@ -1,0 +1,370 @@
+TrainChat — Check-In Intelligence Refinement Sprint
+
+Objective:
+Transform the Check-In system from:
+“smart wellness tracking”
+into:
+a visibly adaptive coaching intelligence system.
+
+Core Principle:
+Check-ins must create:
+- visible program impact
+- longitudinal coaching continuity
+- persistent recovery intelligence
+- structural training adaptation
+- emotional coaching presence
+
+The user should never wonder:
+“Did my check-in actually matter?”
+
+==================================================
+P0 — STRUCTURAL ADAPTATIONS (HIGHEST PRIORITY)
+==================================================
+
+Problem:
+LIGHT_MODIFICATION and GREEN_LIGHT_PROGRESSION currently write coaching notes instead of structurally modifying training.
+
+Fix:
+Convert readiness adaptations into real mutation-engine edits.
+
+LIGHT_MODIFICATION:
+- reduce accessory set counts directly in DB
+- optionally reduce accessory intensity targets
+- preserve primary movement quality
+
+Examples:
+- remove 1 accessory set
+- reduce density circuits
+- reduce conditioning finisher volume
+
+GREEN_LIGHT_PROGRESSION:
+- increase load targets
+- add progression set where appropriate
+- unlock progression pathway directly in session structure
+
+PAIN_MODIFICATION:
+- identify exercises affecting painful region
+- swap or modify movements automatically
+- annotate substitutions clearly
+
+RECOVERY_DELOAD:
+- support BOTH:
+  - session-only deload
+  - week-wide deload
+- do not automatically deload an entire week from one low-readiness day
+
+Goal:
+Readiness must visibly change training structure.
+
+==================================================
+P0 — PROGRAM PANEL ADAPTATION VISIBILITY
+==================================================
+
+Add visible readiness-driven adaptation indicators directly inside the Program Panel.
+
+Add:
+- “Adjusted from check-in” badge
+- readiness mode indicator
+- adaptation timestamp
+- adaptation reasoning chip
+- recovery safeguard status
+
+Examples:
+- “Adjusted today · Recovery protection active”
+- “Pain-modified session”
+- “Progression unlocked from high readiness”
+
+Goal:
+Users should SEE that their check-in changed the program.
+
+==================================================
+P0 — POST-CONFIRMATION SPECIFICITY
+==================================================
+
+Problem:
+“Today’s plan adjusted” is vague.
+
+Fix:
+After adaptation confirmation, explicitly summarize:
+- what changed
+- why it changed
+- what stayed untouched
+
+Examples:
+- “Removed 1 set from pull-downs and cable rows. Primary lifts unchanged.”
+- “Swapped split squats due to knee discomfort.”
+- “Increased top-set load targets based on strong recovery trends.”
+
+Goal:
+Close the coaching feedback loop.
+
+==================================================
+P1 — ROLLING READINESS HISTORY
+==================================================
+
+Problem:
+Only the most recent check-in exists in agent memory.
+
+Fix:
+Store rolling readiness context inside agentMemory.
+
+Add:
+- last 7 composites
+- trend direction
+- volatility score
+- rolling soreness average
+- rolling sleep average
+- recovery stability classification
+
+Examples:
+- improving
+- declining
+- unstable
+- stable-high
+- stable-low
+
+Goal:
+Atlas should understand recovery trends, not isolated days.
+
+==================================================
+P1 — READINESS TREND INJECTION INTO ATLAS
+==================================================
+
+Inject readiness-trend summaries into Atlas system context.
+
+Examples:
+- “Recent readiness trend: declining over 5 days.”
+- “Recovery volatility elevated this week.”
+- “Sleep scores improving steadily.”
+
+Atlas should naturally reference:
+- patterns
+- recovery continuity
+- adaptation rationale
+
+Goal:
+Atlas should feel longitudinally aware.
+
+==================================================
+P1 — RECOVERY PATTERN MEMORY FORMATION
+==================================================
+
+Problem:
+The recovery_pattern memory type exists but is never populated.
+
+Fix:
+Create memory observations from repeated readiness trends.
+
+Examples:
+- chronic poor sleep
+- recurring Monday soreness
+- persistent recovery instability
+- elevated soreness after lower-body sessions
+- consistent high readiness during deload weeks
+
+Rules:
+- require repeated signals
+- confidence-scored
+- decay-aware
+- user-correctable
+
+Goal:
+Check-ins should create persistent coaching intelligence.
+
+==================================================
+P1 — FORECAST → ATLAS INTEGRATION
+==================================================
+
+Problem:
+Forecast signals exist in isolation.
+
+Fix:
+Inject active Forecast signals into Atlas coaching context.
+
+Examples:
+- FATIGUE_RISK
+- RECOVERY_DIP_RISK
+- PROGRESSION_OPPORTUNITY
+- PLATEAU_RISK
+
+Atlas should proactively say:
+- “I’ve noticed fatigue accumulating.”
+- “You’re recovering well enough to progress this week.”
+- “Your recovery trend suggests we should monitor lower-body fatigue.”
+
+Goal:
+Forecast intelligence should influence coaching dialogue.
+
+==================================================
+P1 — CONNECT FORECAST TO ADAPTATION ENGINE
+==================================================
+
+Problem:
+Forecast detects risks but does not influence training adaptation.
+
+Fix:
+Allow active Forecast signals to:
+- bias adaptation recommendations
+- modify readiness thresholds
+- trigger proactive adaptation suggestions
+
+Examples:
+- active FATIGUE_RISK lowers progression aggressiveness
+- RECOVERY_DIP_RISK biases toward session-level deload
+- PROGRESSION_OPPORTUNITY increases progression confidence
+
+Goal:
+Forecast should influence coaching behavior, not just UI cards.
+
+==================================================
+P2 — READINESS MODEL IMPROVEMENTS
+==================================================
+
+Improve adaptation intelligence.
+
+Add:
+- rolling averages
+- acute vs chronic fatigue comparison
+- volatility detection
+- repeated moderate-signal escalation
+- trend weighting
+- day-of-week pattern detection
+
+Fix:
+- LIGHT_MODIFICATION threshold too aggressive
+- pain score 3 should inject pain-awareness
+- stable 3/5 scores should not automatically modify training
+
+Goal:
+The system should behave like coaching logic, not score math.
+
+==================================================
+P2 — CHECK-IN UX REFINEMENT
+==================================================
+
+Rework UX hierarchy and emotional tone.
+
+Reorder dimensions:
+1. Sleep
+2. Energy
+3. Soreness
+4. Pain
+5. Stress
+6. Motivation
+
+Add:
+- progress bar
+- selection micro-animations
+- swipe-dismiss
+- keyboard-aware note field
+- haptic feedback (mobile)
+- progressive collapse after answering sections
+
+Rewrite language:
+- “How’s the body holding up?”
+- “Recovery today?”
+- “Mental load today?”
+
+Replace CTA:
+- “Send to Atlas”
+OR
+- “Update My Coach”
+
+Goal:
+The experience should feel coach-like, not clinical.
+
+==================================================
+P2 — COACHING PRESENCE IMPROVEMENTS
+==================================================
+
+Improve post-check-in emotional intelligence.
+
+Current:
+“Recovery looks a little low…”
+
+Replace with:
+- stronger coaching conviction
+- contextual references
+- visible adaptation rationale
+
+Examples:
+- “You’re showing elevated fatigue today — I’m protecting accessory volume so your main work stays sharp.”
+- “Recovery looks strong. I’m progressing intensity slightly this session.”
+- “Your soreness trend has been climbing for several days. I’m keeping today conservative.”
+
+Goal:
+The system should feel:
+aware,
+confident,
+and proactive.
+
+==================================================
+P2 — READINESS TIMELINE
+==================================================
+
+Create a longitudinal adaptation timeline.
+
+Show:
+- check-in score
+- adaptation triggered
+- changes applied
+- recovery trend
+- session outcome
+
+Goal:
+Make the coaching intelligence visible across time.
+
+==================================================
+P3 — DAY-OF-WEEK PATTERN DETECTION
+==================================================
+
+Detect recurring recovery patterns tied to weekly structure.
+
+Examples:
+- Mondays consistently poor
+- lower-body days causing elevated soreness
+- sleep crashes after high-CNS sessions
+
+Surface:
+- structural recommendations
+- coaching observations
+- proactive program modifications
+
+Goal:
+The system should learn athlete-specific recovery rhythms.
+
+==================================================
+P3 — ADAPTATION REVERSIBILITY
+==================================================
+
+Allow users to:
+- undo readiness-driven adaptations
+- revert session modifications
+- remove active deload state
+
+Add:
+- “Revert adaptation”
+- “Resume original session”
+- adaptation history entries
+
+Goal:
+Adaptation should feel safe and controllable.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+After this sprint:
+- check-ins structurally modify training
+- users can SEE the modifications
+- Atlas understands recovery trends
+- repeated readiness patterns form memory
+- Forecast influences coaching behavior
+- adaptations become longitudinally visible
+- readiness feels integrated into the coaching relationship
+- the system feels adaptive across time
+
+Final Direction:
+The Check-In system should become:
+the nervous system of TrainChat’s coaching intelligence,
+not a wellness form attached to a workout app.

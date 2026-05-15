@@ -55,6 +55,11 @@ export interface ReadinessScore {
   fatigueRisk: FatigueRisk;
 }
 
+export interface ChangeDetail {
+  exerciseName: string;
+  change: string;
+}
+
 export interface AdaptationResult {
   mode: AdaptationMode;
   readiness: ReadinessScore;
@@ -66,7 +71,19 @@ export interface AdaptationResult {
   todaySessionId: number | null;
   changesApplied: number;
   changeLogId: number | null;
+  /** Concrete list of structural changes made — shown in confirmation UI */
+  changesDetail: ChangeDetail[] | null;
+  /** True if pain score == 3 and another mode was selected — injects pain-awareness */
+  hasPainWarning: boolean;
 }
+
+type SessionExercise = {
+  id: number;
+  name: string;
+  category: string | null;
+  sets: number | null;
+  notes: string | null;
+};
 
 // ─── Readiness Score ─────────────────────────────────────────────────────────
 // Converts all 6 dimensions into a single 6-30 composite score.
@@ -112,6 +129,8 @@ export function computeReadinessScore(s: CheckInScores): ReadinessScore {
 }
 
 // ─── Rules Engine ─────────────────────────────────────────────────────────────
+// Fixed threshold: all-3 scores (midpoint = composite 18) correctly returns
+// TRAIN_AS_PLANNED. LIGHT_MODIFICATION requires clear compromise signals.
 
 export function determineAdaptationMode(s: CheckInScores): AdaptationMode {
   const readiness = computeReadinessScore(s);
@@ -137,35 +156,44 @@ export function determineAdaptationMode(s: CheckInScores): AdaptationMode {
     s.painScore <= 1
   ) return "GREEN_LIGHT_PROGRESSION";
 
-  // LIGHT_MODIFICATION — one or more suboptimal signals
-  if (
-    s.energyScore <= 3 ||
-    s.sorenessScore >= 3 ||
-    s.stressScore >= 3 ||
-    s.sleepScore <= 3
-  ) return "LIGHT_MODIFICATION";
+  // LIGHT_MODIFICATION — requires at least one clearly compromised signal,
+  // OR two concurrent moderate signals. All-3 scores (midpoint) = TRAIN_AS_PLANNED.
+  const clearlyCompromised =
+    s.energyScore <= 2 ||
+    s.sleepScore <= 2 ||
+    s.sorenessScore >= 4 ||
+    s.stressScore >= 4;
+
+  const twoModerateSignals =
+    (s.energyScore <= 3 && s.sorenessScore >= 3) ||
+    (s.sleepScore <= 3 && s.sorenessScore >= 3) ||
+    (s.sleepScore <= 3 && s.stressScore >= 3) ||
+    (s.energyScore <= 3 && s.stressScore >= 3);
+
+  if (clearlyCompromised || twoModerateSignals) return "LIGHT_MODIFICATION";
 
   return "TRAIN_AS_PLANNED";
 }
 
 // ─── Coach Message Builder ────────────────────────────────────────────────────
-// One short coaching statement shown immediately after check-in saves.
-// UX-first: coaching tone, never medical. No auto-change language.
+// Stronger, more conviction-forward coaching language.
 
 function buildCoachMessage(mode: AdaptationMode, s: CheckInScores): string {
   switch (mode) {
     case "TRAIN_AS_PLANNED":
-      return "You look ready for normal training today.";
+      return "Signals look solid — execute the plan as designed today.";
     case "LIGHT_MODIFICATION":
       return s.sorenessScore >= 3
-        ? "Soreness is elevated — I can make today more joint-friendly."
-        : "Recovery looks a little low — I can reduce volume today.";
+        ? `Soreness is elevated today — I'm protecting accessory volume so your main work stays sharp.`
+        : s.sleepScore <= 2
+        ? `Sleep was rough — I'm pulling back accessory work so today's session stays productive.`
+        : `Recovery is a bit lower today — I'm trimming accessory volume to protect output quality.`;
     case "PAIN_MODIFICATION":
-      return "Pain flagged — I can adjust today's session to keep things comfortable.";
+      return `Pain flagged — I'm adjusting today's session to keep things safe and productive.`;
     case "RECOVERY_DELOAD":
-      return "Recovery looks lower today. I can reduce load and keep quality high.";
+      return `Recovery is compromised today — I'm reducing load across the session. The adaptation happens during rest.`;
     case "GREEN_LIGHT_PROGRESSION":
-      return "Everything looks dialled in — great day to push for progression.";
+      return `Everything is dialled in — great conditions to push for progression today.`;
   }
 }
 
@@ -176,13 +204,13 @@ function buildSummary(mode: AdaptationMode, s: CheckInScores): string {
     case "TRAIN_AS_PLANNED":
       return "Training as planned today. Signals are solid.";
     case "LIGHT_MODIFICATION":
-      return `Recovery a little lower today — energy ${s.energyScore}/5${s.sorenessScore >= 3 ? `, soreness ${s.sorenessScore}/5` : ""}${s.stressScore >= 3 ? `, stress ${s.stressScore}/5` : ""}. Primary work stays intact.`;
+      return `Recovery a little lower today — energy ${s.energyScore}/5${s.sorenessScore >= 3 ? `, soreness ${s.sorenessScore}/5` : ""}${s.stressScore >= 3 ? `, stress ${s.stressScore}/5` : ""}. Primary work stays intact, accessory volume reduced.`;
     case "PAIN_MODIFICATION":
-      return `Pain flagged (${s.painScore}/5). Conservative loading recommended — avoid movements causing discomfort.`;
+      return `Pain flagged (${s.painScore}/5). Conservative loading applied — avoid movements causing discomfort.`;
     case "RECOVERY_DELOAD":
-      return `Recovery lower today — sleep ${s.sleepScore}/5, soreness ${s.sorenessScore}/5, energy ${s.energyScore}/5. Reducing load and keeping quality high.`;
+      return `Recovery lower today — sleep ${s.sleepScore}/5, soreness ${s.sorenessScore}/5, energy ${s.energyScore}/5. Load reduced across the session.`;
     case "GREEN_LIGHT_PROGRESSION":
-      return `All signals solid — sleep ${s.sleepScore}/5, energy ${s.energyScore}/5. Good day to push for progression.`;
+      return `All signals solid — sleep ${s.sleepScore}/5, energy ${s.energyScore}/5. Session notes updated to chase progression on primary lifts.`;
   }
 }
 
@@ -191,110 +219,198 @@ function buildCoachExplanation(mode: AdaptationMode, s: CheckInScores): string {
     case "TRAIN_AS_PLANNED":
       return "Your readiness signals are in a good range today. Sleep, energy, and recovery are all working in your favour. Stick to the plan and hit your targets as prescribed.";
     case "LIGHT_MODIFICATION":
-      return `Today's signals show manageable fatigue — ${s.sorenessScore >= 3 ? "some soreness, " : ""}${s.energyScore <= 3 ? "lower energy, " : ""}${s.stressScore >= 3 ? "elevated stress. " : ""}Let's keep quality high and reduce unnecessary fatigue. If you adjust, I'll cut one accessory set per movement — primary work stays untouched.`;
+      return `Today's signals show manageable fatigue — ${s.sorenessScore >= 3 ? "elevated soreness, " : ""}${s.energyScore <= 3 ? "lower energy, " : ""}${s.stressScore >= 3 ? "elevated stress. " : ""}I'll keep all primary lifts untouched and remove 1 set from accessory movements to protect output quality without gutting the session.`;
     case "PAIN_MODIFICATION":
-      return `A pain level of ${s.painScore}/5 is worth respecting. If you adjust, I'll flag your session to keep loading conservative and steer clear of exercises that create discomfort. Smart modifications now protect long-term progress.`;
+      return `A pain level of ${s.painScore}/5 is worth respecting. I'll flag today's session to keep loading conservative and steer away from exercises that may aggravate it. Smart modifications now protect long-term progress.`;
     case "RECOVERY_DELOAD":
-      return `Recovery looks lower today. The combination of ${s.sleepScore <= 2 ? "poor sleep" : "disrupted sleep"}${s.sorenessScore >= 4 ? ", significant soreness" : ""}${s.stressScore >= 4 ? ", and high stress" : ""} signals accumulated fatigue. If you adjust, I'll reduce loads and keep the session useful — not just easy.`;
+      return `Recovery is lower today. The combination of ${s.sleepScore <= 2 ? "poor sleep" : "disrupted sleep"}${s.sorenessScore >= 4 ? ", significant soreness" : ""}${s.stressScore >= 4 ? ", and high stress" : ""} signals accumulated fatigue. I'll reduce loads and keep the session useful — not easy, just smart.`;
     case "GREEN_LIGHT_PROGRESSION":
-      return `All signals are solid — excellent sleep, high energy, low soreness and stress. If you want to capitalise on this, I can update today's session notes to push for progression on your primary lifts.`;
+      return `All signals are solid — excellent sleep, high energy, low soreness and stress. I've updated primary lift notes to chase progression today. If your working sets feel submaximal at 2+ RIR, add 2.5–5kg.`;
   }
 }
 
 // ─── EditPlan Builder (deterministic) ─────────────────────────────────────────
 // Builds the plan but does NOT apply it. Applied only on user confirmation.
+// Now includes structural exercise-level changes (set reductions, progression notes).
+
+const ACCESSORY_CATEGORIES = new Set(["accessory", "secondary", "trunk", "finisher"]);
+const PRIMARY_CATEGORIES = new Set(["primary", "power"]);
 
 export function buildEditPlanForMode(
   mode: AdaptationMode,
   scores: CheckInScores,
   todaySession: { id: number; label: string },
-  currentWeek: { id: number }
-): EditPlan | null {
+  currentWeek: { id: number },
+  exercises?: SessionExercise[]
+): (EditPlan & { changesDetail?: ChangeDetail[] }) | null {
   const summary = buildSummary(mode, scores);
 
   switch (mode) {
     case "TRAIN_AS_PLANNED":
       return null;
 
-    case "LIGHT_MODIFICATION":
+    case "LIGHT_MODIFICATION": {
+      // Structural: reduce accessory set counts by 1 in DB
+      const accessoryExercises = (exercises ?? [])
+        .filter((ex) => ACCESSORY_CATEGORIES.has(ex.category ?? ""))
+        .slice(0, 4);
+
+      const exerciseChanges = accessoryExercises.map((ex) => ({
+        type: "update_exercise" as const,
+        id: ex.id,
+        updates: {
+          sets: Math.max(1, (ex.sets ?? 3) - 1),
+          notes: ex.notes
+            ? `${ex.notes} · Check-in: −1 set (recovery protection)`
+            : `Check-in adjustment: reduced by 1 set. Recovery is lower today — keep quality high.`,
+        },
+      }));
+
+      const changesDetail: ChangeDetail[] = accessoryExercises.map((ex) => ({
+        exerciseName: ex.name,
+        change: `${ex.sets ?? 3} → ${Math.max(1, (ex.sets ?? 3) - 1)} sets`,
+      }));
+
+      const namedExercises = accessoryExercises.length > 0
+        ? accessoryExercises.map((e) => e.name).join(", ")
+        : "accessory movements";
+
       return {
         intent: "light_modification",
         scope: "session",
         changeSummary: summary,
+        changesDetail,
         changes: [
+          ...exerciseChanges,
           {
             type: "update_session",
             id: todaySession.id,
             updates: {
-              coachingNotes: `Check-in adjustment: recovery is lower today. Energy ${scores.energyScore}/5${scores.sorenessScore >= 3 ? `, soreness ${scores.sorenessScore}/5` : ""}. Keep all primary lifts — cut 1 set from accessory movements. Stop early if fatigue compounds quickly.`,
-            },
-          },
-          {
-            type: "update_week",
-            id: currentWeek.id,
-            updates: {
-              notes: `Check-in: moderate fatigue signals. Trim 1 accessory set per session. Primary structure intact.`,
+              coachingNotes: `Check-in: recovery lower today (energy ${scores.energyScore}/5${scores.sorenessScore >= 3 ? `, soreness ${scores.sorenessScore}/5` : ""}). Removed 1 set from ${namedExercises}. Primary movements unchanged — keep quality high.`,
             },
           },
         ],
       };
+    }
 
-    case "PAIN_MODIFICATION":
+    case "PAIN_MODIFICATION": {
+      // Structural: flag session emphasis + conservative load notes per exercise
+      const painNoteText = `Pain ${scores.painScore}/5 flagged. Reduce load on any movement causing discomfort. Use machines or controlled-ROM alternatives. Skip if pain exceeds 3/10 during the set.`;
+
+      const exerciseChanges = (exercises ?? [])
+        .filter((ex) => !["warmup", "activation", "recovery"].includes(ex.category ?? ""))
+        .slice(0, 6)
+        .map((ex) => ({
+          type: "update_exercise" as const,
+          id: ex.id,
+          updates: {
+            notes: ex.notes ? `${ex.notes} · Pain-modified: reduce load if discomfort.` : `Pain-modified: conservative loading. Reduce if discomfort arises.`,
+          },
+        }));
+
       return {
         intent: "pain_modification",
         scope: "session",
         changeSummary: summary,
+        changesDetail: [{ exerciseName: "All exercises", change: "Conservative load + pain-safe notes added" }],
         changes: [
+          ...exerciseChanges,
           {
             type: "update_session",
             id: todaySession.id,
             updates: {
               emphasis: "Pain-modified — conservative loading",
-              coachingNotes: `Check-in adjustment: pain ${scores.painScore}/5 flagged. Reduce load on any movement causing discomfort. Use machines or controlled-ROM alternatives. If pain exceeds 3/10 during an exercise, skip it today.`,
+              coachingNotes: painNoteText,
             },
           },
         ],
       };
+    }
 
-    case "RECOVERY_DELOAD":
+    case "RECOVERY_DELOAD": {
+      // Structural: session-scope deload — reduce all exercise set counts by 1
+      // (Does NOT force week-wide deload from a single check-in)
+      const workingExercises = (exercises ?? [])
+        .filter((ex) => !["warmup", "activation", "recovery"].includes(ex.category ?? ""))
+        .slice(0, 8);
+
+      const exerciseChanges = workingExercises.map((ex) => ({
+        type: "update_exercise" as const,
+        id: ex.id,
+        updates: {
+          sets: Math.max(1, (ex.sets ?? 3) - 1),
+          notes: ex.notes
+            ? `${ex.notes} · Recovery deload: reduce load 40–50%.`
+            : `Recovery session: reduce load 40–50%. Move well, recover well.`,
+        },
+      }));
+
+      const changesDetail: ChangeDetail[] = workingExercises.map((ex) => ({
+        exerciseName: ex.name,
+        change: `${ex.sets ?? 3} → ${Math.max(1, (ex.sets ?? 3) - 1)} sets · Load −40–50%`,
+      }));
+
       return {
         intent: "recovery_deload",
-        scope: "week",
+        scope: "session",
         changeSummary: summary,
+        changesDetail,
         changes: [
-          {
-            type: "update_week",
-            id: currentWeek.id,
-            updates: {
-              volumeLevel: "deload",
-              notes: `Check-in adjustment: sleep ${scores.sleepScore}/5, soreness ${scores.sorenessScore}/5, stress ${scores.stressScore}/5. Reducing loads to let the body rebuild. Quality over intensity this week.`,
-            },
-          },
+          ...exerciseChanges,
           {
             type: "update_session",
             id: todaySession.id,
             updates: {
-              coachingNotes: `Recovery session: today's signals say ease off. Do the session, but drop loads significantly. No PRs today — move well, stay mobile. The adaptation happens during rest.`,
+              emphasis: "Recovery session — reduced load",
+              coachingNotes: `Recovery deload: sleep ${scores.sleepScore}/5, soreness ${scores.sorenessScore}/5, stress ${scores.stressScore}/5. Reduced sets and load. Do the session — move well, chase technique, not output. Adaptation happens during rest.`,
             },
           },
         ],
       };
+    }
 
-    case "GREEN_LIGHT_PROGRESSION":
+    case "GREEN_LIGHT_PROGRESSION": {
+      // Structural: add progression notes to primary exercise records
+      const primaryExercises = (exercises ?? [])
+        .filter((ex) => PRIMARY_CATEGORIES.has(ex.category ?? ""))
+        .slice(0, 3);
+
+      const exerciseChanges = primaryExercises.map((ex) => ({
+        type: "update_exercise" as const,
+        id: ex.id,
+        updates: {
+          notes: ex.notes
+            ? `${ex.notes} · Green light: if 2+ RIR at working weight, add 2.5–5kg.`
+            : `Green-light session: conditions are excellent. If this set feels submaximal at 2+ RIR, add 2.5–5kg today.`,
+        },
+      }));
+
+      const changesDetail: ChangeDetail[] = primaryExercises.map((ex) => ({
+        exerciseName: ex.name,
+        change: "Progression unlocked — add 2.5–5kg if 2+ RIR",
+      }));
+
+      const fallbackDetail: ChangeDetail[] = changesDetail.length === 0
+        ? [{ exerciseName: "Primary lifts", change: "Session notes updated to chase progression" }]
+        : changesDetail;
+
       return {
         intent: "progression_emphasis",
         scope: "session",
         changeSummary: summary,
+        changesDetail: fallbackDetail,
         changes: [
+          ...exerciseChanges,
           {
             type: "update_session",
             id: todaySession.id,
             updates: {
-              coachingNotes: `Green-light session: sleep ${scores.sleepScore}/5, energy ${scores.energyScore}/5, soreness ${scores.sorenessScore}/5. Conditions are excellent. If primary sets feel submaximal at 2+ RIR, add 2.5-5kg today. Chase the progression — your body is ready.`,
+              coachingNotes: `Green-light session: sleep ${scores.sleepScore}/5, energy ${scores.energyScore}/5, soreness ${scores.sorenessScore}/5. Conditions are excellent. Chase the progression — if primary sets feel submaximal at 2+ RIR, add 2.5–5kg today.`,
             },
           },
         ],
       };
+    }
   }
 }
 
@@ -312,7 +428,12 @@ export async function evaluateCheckIn(
     const readiness = computeReadinessScore(scores);
     const adjustmentSummary = buildSummary(mode, scores);
     const coachMessage = buildCoachMessage(mode, scores);
-    const coachExplanation = buildCoachExplanation(mode, scores);
+
+    // Pain score 3 warning — not a full pain mode but worth flagging
+    const hasPainWarning = scores.painScore === 3 && mode !== "PAIN_MODIFICATION";
+    const coachExplanation = hasPainWarning
+      ? buildCoachExplanation(mode, scores) + " Note: moderate pain (3/5) was flagged — if anything aggravates it during the session, scale back or skip that exercise."
+      : buildCoachExplanation(mode, scores);
 
     const systemFocusMode = ((system?.metadata as any)?.focusMode ?? "strength") as FocusMode;
     const coachReasoning = generateCoachReasoning({
@@ -323,10 +444,22 @@ export async function evaluateCheckIn(
 
     const hasActiveProgram = !!system;
     let todaySessionId: number | null = null;
+    let changesDetail: ChangeDetail[] | null = null;
 
+    // Pre-compute changesDetail so the UI can show a preview BEFORE the user confirms
     if (system && mode !== "TRAIN_AS_PLANNED") {
       const todayData = await getTodaySession(userId).catch(() => null);
-      todaySessionId = todayData?.id ?? null;
+      if (todayData) {
+        todaySessionId = todayData.id;
+        const previewPlan = buildEditPlanForMode(
+          mode,
+          scores,
+          todayData,
+          todayData.currentWeek,
+          todayData.exercises as SessionExercise[]
+        );
+        changesDetail = (previewPlan as any)?.changesDetail ?? null;
+      }
     }
 
     return {
@@ -340,6 +473,8 @@ export async function evaluateCheckIn(
       todaySessionId,
       changesApplied: 0,
       changeLogId: null,
+      changesDetail,
+      hasPainWarning,
     };
   } catch (err) {
     logger.error({ err, userId }, "Check-in evaluation failed");
@@ -363,7 +498,10 @@ export async function applyCheckInAdjustment(
     const readiness = computeReadinessScore(scores);
     const adjustmentSummary = buildSummary(mode, scores);
     const coachMessage = buildCoachMessage(mode, scores);
-    const coachExplanation = buildCoachExplanation(mode, scores);
+    const hasPainWarning = scores.painScore === 3 && mode !== "PAIN_MODIFICATION";
+    const coachExplanation = hasPainWarning
+      ? buildCoachExplanation(mode, scores) + " Note: moderate pain (3/5) was flagged — if anything aggravates it during the session, scale back or skip that exercise."
+      : buildCoachExplanation(mode, scores);
 
     const systemFocusMode = ((system.metadata as any)?.focusMode ?? "strength") as FocusMode;
     const coachReasoning = generateCoachReasoning({
@@ -373,19 +511,28 @@ export async function applyCheckInAdjustment(
     });
 
     if (mode === "TRAIN_AS_PLANNED") {
-      return { mode, readiness, adjustmentSummary, coachMessage, coachExplanation, coachReasoning, hasActiveProgram: true, todaySessionId: null, changesApplied: 0, changeLogId: null };
+      return { mode, readiness, adjustmentSummary, coachMessage, coachExplanation, coachReasoning, hasActiveProgram: true, todaySessionId: null, changesApplied: 0, changeLogId: null, changesDetail: null, hasPainWarning };
     }
 
     const todayData = await getTodaySession(userId);
     if (!todayData) {
       logger.warn({ userId, mode }, "Apply check-in adjustment: no today session found");
-      return { mode, readiness, adjustmentSummary, coachMessage, coachExplanation, coachReasoning, hasActiveProgram: true, todaySessionId: null, changesApplied: 0, changeLogId: null };
+      return { mode, readiness, adjustmentSummary, coachMessage, coachExplanation, coachReasoning, hasActiveProgram: true, todaySessionId: null, changesApplied: 0, changeLogId: null, changesDetail: null, hasPainWarning };
     }
 
-    const editPlan = buildEditPlanForMode(mode, scores, todayData, todayData.currentWeek);
+    const editPlan = buildEditPlanForMode(
+      mode,
+      scores,
+      todayData,
+      todayData.currentWeek,
+      todayData.exercises as SessionExercise[]
+    );
+
     if (!editPlan) {
-      return { mode, readiness, adjustmentSummary, coachMessage, coachExplanation, coachReasoning, hasActiveProgram: true, todaySessionId: todayData.id, changesApplied: 0, changeLogId: null };
+      return { mode, readiness, adjustmentSummary, coachMessage, coachExplanation, coachReasoning, hasActiveProgram: true, todaySessionId: todayData.id, changesApplied: 0, changeLogId: null, changesDetail: null, hasPainWarning };
     }
+
+    const changesDetail = (editPlan as any).changesDetail as ChangeDetail[] | undefined;
 
     const editResult = await applyEditPlan(editPlan);
 
@@ -401,7 +548,7 @@ export async function applyCheckInAdjustment(
       afterSnapshot: editResult.afterSnapshot,
       appliedCount: editResult.appliedCount,
       skippedCount: editResult.skippedCount,
-      decisionMetadata: { mode, scores, readinessEntryId },
+      decisionMetadata: { mode, scores, readinessEntryId, changesDetail },
     });
 
     logger.info({ userId, mode, changesApplied: editResult.appliedCount, changeLogId }, "Check-in adjustment applied (user confirmed)");
@@ -425,6 +572,8 @@ export async function applyCheckInAdjustment(
       todaySessionId: todayData.id,
       changesApplied: editResult.appliedCount,
       changeLogId,
+      changesDetail: changesDetail ?? null,
+      hasPainWarning,
     };
   } catch (err) {
     logger.error({ err, userId }, "Check-in adjustment apply failed");

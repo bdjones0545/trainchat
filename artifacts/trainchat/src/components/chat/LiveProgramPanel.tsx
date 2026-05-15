@@ -787,6 +787,23 @@ function ProgramTab({
     staleTime: 30_000,
   });
 
+  // ── Today's readiness check-in status ─────────────────────────────────────
+  // Fetches whether today has a check-in and what adaptation mode was triggered.
+  // Used to show a readiness adaptation banner on today's session card.
+  const { data: todayReadinessStatus } = useQuery<{
+    hasCheckInToday: boolean;
+    mode: string | null;
+    composite: number | null;
+    readinessLevel: string | null;
+    checkedInAt?: string;
+  }>({
+    queryKey: ["readiness-today-status"],
+    queryFn: () => customFetch<any>("/api/readiness/today-status"),
+    enabled: !!isSaved,
+    staleTime: 5 * 60 * 1000, // 5 min — re-check after new check-ins
+    refetchOnWindowFocus: true,
+  });
+
   // ── Current-week DB data for exercise ID lookup (needed for direct edits) ──
   const { data: currentWeekDbData, isFetching: isWeekSyncing } = useQuery({
     // Key includes trainingSystemId so each conversation's system gets its own cache entry.
@@ -2511,6 +2528,43 @@ function ProgramTab({
           </p>
         </div>
       )}
+
+      {/* Readiness adaptation banner — shown when today's check-in triggered a session modification */}
+      {todayReadinessStatus?.hasCheckInToday &&
+        todayReadinessStatus.mode &&
+        todayReadinessStatus.mode !== "TRAIN_AS_PLANNED" && isSaved && (() => {
+          const mode = todayReadinessStatus.mode as string;
+          const bannerConfig: Record<string, { dot: string; text: string; border: string }> = {
+            LIGHT_MODIFICATION: {
+              dot: "bg-yellow-400",
+              text: "Volume trimmed · Accessory sets reduced for recovery today",
+              border: "border-yellow-500/20 bg-yellow-500/5",
+            },
+            PAIN_MODIFICATION: {
+              dot: "bg-orange-400",
+              text: "Pain flagged · Conservative loading applied to today's session",
+              border: "border-orange-500/20 bg-orange-500/5",
+            },
+            RECOVERY_DELOAD: {
+              dot: "bg-red-400",
+              text: "Recovery lower · Load reduced across today's session",
+              border: "border-red-500/20 bg-red-500/5",
+            },
+            GREEN_LIGHT_PROGRESSION: {
+              dot: "bg-primary",
+              text: "All signals solid · Progression notes added to primary lifts",
+              border: "border-primary/20 bg-primary/5",
+            },
+          };
+          const cfg = bannerConfig[mode];
+          if (!cfg) return null;
+          return (
+            <div className={`mx-4 mt-3 mb-1 flex items-center gap-2 px-3 py-2 rounded-lg border ${cfg.border}`}>
+              <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse ${cfg.dot}`} />
+              <p className="text-[10px] text-muted-foreground/80 leading-snug">{cfg.text}</p>
+            </div>
+          );
+        })()}
 
       {/* Days */}
       <div

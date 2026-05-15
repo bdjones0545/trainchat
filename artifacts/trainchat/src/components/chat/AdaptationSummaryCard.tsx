@@ -5,11 +5,14 @@
  * Displays a single coaching recommendation and gives the user
  * two choices: adjust today's plan, or keep it as-is.
  *
+ * After confirmation, shows a specific breakdown of what changed
+ * in concrete terms (exercise names, set counts, etc.)
+ *
  * Plan changes are NEVER applied automatically — always user-confirmed.
  */
 
 import { useState } from "react";
-import { CheckCircle2, AlertTriangle, TrendingDown, TrendingUp, Activity, ChevronRight, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, TrendingDown, TrendingUp, Activity, ChevronRight, Loader2, ArrowRight } from "lucide-react";
 import CoachReasoningCallout from "./CoachReasoningCallout";
 import { customFetch } from "@workspace/api-client-react";
 
@@ -31,6 +34,11 @@ export interface ReadinessScore {
   fatigueRisk: "low" | "moderate" | "high";
 }
 
+export interface ChangeDetail {
+  exerciseName: string;
+  change: string;
+}
+
 export interface AdaptationResult {
   mode: AdaptationMode;
   readiness?: ReadinessScore | null;
@@ -42,6 +50,10 @@ export interface AdaptationResult {
   todaySessionId?: number | null;
   changesApplied: number;
   changeLogId: number | null;
+  /** Specific structural changes made — shown after user confirmation */
+  changesDetail?: ChangeDetail[] | null;
+  /** Pain score == 3 but a non-pain mode fired — worth flagging */
+  hasPainWarning?: boolean;
   // scores for apply-adjustment call
   scores?: {
     sleepScore: number;
@@ -116,14 +128,14 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
   const config = MODE_CONFIG[adaptation.mode];
   const Icon = config.icon;
   const [adjusting, setAdjusting] = useState(false);
-  const [adjusted, setAdjusted] = useState(false);
   const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [appliedResult, setAppliedResult] = useState<AdaptationResult | null>(null);
 
   const needsAdjust = adaptation.mode !== "TRAIN_AS_PLANNED" && adaptation.hasActiveProgram !== false;
   const coachMsg = adaptation.coachMessage ?? adaptation.adjustmentSummary;
 
   async function handleAdjust() {
-    if (adjusting || adjusted) return;
+    if (adjusting || appliedResult) return;
     if (!adaptation.readinessEntryId || !adaptation.scores) {
       setAdjustError("Missing data to apply adjustment.");
       return;
@@ -131,7 +143,7 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
     setAdjusting(true);
     setAdjustError(null);
     try {
-      await customFetch("/api/readiness/apply-adjustment", {
+      const result = await customFetch<AdaptationResult>("/api/readiness/apply-adjustment", {
         method: "POST",
         body: JSON.stringify({
           readinessEntryId: adaptation.readinessEntryId,
@@ -139,7 +151,7 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
           mode: adaptation.mode,
         }),
       });
-      setAdjusted(true);
+      setAppliedResult(result ?? { ...adaptation, changesApplied: 0 });
     } catch {
       setAdjustError("Couldn't apply adjustment. Try again.");
     } finally {
@@ -147,18 +159,69 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
     }
   }
 
-  if (adjusted) {
+  // Post-confirmation view — shows specific changes made
+  if (appliedResult) {
+    const detail = appliedResult.changesDetail ?? adaptation.changesDetail;
+    const appliedCount = appliedResult.changesApplied ?? 0;
+
     return (
       <div className={`rounded-2xl border ${config.border} ${config.bg} overflow-hidden`}>
-        <div className="px-4 py-5 flex flex-col items-center gap-2 text-center">
-          <div className={`w-10 h-10 rounded-full ${config.bg} border ${config.border} flex items-center justify-center`}>
-            <Icon className={`w-5 h-5 ${config.color}`} />
+        <div className="px-4 pt-4 pb-3 flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-xl ${config.bg} border ${config.border} flex items-center justify-center flex-shrink-0`}>
+            <CheckCircle2 className="w-4 h-4 text-green-400" />
           </div>
-          <p className="text-sm font-semibold text-foreground">Today's plan adjusted</p>
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-green-400 mb-0.5">
+              Plan adjusted
+            </p>
+            <p className="text-sm font-semibold text-foreground leading-tight">
+              Today's session updated
+            </p>
+          </div>
+        </div>
+
+        <div className="px-4 pb-3">
           <p className="text-xs text-muted-foreground leading-relaxed">
             {adaptation.coachExplanation}
           </p>
         </div>
+
+        {/* Specific changes made */}
+        {detail && detail.length > 0 && (
+          <div className="mx-4 mb-3 rounded-xl bg-background/60 border border-border/60 overflow-hidden">
+            <p className="px-3 pt-2.5 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60">
+              What changed
+            </p>
+            <div className="divide-y divide-border/40">
+              {detail.map((item, i) => (
+                <div key={i} className="flex items-center justify-between px-3 py-2 gap-3">
+                  <span className="text-[11px] font-medium text-foreground truncate flex-1 min-w-0">
+                    {item.exerciseName}
+                  </span>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <span className={`text-[10px] font-semibold ${config.color}`}>
+                      {item.change}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {appliedCount > 0 && (
+              <p className="px-3 py-2 text-[10px] text-muted-foreground/50 border-t border-border/40">
+                {appliedCount} update{appliedCount === 1 ? "" : "s"} applied to your program
+              </p>
+            )}
+          </div>
+        )}
+
+        {adaptation.hasPainWarning && (
+          <div className="mx-4 mb-3 px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20">
+            <p className="text-[11px] text-orange-400 font-medium">
+              Moderate pain flagged — scale back or skip any exercise that aggravates it during the session.
+            </p>
+          </div>
+        )}
+
         <div className="px-4 pb-4">
           <button
             onClick={() => onDismiss(true)}
@@ -216,6 +279,48 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
         <p className="text-xs text-muted-foreground leading-relaxed">{adaptation.coachExplanation}</p>
       </div>
 
+      {/* Pain warning — pain score 3 in non-pain mode */}
+      {adaptation.hasPainWarning && (
+        <div className="px-4 pb-3">
+          <div className="px-3 py-2 rounded-xl bg-orange-500/10 border border-orange-500/20">
+            <p className="text-[11px] text-orange-400 font-medium">
+              Moderate pain flagged — if anything aggravates it during the session, scale back or skip that exercise.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Preview of what will change — shown before user confirms */}
+      {needsAdjust && adaptation.changesDetail && adaptation.changesDetail.length > 0 && (
+        <div className="px-4 pb-3">
+          <div className="rounded-xl bg-background/40 border border-border/50 overflow-hidden">
+            <p className="px-3 pt-2 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50">
+              What will change
+            </p>
+            <div className="divide-y divide-border/30">
+              {adaptation.changesDetail.slice(0, 4).map((item, i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5">
+                  <ArrowRight className="w-2.5 h-2.5 text-muted-foreground/40 flex-shrink-0" />
+                  <span className="text-[10px] text-muted-foreground truncate flex-1 min-w-0">
+                    {item.exerciseName}
+                  </span>
+                  <span className={`text-[10px] font-semibold ${config.color} flex-shrink-0`}>
+                    {item.change}
+                  </span>
+                </div>
+              ))}
+              {adaptation.changesDetail.length > 4 && (
+                <div className="px-3 py-1.5">
+                  <span className="text-[10px] text-muted-foreground/50">
+                    +{adaptation.changesDetail.length - 4} more
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Coach reasoning */}
       {adaptation.coachReasoning && adaptation.mode !== "TRAIN_AS_PLANNED" && (
         <div className="px-4 pb-3">
@@ -244,7 +349,7 @@ export default function AdaptationSummaryCard({ adaptation, onDismiss }: Adaptat
             {adjusting ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Adjusting plan...
+                Adjusting plan…
               </>
             ) : (
               "Adjust today's plan"

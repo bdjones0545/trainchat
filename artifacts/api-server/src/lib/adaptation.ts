@@ -91,6 +91,35 @@ function avg(vals: number[]): number {
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
+function computeComposite(r: ReadinessEntry): number {
+  return r.sleepScore + r.energyScore + r.motivationScore + (6 - r.sorenessScore) + (6 - r.stressScore) + (6 - r.painScore);
+}
+
+export type TrendDirection = "improving" | "declining" | "stable-high" | "stable-low" | "unstable" | "not_enough_data";
+
+export function computeReadinessTrendDirection(readiness: ReadinessEntry[]): TrendDirection {
+  if (readiness.length < 2) return "not_enough_data";
+  const composites = readiness.map(computeComposite);
+  const max = Math.max(...composites);
+  const min = Math.min(...composites);
+  const volatility = max - min;
+
+  if (composites.length >= 4) {
+    const recentAvg = avg(composites.slice(0, 3));
+    const olderAvg = avg(composites.slice(3));
+    if (volatility >= 8) return "unstable";
+    if (recentAvg > olderAvg + 1.5) return "improving";
+    if (recentAvg < olderAvg - 1.5) return "declining";
+    return avg(composites) >= 20 ? "stable-high" : "stable-low";
+  }
+
+  const delta = composites[0] - composites[composites.length - 1];
+  if (volatility >= 6) return "unstable";
+  if (delta > 2) return "improving";
+  if (delta < -2) return "declining";
+  return composites[0] >= 20 ? "stable-high" : "stable-low";
+}
+
 function computeTrends(
   readiness: ReadinessEntry[],
   feedback: SessionFeedbackEntry[]
@@ -183,7 +212,8 @@ function buildAdaptationPrompt(
   latest: ReadinessEntry | null,
   trends: TrendSignals,
   recentFeedback: SessionFeedbackEntry[],
-  readinessCount: number
+  readinessCount: number,
+  trendDirection?: TrendDirection
 ): string {
   if (!latest && recentFeedback.length === 0) {
     return ""; // No adaptation data yet — don't inject anything
@@ -217,6 +247,19 @@ function buildAdaptationPrompt(
     lines.push(`Recovery trend: ${trends.recoveryTrend}`);
     lines.push(`Fatigue accumulation: ${trends.fatigueAccumulation}`);
     if (trends.painTrend !== "none") lines.push(`Pain trend: ${trends.painTrend}`);
+
+    // Rolling trend direction — the most actionable signal
+    if (trendDirection && trendDirection !== "not_enough_data") {
+      const trendLabel: Record<TrendDirection, string> = {
+        "improving": "IMPROVING — readiness has been climbing across recent check-ins. Athlete is recovering well.",
+        "declining": "DECLINING — readiness has been dropping across recent check-ins. Accumulation risk is elevated.",
+        "stable-high": "STABLE HIGH — consistently high readiness. Athlete has good recovery capacity right now.",
+        "stable-low": "STABLE LOW — consistently lower readiness. Chronic fatigue or lifestyle factors may be limiting.",
+        "unstable": "UNSTABLE — large swings in readiness day to day. Inconsistent recovery. Keep programming conservative.",
+        "not_enough_data": "",
+      };
+      lines.push(`Trend direction (7-day): ${trendLabel[trendDirection]}`);
+    }
     lines.push("");
   }
 
@@ -228,24 +271,33 @@ function buildAdaptationPrompt(
     lines.push("");
   }
 
-  // Adaptive directive
+  // Adaptive directive — strengthened language
   lines.push("### ADAPTIVE DIRECTIVE");
   switch (trends.recommendedAdjustment) {
     case "reduce":
-      lines.push("REDUCE: Current signals indicate recovery is compromised. Intelligently reduce session density, intensity, or volume.");
-      lines.push("Options: fewer exercises, lower rep ranges, longer rest, swap high-stress exercises for lower-demand alternatives.");
-      lines.push("Preserve training continuity — don't abandon structure. Adjust it.");
+      lines.push("REDUCE: Recovery is compromised. Reduce session density, intensity, or volume intelligently.");
+      lines.push("Options: fewer exercises, lower rep ranges, longer rest, swap high-stress movements for lower-demand alternatives.");
+      lines.push("Preserve training continuity — do not abandon structure. Adapt it.");
       if (trends.painTrend === "elevated") {
         lines.push("Pain trend is elevated — be especially conservative with aggravating movement patterns.");
+      }
+      if (trendDirection === "declining") {
+        lines.push("CRITICAL: Readiness has been declining. This athlete may be in an overreaching state — a deload week should be discussed proactively.");
       }
       break;
     case "progress":
       lines.push("PROGRESS: Recovery signals are strong and training tolerance is good. Consider a small load increment or volume addition.");
       lines.push("Stay within the defined progression model — don't overcorrect in the positive direction either.");
+      if (trendDirection === "improving") {
+        lines.push("Readiness is trending upward — this is a good window to push progressive overload while recovery capacity is high.");
+      }
       break;
     case "maintain":
     default:
       lines.push("MAINTAIN: Signals are moderate. Execute the plan as designed. No significant adjustments needed.");
+      if (trendDirection === "stable-low") {
+        lines.push("Note: Readiness has been consistently lower — watch for signs of accumulated fatigue and consider a recovery week soon.");
+      }
       break;
   }
 
@@ -280,12 +332,14 @@ export async function buildAdaptationContext(userId: number, focusMode?: string 
 
   const latestReadiness = recentReadiness[0] ?? null;
   const trends = computeTrends(recentReadiness, recentFeedback);
+  const trendDirection = computeReadinessTrendDirection(recentReadiness);
 
   const readinessPrompt = buildAdaptationPrompt(
     latestReadiness,
     trends,
     recentFeedback,
-    recentReadiness.length
+    recentReadiness.length,
+    trendDirection
   );
 
   // Memory dominance context comes FIRST — it overrides conflicting block prescriptions
