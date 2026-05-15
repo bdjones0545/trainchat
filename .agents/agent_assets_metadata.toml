@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "3CC5g2ox34k02XjWbWF_r"
+uri = "file://attached_assets/trainchat-token-economics-audit.md"
+type = "text"
+title = "TrainChat — Token Economics + Action Cost Audit"
