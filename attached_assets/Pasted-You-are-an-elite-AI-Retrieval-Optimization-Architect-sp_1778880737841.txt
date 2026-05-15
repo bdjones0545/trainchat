@@ -1,0 +1,327 @@
+You are an elite AI Retrieval Optimization Architect specializing in:
+- AEO (Answer Engine Optimization)
+- semantic entity systems
+- retrieval-aware information architecture
+- AI-native search optimization
+- knowledge graph reinforcement
+- semantic authority engineering
+
+TrainChat® has already completed foundational AEO implementation:
+- answer pages
+- FAQ architecture
+- comparison pages
+- JSON-LD schema
+- sitemap
+- robots.txt
+- canonical URLs
+- founder authority pages
+- AI-friendly semantic formatting
+
+The next objective is NOT traditional SEO.
+
+The next objective is:
+# semantic dominance + entity reinforcement + retrieval authority
+
+Your task is to design the NEXT EVOLUTION of TrainChat’s AI retrieval ecosystem.
+
+==================================================
+COMPANY CONTEXT
+==================================================
+
+TrainChat® is an AI Training System.
+
+It is NOT:
+- a chatbot
+- a workout generator
+- a static fitness app
+
+Core semantic positioning:
+- coaching intelligence
+- adaptive programming
+- conversational training
+- living training systems
+- workout mutation
+- real-time adaptation
+- AI performance coaching
+- dynamic progression
+- conversational fitness AI
+- vibe coding your workouts
+
+Founder context:
+- strength & conditioning coach
+- exercise science background
+- real-world athlete coaching
+- research-oriented philosophy
+- practitioner-first authority
+
+==================================================
+PRIMARY OBJECTIVE
+==================================================
+
+Design a semantic retrieval ecosystem that:
+- strengthens TrainChat’s entity authority
+- increases AI citation likelihood
+- improves semantic embedding relationships
+- creates concept ownership
+- builds retrieval-friendly knowledge structures
+- reinforces TrainChat as the authority defining adaptive AI coaching
+
+The system should optimize TrainChat for:
+- Google AI Overviews
+- ChatGPT Search
+- Perplexity
+- Claude
+- Gemini
+- Bing Copilot
+- future multimodal AI retrieval systems
+
+==================================================
+PHASE 2 REQUIREMENTS
+==================================================
+
+Generate a comprehensive Phase 2 AEO strategy including:
+
+1. CONCEPT LIBRARY ARCHITECTURE
+Create a full “Concepts” knowledge hub.
+
+Examples:
+- /concepts/adaptive-programming
+- /concepts/coaching-intelligence
+- /concepts/training-memory
+- /concepts/workout-mutation
+- /concepts/conversational-training
+- /concepts/dynamic-progression
+- /concepts/performance-adaptation
+- /concepts/intelligent-periodization
+- /concepts/living-training-system
+
+For each:
+- semantic purpose
+- AI retrieval value
+- entity reinforcement role
+- internal linking relationships
+- ideal structure
+- retrieval-friendly definition format
+
+==================================================
+2. AI FITNESS GLOSSARY SYSTEM
+==================================================
+
+Create a semantic glossary strategy designed for:
+- definition extraction
+- featured snippets
+- conversational AI retrieval
+- entity association
+
+Generate:
+- glossary architecture
+- glossary page structure
+- semantic formatting patterns
+- retrieval-optimized definition examples
+
+Include:
+- adaptive programming
+- coaching intelligence
+- workout mutation
+- conversational fitness AI
+- living training system
+- dynamic progression
+- training memory
+- AI performance coaching
+
+==================================================
+3. SEMANTIC KNOWLEDGE GRAPH
+==================================================
+
+Design:
+- parent/child concept relationships
+- semantic clusters
+- internal linking maps
+- retrieval relationship architecture
+
+Map how AI systems should understand:
+AI Fitness Coaching
+    → Adaptive Programming
+    → Conversational Training
+    → Training Memory
+    → Workout Mutation
+    → Dynamic Progression
+    → Coaching Intelligence
+
+Generate:
+- semantic hierarchy
+- contextual linking strategy
+- anchor text recommendations
+- reinforcement frequency recommendations
+
+==================================================
+4. RETRIEVAL-OPTIMIZED CONTENT PATTERNS
+==================================================
+
+Generate standardized templates for:
+- definition blocks
+- AI summaries
+- chunkable paragraphs
+- semantic comparison sections
+- conversational answer blocks
+- AI citation-friendly formatting
+
+Optimize for:
+- embedding similarity
+- retrieval chunking
+- summarization
+- semantic extraction
+- citation likelihood
+
+==================================================
+5. ENTITY REINFORCEMENT STRATEGY
+==================================================
+
+Create a cross-platform entity consistency system.
+
+Generate strategies for:
+- LinkedIn
+- YouTube
+- Instagram
+- podcasts
+- interviews
+- PR
+- founder content
+- captions
+- educational posts
+
+Goal:
+Ensure all platforms reinforce the SAME semantic identity:
+“TrainChat® — AI Training System”
+
+Avoid inconsistent language.
+
+==================================================
+6. YOUTUBE + MULTIMODAL AEO
+==================================================
+
+Create a YouTube semantic authority strategy.
+
+Generate:
+- video topic clusters
+- educational semantic reinforcement content
+- retrieval-friendly titles
+- semantic descriptions
+- transcript optimization recommendations
+
+Examples:
+- What Is Adaptive Programming?
+- Why Workout Apps Fail
+- What Is Conversational Fitness AI?
+- Static Programs vs Living Training Systems
+
+Explain how YouTube strengthens:
+- multimodal retrieval
+- AI understanding
+- entity authority
+- cross-platform semantic alignment
+
+==================================================
+7. AUTHOR AUTHORITY EXPANSION
+==================================================
+
+Expand founder E-E-A-T infrastructure.
+
+Generate:
+- author page structures
+- expertise blocks
+- research philosophy positioning
+- practitioner authority frameworks
+- content attribution systems
+
+Positioning should feel:
+- grounded
+- intelligent
+- practitioner-first
+- evidence-oriented
+- non-corporate
+
+==================================================
+8. ADVANCED FAQ ECOSYSTEM
+==================================================
+
+Design:
+- conversational FAQ clusters
+- beginner question groups
+- athlete question groups
+- coach/professional question groups
+- AI coaching misconceptions
+- adaptive programming explanations
+
+Optimize for:
+- AI conversational retrieval
+- featured snippets
+- People Also Ask
+- semantic answer extraction
+
+==================================================
+9. “VIBE CODE YOUR WORKOUTS” EXPANSION
+==================================================
+
+This phrase is strategically important.
+
+Design:
+- semantic ownership strategy
+- topic cluster ecosystem
+- supporting content ideas
+- retrieval associations
+- glossary integrations
+- YouTube integrations
+- FAQ integrations
+- landing page expansion
+
+Goal:
+Make TrainChat synonymous with:
+“vibe coding your workouts”
+
+==================================================
+10. TECHNICAL RETRIEVAL ENHANCEMENTS
+==================================================
+
+Recommend advanced improvements for:
+- semantic HTML
+- structured data expansion
+- retrieval chunking optimization
+- schema layering
+- metadata systems
+- internal semantic navigation
+- content embedding structure
+- crawl prioritization
+- page hierarchy
+- multimodal discoverability
+
+==================================================
+11. OUTPUT REQUIREMENTS
+==================================================
+
+Provide:
+1. Phase 2 semantic architecture
+2. Concept library blueprint
+3. Glossary system
+4. Semantic graph map
+5. Retrieval formatting system
+6. Entity reinforcement plan
+7. Cross-platform authority strategy
+8. YouTube AEO roadmap
+9. FAQ ecosystem
+10. “Vibe Coding” expansion strategy
+11. Technical retrieval optimization roadmap
+12. 90-day implementation plan
+
+IMPORTANT:
+This is NOT SEO blogging.
+
+This is:
+- semantic authority engineering
+- AI retrieval optimization
+- entity dominance
+- knowledge graph reinforcement
+- answer engine positioning
+
+The output should feel like:
+a next-generation AI search infrastructure strategy for a category-defining platform.

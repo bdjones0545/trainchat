@@ -32,6 +32,9 @@ import VsChatGptWorkouts from "@/pages/aeo/VsChatGptWorkouts";
 import VsTraditionalApps from "@/pages/aeo/VsTraditionalApps";
 import FaqPage from "@/pages/aeo/FaqPage";
 import AboutPage from "@/pages/aeo/AboutPage";
+import GlossaryPage from "@/pages/aeo/GlossaryPage";
+import ConceptsIndex from "@/pages/aeo/concepts/ConceptsIndex";
+import ConceptPage from "@/pages/aeo/concepts/ConceptPage";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -320,6 +323,11 @@ function Router() {
       {/* Support / Brand Pages */}
       <Route path="/faq" component={FaqPage} />
       <Route path="/about" component={AboutPage} />
+      <Route path="/glossary" component={GlossaryPage} />
+
+      {/* Concept Library */}
+      <Route path="/concepts" component={ConceptsIndex} />
+      <Route path="/concepts/:slug" component={ConceptPage} />
 
       <Route component={NotFound} />
     </Switch>
