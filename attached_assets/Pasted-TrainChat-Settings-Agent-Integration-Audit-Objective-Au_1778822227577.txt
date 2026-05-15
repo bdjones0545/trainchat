@@ -1,0 +1,86 @@
+TrainChat — Settings + Agent Integration Audit
+
+Objective:
+Audit the Settings section as the control center for user trust, agent behavior, memory transparency, personalization, privacy, and long-term coaching continuity.
+
+Core Principle:
+Settings should not feel like generic app preferences.
+
+Settings should feel like:
+the place where the user controls how Atlas remembers, coaches, adapts, communicates, and personalizes training.
+
+Audit Categories:
+
+1. Account + Profile
+- Does user identity flow correctly into Atlas?
+- Are name, training identity, goals, and profile data used meaningfully?
+- Is profile data duplicated with Athlete Intelligence Profile?
+
+2. Memory + Personalization
+- Can users see what Atlas remembers?
+- Can they delete, correct, or confirm memories?
+- Are injury/pain memories clearly controllable?
+- Are memory confidence and source visible?
+- Is there a downgrade/resolved pathway for outdated constraints?
+
+3. Coaching Preferences
+- Can users control Atlas’s tone?
+- Can they choose direct vs supportive coaching?
+- Can they set motivation style, feedback style, explanation depth, and challenge level?
+- Do these preferences actually inject into Atlas prompts?
+
+4. Adaptation Controls
+- Can users control how aggressively Atlas adapts training?
+- Are options available for conservative, balanced, or aggressive progression?
+- Can users enable/disable auto-adaptations from check-ins?
+- Can users require confirmation before structural changes?
+
+5. Notifications + Proactive Coaching
+- Are proactive check-ins configurable?
+- Can users control reminders, missed-session nudges, readiness prompts, and forecast alerts?
+- Does notification timing connect to training schedule and agent intelligence?
+
+6. Privacy + Data Trust
+- Does the user understand what data Atlas uses?
+- Are memory, check-ins, training logs, and readiness data explained clearly?
+- Can users export/delete their data?
+- Are sensitive health/injury notes handled with appropriate clarity?
+
+7. Agent Visibility
+- Does Settings explain what Atlas does?
+- Does it show which systems are active: memory, forecasting, readiness adaptation, progression intelligence?
+- Can users understand how the agent ecosystem works without technical overload?
+
+8. Subscription / Plan Controls
+- Are usage limits, Pro features, token/credit systems, or premium intelligence features clear?
+- Does the pricing page connect to value: memory, adaptive coaching, forecasting, Athlete DNA, etc.?
+
+9. Safety + Constraints
+- Are hard constraints visible and editable?
+- Are “never program this” rules clearly separated from preferences?
+- Are injuries/pain flags surfaced prominently?
+- Can users mark an issue as resolved?
+
+10. Mobile UX
+- Is Settings easy to navigate on mobile?
+- Are dangerous actions protected?
+- Are controls grouped intuitively?
+- Is the section too dense?
+
+Final Deliverables:
+- Current settings map
+- Agent integration gaps
+- Memory/privacy risks
+- Preference injection gaps
+- Adaptation-control gaps
+- Notification/proactive-coaching gaps
+- UX hierarchy issues
+- Highest ROI improvements
+- Roadmap priorities
+
+Final assessment should answer:
+
+1. Does Settings feel like generic app settings or an intelligence control center?
+2. Can users clearly control what Atlas knows and how Atlas coaches?
+3. Are privacy, memory, safety, and adaptation controls strong enough for long-term trust?
+4. What changes would make Settings reinforce TrainChat as a persistent athlete intelligence system?
