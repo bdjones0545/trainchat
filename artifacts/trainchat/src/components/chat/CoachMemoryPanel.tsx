@@ -12,9 +12,9 @@
  * Tone: transparent and direct. No jargon. Plain coaching language.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { customFetch } from "@workspace/api-client-react";
-import { X, Brain, CheckCircle, Clock, Activity, Dumbbell, Heart, Star } from "lucide-react";
+import { X, Brain, CheckCircle, Clock, Activity, Dumbbell, Heart, Star, Trash2 } from "lucide-react";
 
 // ─── Types (mirror server) ────────────────────────────────────────────────────
 
@@ -166,10 +166,35 @@ function EmptyMemory() {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CoachMemoryPanel({ onClose }: Props) {
+  const queryClient = useQueryClient();
+
   const { data: memories, isLoading } = useQuery<MemoryEntry[]>({
     queryKey: ["memories"],
     queryFn: () => customFetch<MemoryEntry[]>("/api/memories"),
     staleTime: 5 * 60 * 1000,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (memoryId: number) =>
+      customFetch<{ deleted: boolean }>(`/api/memories/${memoryId}`, {
+        method: "DELETE",
+      }),
+    onMutate: async (memoryId) => {
+      await queryClient.cancelQueries({ queryKey: ["memories"] });
+      const previous = queryClient.getQueryData<MemoryEntry[]>(["memories"]);
+      queryClient.setQueryData<MemoryEntry[]>(["memories"], (old) =>
+        (old ?? []).filter((m) => m.id !== memoryId)
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(["memories"], context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["memories"] });
+    },
   });
 
   // Group by type, filter confidence >= 2
@@ -182,9 +207,7 @@ export default function CoachMemoryPanel({ onClose }: Props) {
 
   const hasMemories = grouped.size > 0;
 
-  // Convert detail text to plain coaching language summary (strip DB-style phrasing)
   function summarize(detail: string): string {
-    // Return as-is — the detail field is already written in coaching language
     return detail;
   }
 
@@ -242,9 +265,23 @@ export default function CoachMemoryPanel({ onClose }: Props) {
               <div className="space-y-1.5 pl-4">
                 {entries.map((entry) => {
                   const note = sentimentNote(entry.sentiment, entry.type);
+                  const isDeleting = deleteMutation.isPending && deleteMutation.variables === entry.id;
                   return (
-                    <div key={entry.id} className="rounded-lg border border-border/30 bg-muted/5 px-3 py-2">
-                      <p className="text-[10px] text-foreground/85 leading-relaxed">{summarize(entry.detail)}</p>
+                    <div
+                      key={entry.id}
+                      className={`group rounded-lg border border-border/30 bg-muted/5 px-3 py-2 transition-opacity ${isDeleting ? "opacity-40" : ""}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-[10px] text-foreground/85 leading-relaxed flex-1">{summarize(entry.detail)}</p>
+                        <button
+                          onClick={() => deleteMutation.mutate(entry.id)}
+                          disabled={isDeleting || deleteMutation.isPending}
+                          className="flex-shrink-0 opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center text-muted-foreground/40 hover:text-red-400/70 hover:bg-red-400/10 transition-all mt-0.5"
+                          title="Remove this memory"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[8.5px] text-muted-foreground/50">{sourceBadge(entry.source)}</span>
                         {entry.confidence >= 4 && (
@@ -270,7 +307,7 @@ export default function CoachMemoryPanel({ onClose }: Props) {
             <p className="text-[9px] text-muted-foreground/40 text-center leading-relaxed">
               Memory grows as you train and check in.
               <br />
-              The system uses this to avoid repetition and coach you more specifically.
+              Hover any item to remove it if it's incorrect.
             </p>
           </div>
         )}

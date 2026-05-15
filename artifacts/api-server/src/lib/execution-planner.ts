@@ -293,6 +293,48 @@ export function detectLowDetailContextCommand(message: string): LowDetailContext
   return null;
 }
 
+// ─── Confident Directional Inference Patterns ─────────────────────────────────
+// These phrases carry clear coaching directionality — a performance coach would
+// act on them without asking for clarification. They bypass the vague guard and
+// route directly to APPLY_MUTATION with the inferred transformation family.
+// Ordered from most-specific to least-specific.
+const DIRECTIONAL_INFERENCE_PATTERNS: Array<{
+  pattern: RegExp;
+  family: IntentFamily;
+  label: string;
+}> = [
+  // ATHLETIC — power + reactive emphasis, reduced hypertrophy bias
+  {
+    pattern: /\b(more athletic|make.*athletic|athletic.*mode|feel.*athletic|build.*like.*athlete|train.*like.*athlete|athletic.*performance|more.*sport.*specific)\b/i,
+    family: "athletic_performance_focus",
+    label: "athletic",
+  },
+  // EXPLOSIVE — CNS emphasis, velocity intent, plyometric + med ball integration
+  {
+    pattern: /\b(more explosive|make.*explosive|add.*explosiv|explosiveness|explosive.*power|explosive.*training|more.*power.*output|hit.*more.*power)\b/i,
+    family: "power_explosive_focus",
+    label: "explosive",
+  },
+  // TIGHTEN UP — density increase, reduce junk volume, session efficiency
+  {
+    pattern: /\b(tighten.*up|tighten.*it|make.*it.*tighter|more.*efficient|streamline.*it|make.*more.*dense|cut.*fat.*from.*program|trim.*it.*down|more.*focused)\b/i,
+    family: "decrease_volume",
+    label: "tighten up",
+  },
+  // GRIT — conditioning circuits, density finishers, fatigue resistance
+  {
+    pattern: /\b(add.*grit|more.*grit|grittier|tougher.*sessions|harder.*mentally|conditioning.*finisher|make.*it.*gritty|make.*it.*tough|more.*mental.*toughness|grind)\b/i,
+    family: "conditioning_focus",
+    label: "grit",
+  },
+  // HIT HARDER — overall intensity increase
+  {
+    pattern: /\b(hit.*harder|make.*hit.*harder|make.*this.*hit|more.*intense|crank.*up|dial.*up.*intensity|amp.*up|up.*the.*intensity|push.*me.*harder|really.*push)\b/i,
+    family: "increase_difficulty",
+    label: "hit harder",
+  },
+];
+
 // ─── Vague Improvement Patterns ───────────────────────────────────────────────
 // These phrases are intentionally direction-free and must NEVER trigger
 // REBUILD_PROGRAM. They always ask a clarifying question regardless of whether
@@ -938,6 +980,42 @@ export async function buildExecutionPlan({
     } catch (err) {
       // If classification fails, fall through to normal mutation path
       logger.warn({ err, intent }, "[ConstraintReinforcement] classifyAdjustmentIntent failed — falling through to mutation path");
+    }
+  }
+
+  // ── STEP 3.55: Confident Directional Inference ────────────────────────────
+  // Phrases like "make it more athletic", "more explosive", "tighten it up",
+  // "add some grit", "make this hit harder" have clear coaching direction.
+  // A performance coach acts on these immediately without asking for clarification.
+  // Route to APPLY_MUTATION with the inferred family, program-wide scope.
+  // Only fires when an active program exists — otherwise falls through.
+  if (program) {
+    for (const { pattern, family, label } of DIRECTIONAL_INFERENCE_PATTERNS) {
+      if (pattern.test(message)) {
+        const directionalPlan: ExecutionPlan = {
+          action: "APPLY_MUTATION",
+          intentFamily: family,
+          scope: { type: "program" },
+          mutation: {
+            type: "transform",
+            params: {
+              transformation: family,
+              directionalLabel: label,
+              defaultScopeUsed: true,
+              confidenceSource: "directional_inference",
+            },
+          },
+          reasoning: `[DirectionalInference] "${label}" pattern detected → ${family} program-wide mutation (no clarification needed — direction is clear)`,
+          defaultScopeUsed: true,
+        };
+
+        logger.info(
+          { conversationId, userId, label, family, message: message.slice(0, 80) },
+          "[DirectionalInference] Confident directional phrase — APPLY_MUTATION program-wide without clarification"
+        );
+
+        return directionalPlan;
+      }
     }
   }
 

@@ -1,6 +1,9 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { listMemories, syncMemoriesFromData } from "../lib/memory";
+import { db } from "@workspace/db";
+import { userMemoriesTable } from "@workspace/db";
+import { eq, and } from "drizzle-orm";
 
 const router: IRouter = Router();
 
@@ -25,6 +28,39 @@ router.post("/memories/sync", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
   const synced = await syncMemoriesFromData(userId);
   res.json({ synced });
+});
+
+/**
+ * DELETE /api/memories/:id
+ *
+ * Removes a single memory entry. Ownership is enforced — users can only
+ * delete their own memories. Returns 404 if not found or not owned.
+ */
+router.delete("/memories/:id", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.session.userId!;
+  const rawId = req.params["id"] as string;
+  const memoryId = parseInt(rawId, 10);
+
+  if (isNaN(memoryId)) {
+    res.status(400).json({ error: "Invalid memory ID" });
+    return;
+  }
+
+  try {
+    const deleted = await db
+      .delete(userMemoriesTable)
+      .where(and(eq(userMemoriesTable.id, memoryId), eq(userMemoriesTable.userId, userId)))
+      .returning({ id: userMemoriesTable.id });
+
+    if (deleted.length === 0) {
+      res.status(404).json({ error: "Memory not found" });
+      return;
+    }
+
+    res.json({ deleted: true, id: memoryId });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete memory" });
+  }
 });
 
 /**

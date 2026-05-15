@@ -104,10 +104,10 @@ async function trackFunnelEvent(deviceId: string, event: string, metadata?: Reco
 // prompt  – full conversational sentence sent to the AI when tapped
 
 const QUICK_START = [
-  { label: "Build a 4-day strength system", prompt: "Design a 4-day strength training system for me",           icon: "📅", highlight: true },
-  { label: "Work around pain or injury",    prompt: "Help me train around an injury or pain",                   icon: "🩺", highlight: false },
-  { label: "Add speed & explosiveness",     prompt: "Add speed, power, and athletic explosiveness to my program", icon: "⚡", highlight: false },
-  { label: "Build for a home gym",          prompt: "Build a program using only home gym equipment",            icon: "🏠", highlight: false },
+  { label: "Build me like a strength athlete",          prompt: "Build me like a strength athlete — design a system around getting seriously strong",                        icon: "📅", highlight: true },
+  { label: "Train hard without making my injury worse", prompt: "Help me train hard while working around my injury or pain",                                                icon: "🩺", highlight: false },
+  { label: "Make me more explosive and athletic",       prompt: "Make me more explosive and athletic — I want to move better and hit harder",                               icon: "⚡", highlight: false },
+  { label: "Get me results with what I have at home",  prompt: "Get me results with what I have at home — no gym required",                                                icon: "🏠", highlight: false },
 ];
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
@@ -475,7 +475,7 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
     } else {
       setMessages([{
         role: "assistant",
-        content: "Let's build your training system.",
+        content: "Tell me what you want to train — I'll build the system around you.",
       }]);
     }
 

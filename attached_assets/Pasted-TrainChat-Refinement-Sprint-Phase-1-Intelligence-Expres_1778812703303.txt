@@ -1,0 +1,301 @@
+TrainChat Refinement Sprint — Phase 1 Intelligence Expression + Trust Layer
+
+Objective:
+Do NOT add major new features or tools during this sprint.
+
+Focus entirely on:
+- perceived intelligence,
+- conversational confidence,
+- proactive behavior,
+- trust reinforcement,
+- continuity,
+- and emotional UX polish.
+
+TrainChat’s infrastructure is already sophisticated.
+The goal now is to close the gap between:
+what the system KNOWS
+and
+what the user FEELS.
+
+==================================================
+PRIORITY 1 — CONFIDENT DIRECTIONAL INFERENCE
+==================================================
+
+Problem:
+Directional coaching language currently triggers unnecessary clarification loops.
+
+Examples:
+- “make it more athletic”
+- “make it explosive”
+- “tighten it up”
+- “add some grit”
+- “make this hit harder”
+
+These phrases already imply clear coaching intent.
+
+Implementation:
+Expand the mutation ontology AI directives to include default transformation packages for common directional language families.
+
+Examples:
+
+ATHLETIC:
+- increase power/reactive emphasis
+- reduce hypertrophy bias
+- increase movement variability
+- add acceleration/change-of-direction work
+
+EXPLOSIVE:
+- CNS emphasis
+- lower fatigue accumulation
+- higher velocity intent
+- elastic/reactive movements
+- med ball / plyometric integration
+
+TIGHTEN_UP:
+- reduce junk volume
+- increase intensity density
+- simplify exercise selection
+- improve session efficiency
+
+GRIT:
+- conditioning emphasis
+- density circuits
+- mental toughness finishers
+- fatigue resistance
+
+Behavior:
+TrainChat should confidently infer and act first.
+
+Instead of:
+“What do you mean by athletic?”
+
+Use:
+“I shifted this toward more power and reactive emphasis while reducing some hypertrophy volume. I can apply this across the full program or just this phase.”
+
+Goal:
+Reduce conversational dead zones and increase perceived coaching intelligence.
+
+==================================================
+PRIORITY 2 — PROACTIVE COACH PRESENCE
+==================================================
+
+Problem:
+TrainChat is still primarily reactive.
+
+Implementation:
+Add proactive conversational initiation behaviors.
+
+Examples:
+- missed scheduled session
+- repeated skipped days
+- fatigue trend
+- adherence drop
+- repeated edit patterns
+- goal drift
+
+Examples:
+“You missed yesterday’s lower-body session — want me to adjust the week so recovery stays intact?”
+“I’ve noticed your recent edits are shifting toward athletic performance. Want me to rebalance the whole system around that?”
+“You’ve reported high fatigue the last 3 sessions. I’d recommend reducing lower-body volume this week.”
+
+Requirements:
+- conversational
+- coach-like
+- contextual
+- concise
+- actionable
+
+Avoid:
+generic engagement notifications.
+
+Goal:
+Make TrainChat feel aware and longitudinally intelligent.
+
+==================================================
+PRIORITY 3 — MUTATION TRUST STATES
+==================================================
+
+Problem:
+Coach responses can imply mutations succeeded before audit receipt confirmation completes.
+
+Implementation:
+Add explicit mutation confirmation states.
+
+Chat mutation lifecycle:
+1. Processing mutation…
+2. Verifying changes…
+3. Confirmed
+OR
+4. Failed to apply changes
+
+Requirements:
+- no “Done — updated” language before receipt confirmation
+- failed mutations visibly transition to error state
+- sync right panel loading state during active mutation
+- prevent chat/panel parallel mutation race conditions
+
+Goal:
+TrainChat must feel deterministic and trustworthy.
+
+==================================================
+PRIORITY 4 — ADAPTATION VISIBILITY
+==================================================
+
+Problem:
+Behavioral intelligence adjustments are mostly invisible.
+
+Implementation:
+Every automatic adaptation should generate:
+- a Changes tab entry
+- a plain-language explanation
+
+Examples:
+“I reduced Wednesday volume after repeated high-fatigue reports.”
+“I increased power emphasis based on your recent edits.”
+“I adjusted recovery spacing after detecting missed sessions.”
+
+Requirements:
+- human-readable
+- coaching-oriented
+- concise
+- tied to behavioral signal
+
+Goal:
+Users should SEE the intelligence system adapting.
+
+==================================================
+PRIORITY 5 — CROSS-CONVERSATION CONTINUITY
+==================================================
+
+Problem:
+Longitudinal memory exists internally but is not strongly surfaced conversationally.
+
+Implementation:
+On returning conversations:
+Coach should proactively reference the highest-confidence relevant memory.
+
+Examples:
+“Last time you mentioned your shoulder was bothering you — how’s that feeling before we adjust anything?”
+“You’ve been leaning toward more athletic work recently. Want to continue building in that direction?”
+
+Requirements:
+- only reference memories with confidence ≥ 3
+- prioritize:
+  - pain/injury
+  - recurring preferences
+  - recent directional changes
+  - adherence patterns
+
+Goal:
+TrainChat should feel persistent across time.
+
+==================================================
+PRIORITY 6 — MEMORY TRANSPARENCY UI
+==================================================
+
+Problem:
+Invisible memory accumulation can reduce trust.
+
+Implementation:
+Create:
+“What TrainChat Knows About You”
+
+Display:
+- active memories
+- confidence level
+- source type
+- editable/removable controls
+
+Categories:
+- goals
+- injuries/pain
+- equipment
+- schedule
+- preferences
+- edit patterns
+- behavioral tendencies
+
+Goal:
+Make memory collaborative instead of hidden.
+
+==================================================
+PRIORITY 7 — INTELLIGENCE VISIBILITY
+==================================================
+
+Problem:
+Advanced orchestration is largely invisible.
+
+Implementation:
+Surface lightweight agent/orchestration visibility.
+
+Examples:
+- “Consulting Architect Vale”
+- “Reviewing fatigue constraints”
+- “Checking progression balance”
+- “Applying recovery safeguards”
+
+Requirements:
+- subtle
+- premium
+- non-gimmicky
+- occasional, not constant
+
+Goal:
+Reinforce TrainChat as a genuine intelligence system rather than a single-response chatbot.
+
+==================================================
+PRIORITY 8 — ONBOARDING LANGUAGE REWRITE
+==================================================
+
+Replace category-style prompts with identity/outcome-driven prompts.
+
+Replace:
+- “Build a 4-day strength system”
+
+With:
+- “Build me like a strength athlete”
+
+Replace:
+- “Add speed & explosiveness”
+
+With:
+- “Make me more explosive and athletic”
+
+Replace:
+- “Build for a home gym”
+
+With:
+- “Get me results with what I have at home”
+
+Update headline:
+From:
+“Let’s build your training system”
+
+To:
+“Tell me what you want to train — I’ll build the system around you.”
+
+Goal:
+TrainChat should immediately feel collaborative and intelligent.
+
+==================================================
+OVERALL PRODUCT DIRECTION
+==================================================
+
+TrainChat should increasingly feel like:
+- a persistent coaching intelligence,
+- an adaptive performance system,
+- and a collaborative AI training architect.
+
+NOT:
+- a reactive workout generator,
+- a template app,
+- or a generic chatbot.
+
+Core philosophy:
+Prioritize:
+- awareness,
+- continuity,
+- confidence,
+- trust,
+- and coaching presence
+over adding new tools or features.

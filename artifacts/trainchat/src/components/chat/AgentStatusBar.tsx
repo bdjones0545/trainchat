@@ -19,24 +19,30 @@ function getStageLabel(stage: BuildStage | null, actionType?: string): string {
       return "Loading your current program…";
     case "classifying":
       return isGenerate
-        ? "Selecting block type…"
+        ? "Reviewing fatigue constraints…"
         : isModify
         ? "Identifying what to change…"
         : "Mapping what needs to change…";
     case "planning":
-      return isModify
+      return isGenerate
+        ? "Consulting Architect Vale…"
+        : isModify
         ? "Planning your modifications…"
         : isRebuild
-        ? "Restructuring your split…"
+        ? "Consulting Architect Vale…"
         : "Mapping weekly structure…";
     case "applying":
       return isModify
         ? "Applying the change…"
         : isRebuild
-        ? "Rebuilding your program…"
+        ? "Applying recovery safeguards…"
+        : isGenerate
+        ? "Assigning sessions & exercises…"
         : "Assigning sessions & exercises…";
     case "validating":
-      return "Validating your training structure…";
+      return isModify
+        ? "Verifying your update…"
+        : "Checking progression balance…";
     case "saving":
       return "Finalizing your program…";
     case "complete":

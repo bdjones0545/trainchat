@@ -192,7 +192,7 @@ export const MUTATION_ONTOLOGY: Record<CanonicalCommandName, CanonicalMutationCo
     aliases: ["conditioning_focus"],
     minimumStructuralChanges: 2,
     antiPatterns: ["description-only update", "adding single conditioning note without structural drill"],
-    aiDirective: "Add interval/circuit block. Tighten rest across session. Update session emphasis.",
+    aiDirective: "Infer confidently: 'grit' / 'tough' / 'conditioning' = density circuits, mental toughness finishers, fatigue resistance work. Add conditioning finisher (AMRAP circuit or interval block). Tighten rest across session. Add density or EMOM structure as finisher. In your coaching response, explain what you added and why — do NOT ask what 'grit' means. Example: 'I added a conditioning finisher and tightened rest periods — this builds fatigue resistance alongside your strength work.'",
   },
   POWER_EXPLOSIVE_FOCUS: {
     name: "POWER_EXPLOSIVE_FOCUS",
@@ -202,7 +202,7 @@ export const MUTATION_ONTOLOGY: Record<CanonicalCommandName, CanonicalMutationCo
     aliases: ["power_explosive_focus"],
     minimumStructuralChanges: 2,
     antiPatterns: ["tempo note only", "single coaching cue without rep/exercise change"],
-    aiDirective: "Add explosive movement (Box Jump, Med Ball Slam). Shift primaries to 2-5 reps at 70-80% with 3-1-X-0 tempo. Full CNS recovery between sets.",
+    aiDirective: "Infer confidently: 'explosive' = CNS emphasis, lower fatigue accumulation, higher velocity intent, elastic/reactive movements. Add explosive movement (Box Jump or Med Ball Slam). Shift primaries to 2-5 reps at 70-80% with 3-1-X-0 tempo. Full CNS recovery between sets (3-4 min). In your coaching response, explain the shift confidently — do NOT ask what 'explosive' means. Example response tone: 'I've shifted this toward more power and reactive emphasis — Box Jump added as the session opener, primary lifts moved to lower reps with velocity intent.'",
   },
   SPEED_FOCUS: {
     name: "SPEED_FOCUS",
@@ -252,7 +252,7 @@ export const MUTATION_ONTOLOGY: Record<CanonicalCommandName, CanonicalMutationCo
     aliases: ["athletic_performance_focus"],
     minimumStructuralChanges: 2,
     antiPatterns: ["generic athleticism note", "text-only athletic cue without structural change"],
-    aiDirective: "Add explosive opener (Box Jump) + velocity intent on primaries. Update session emphasis for athletic output. Explosive quality takes priority over fatigue accumulation.",
+    aiDirective: "Infer confidently: 'athletic' = more power/reactive emphasis, reduced hypertrophy bias, increased movement variability. Add explosive opener (Box Jump or Med Ball Slam) + velocity intent on primaries. Swap isolation accessories for multi-joint athletic movements. Update session emphasis for athletic output. In your coaching response, explain what you shifted and why — do NOT ask for clarification on what 'athletic' means. Explosive quality takes priority over fatigue accumulation.",
   },
   FATIGUE_MANAGEMENT: {
     name: "FATIGUE_MANAGEMENT",

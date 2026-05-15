@@ -707,12 +707,43 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     // Extract hard constraints from the already-loaded memories (no extra DB call)
     hardConstraintsNonSSE = loadHardConstraints(allowMemory ? memories : []);
     constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
+
+    // ── Priority 5: Cross-conversation continuity opener ─────────────────────
+    // ── Priority 2: Proactive behavioral signal ──────────────────────────────
+    if (allowMemory && memories.length > 0) {
+      const isFirstUserMessage = history.filter((m) => m.role === "user").length === 0;
+      if (isFirstUserMessage) {
+        const highConfMemories = memories.filter((m) => (m as any).confidence >= 3);
+        if (highConfMemories.length > 0) {
+          const OPENER_PRIORITY = ["pain_pattern", "sport_context", "exercise_preference", "adherence_pattern", "volume_response", "training_preference"];
+          const topMemory = [...highConfMemories].sort((a, b) => {
+            const pa = OPENER_PRIORITY.indexOf((a as any).type), pb = OPENER_PRIORITY.indexOf((b as any).type);
+            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+            return (b as any).confidence - (a as any).confidence;
+          })[0] as any;
+          memoryCtx += `\n\n## RETURNING ATHLETE — PROACTIVE OPENER\nThis is the first message of a new conversation. Before answering, open with one brief, coach-like sentence referencing what you already know about this athlete. Make it feel natural — like a real coach who remembers their client. DO NOT say "Based on my memory" or "I know that you". Examples: "Good to be back — how's that shoulder holding up?" or "We've been building more athletically lately — continuing that direction?" Memory to reference: [${topMemory.type}] "${topMemory.detail}"`;
+        }
+        const behavioralSignals = memories.filter((m) =>
+          (["adherence_pattern", "volume_response", "recovery_pattern"].includes((m as any).type)) &&
+          (m as any).sentiment === "negative" && (m as any).confidence >= 3
+        );
+        if (behavioralSignals.length > 0) {
+          const signal = behavioralSignals[0] as any;
+          memoryCtx += `\n\n## PROACTIVE BEHAVIORAL SIGNAL\nPattern observed: ${signal.detail}. If clearly relevant to what the user is asking today, briefly and naturally surface it before answering. Keep it coaching-toned and concise. Example: "I've noticed [pattern] — want me to factor that in?" Only include if genuinely relevant. Do NOT force it into every response.`;
+        }
+      }
+    }
   } else {
     // For non-Pro users: lightweight constraint memory load for hard constraint enforcement
     const constraintMemories = await listMemories(userId).catch(() => []);
     hardConstraintsNonSSE = loadHardConstraints(constraintMemories);
     constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
   }
+
+  // ── Priority 3: Mutation trust language directive ─────────────────────────
+  // Prevent the AI from confirming mutations as complete before verification.
+  // This fires on every turn — only affects language when mutations are being applied.
+  memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
 
   // Agent-driven conversion hint for free/starter users
   let conversionHint = "";
@@ -3438,12 +3469,41 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     // Extract hard constraints from the already-loaded memories (no extra DB call)
     hardConstraintsSSE = loadHardConstraints(allowMemory ? memories : []);
     constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
+
+    // ── Priority 5: Cross-conversation continuity opener (SSE path) ──────────
+    // ── Priority 2: Proactive behavioral signal (SSE path) ───────────────────
+    if (allowMemory && memories.length > 0) {
+      const isFirstUserMessageSSE = history.filter((m) => m.role === "user").length === 0;
+      if (isFirstUserMessageSSE) {
+        const highConfMemoriesSSE = memories.filter((m) => (m as any).confidence >= 3);
+        if (highConfMemoriesSSE.length > 0) {
+          const OPENER_PRIORITY_SSE = ["pain_pattern", "sport_context", "exercise_preference", "adherence_pattern", "volume_response", "training_preference"];
+          const topMemorySSE = [...highConfMemoriesSSE].sort((a, b) => {
+            const pa = OPENER_PRIORITY_SSE.indexOf((a as any).type), pb = OPENER_PRIORITY_SSE.indexOf((b as any).type);
+            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
+            return (b as any).confidence - (a as any).confidence;
+          })[0] as any;
+          memoryCtx += `\n\n## RETURNING ATHLETE — PROACTIVE OPENER\nThis is the first message of a new conversation. Before answering, open with one brief, coach-like sentence referencing what you already know about this athlete. Make it feel natural — like a real coach who remembers their client. DO NOT say "Based on my memory" or "I know that you". Examples: "Good to be back — how's that shoulder holding up?" or "We've been building more athletically lately — continuing that direction?" Memory to reference: [${topMemorySSE.type}] "${topMemorySSE.detail}"`;
+        }
+        const behavioralSignalsSSE = memories.filter((m) =>
+          (["adherence_pattern", "volume_response", "recovery_pattern"].includes((m as any).type)) &&
+          (m as any).sentiment === "negative" && (m as any).confidence >= 3
+        );
+        if (behavioralSignalsSSE.length > 0) {
+          const signalSSE = behavioralSignalsSSE[0] as any;
+          memoryCtx += `\n\n## PROACTIVE BEHAVIORAL SIGNAL\nPattern observed: ${signalSSE.detail}. If clearly relevant to what the user is asking today, briefly and naturally surface it before answering. Keep it coaching-toned and concise. Example: "I've noticed [pattern] — want me to factor that in?" Only include if genuinely relevant. Do NOT force it into every response.`;
+        }
+      }
+    }
   } else {
     // For non-Pro users: lightweight constraint memory load for hard constraint enforcement
     const constraintMemories = await listMemories(userId).catch(() => []);
     hardConstraintsSSE = loadHardConstraints(constraintMemories);
     constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
   }
+
+  // ── Priority 3: Mutation trust language directive (SSE path) ─────────────
+  memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
 
   // ── Neural Graph Context (streaming path) ─────────────────────────────────
   let streamNeuralBias: NeuralBias | undefined;
