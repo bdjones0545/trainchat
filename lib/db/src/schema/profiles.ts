@@ -101,6 +101,13 @@ export const userProfilesTable = pgTable("user_profiles", {
    */
   coachingPrecisionHistory: jsonb("coaching_precision_history"),
 
+  /**
+   * Notification preferences persisted server-side.
+   * Shape: { weeklyDigest: boolean, programChanges: boolean, recoveryAlerts: boolean, milestoneAchievements: boolean }
+   * Stored as JSONB — null means user has not configured (use client defaults).
+   */
+  notificationPreferences: jsonb("notification_preferences"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

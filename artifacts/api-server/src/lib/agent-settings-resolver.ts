@@ -25,7 +25,7 @@
  * ══════════════════════════════════════════════════════════════════════════════
  */
 
-import { db, userProfilesTable } from "@workspace/db";
+import { db, userProfilesTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 
@@ -97,6 +97,8 @@ export interface CoachBehaviorSettings {
 // Loaded from the DB; override with prompt when prompt is explicit.
 
 export interface AgentTrainingContext {
+  /** Athlete's display name from the user account — inject naturally, do not overuse. */
+  name: string | null;
   goal: string | null;
   sport: string | null;
   experience: string | null;
@@ -160,15 +162,18 @@ export async function resolveAgentSettingsContext(
   userId: number,
   clientSettings?: Partial<CoachBehaviorSettings> | null,
 ): Promise<AgentSettingsContext> {
-  // ── 1. Load training profile from DB ────────────────────────────────────────
+  // ── 1. Load training profile + athlete name from DB ─────────────────────────
   let profileRow: typeof userProfilesTable.$inferSelect | null = null;
+  let athleteName: string | null = null;
   try {
     const [row] = await db
-      .select()
+      .select({ profile: userProfilesTable, name: usersTable.name })
       .from(userProfilesTable)
+      .leftJoin(usersTable, eq(userProfilesTable.userId, usersTable.id))
       .where(eq(userProfilesTable.userId, userId))
       .limit(1);
-    profileRow = row ?? null;
+    profileRow = row?.profile ?? null;
+    athleteName = row?.name ?? null;
   } catch (err) {
     logger.warn({ err, userId }, "[AgentSettings] Failed to load profile — using defaults");
   }
@@ -197,6 +202,7 @@ export async function resolveAgentSettingsContext(
 
   // ── 4. Build training context from profile ──────────────────────────────────
   const training: AgentTrainingContext = {
+    name: athleteName,
     goal: profileRow?.trainingGoal ?? null,
     sport: profileRow?.sportFocus ?? null,
     experience: profileRow?.experienceLevel ?? null,
@@ -403,6 +409,7 @@ export function buildProfileFillContext(ctx: AgentSettingsContext): string {
   const t = ctx.training;
   const parts: string[] = [];
 
+  if (t.name) parts.push(`- Athlete name: ${t.name} (use naturally but sparingly — do not over-address by name)`);
   if (t.goal) parts.push(`- Primary goal: ${t.goal.replace(/_/g, " ")}`);
   if (t.sport) parts.push(`- Sport / activity context: ${t.sport}`);
   if (t.experience) parts.push(`- Experience level: ${t.experience}`);

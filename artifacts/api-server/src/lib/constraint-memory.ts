@@ -39,8 +39,16 @@ export interface HardConstraints {
   bannedItems: string[];
   /** Exercise names the user dislikes — avoid unless explicitly requested this turn. */
   dislikedItems: string[];
-  /** Body regions with reported pain or limitation — protect in program design. */
+  /**
+   * Body regions with active pain or limitation (status="active").
+   * These are hard constraints — protect aggressively in program design.
+   */
   painRegions: string[];
+  /**
+   * Body regions with monitored (recovering/improving) discomfort (status="monitor").
+   * These are soft cautions — exercise care but do not fully block.
+   */
+  monitorRegions: string[];
   /** User's primary sport (if known) — maintain appropriate athletic emphasis. */
   sport: string | null;
 }
@@ -232,6 +240,7 @@ export function loadHardConstraints(memories: MemoryEntry[]): HardConstraints {
   const bannedItems: string[] = [];
   const dislikedItems: string[] = [];
   const painRegions: string[] = [];
+  const monitorRegions: string[] = [];
   let sport: string | null = null;
 
   for (const m of memories) {
@@ -262,8 +271,20 @@ export function loadHardConstraints(memories: MemoryEntry[]): HardConstraints {
     }
 
     if (m.type === "pain_pattern" && m.sentiment === "negative") {
-      // subject is already the region slug: "knee", "lower_back"
-      painRegions.push(m.subject.replace(/_/g, " "));
+      const region = m.subject.replace(/_/g, " ");
+      const status = m.status ?? "active";
+      if (status === "resolved") {
+        // Injury is healed — must NOT block exercise selection.
+        // Resolved injuries are excluded from both painRegions and monitorRegions.
+        logger.info({ subject: m.subject, region }, "[MemoryRead] pain_pattern is resolved — skipping constraint");
+        continue;
+      } else if (status === "monitor") {
+        // Recovering — soft caution only, not a hard block.
+        monitorRegions.push(region);
+      } else {
+        // "active" — enforce strongly.
+        painRegions.push(region);
+      }
     }
 
     if (m.type === "sport_context") {
@@ -275,10 +296,10 @@ export function loadHardConstraints(memories: MemoryEntry[]): HardConstraints {
   }
 
   logger.info(
-    { bannedCount: bannedItems.length, dislikedCount: dislikedItems.length, sport },
+    { bannedCount: bannedItems.length, dislikedCount: dislikedItems.length, painCount: painRegions.length, monitorCount: monitorRegions.length, sport },
     "[MemoryRead] loadHardConstraints resolved"
   );
-  return { bannedItems, dislikedItems, painRegions, sport };
+  return { bannedItems, dislikedItems, painRegions, monitorRegions, sport };
 }
 
 // ─── 3. Build enforcement directive for AI prompt injection ───────────────────
@@ -318,11 +339,22 @@ export function buildConstraintEnforcementDirective(
 
   if (constraints.painRegions.length > 0) {
     lines.push(
-      "Pain/limitation constraints — protect the following body regions:"
+      "ACTIVE Pain/limitation constraints — hard block — protect these regions aggressively:"
     );
     for (const region of constraints.painRegions) {
       lines.push(
         `  - ${capitalize(region)}: avoid heavy loading, high-impact work, and maximal range of motion under load`
+      );
+    }
+  }
+
+  if (constraints.monitorRegions.length > 0) {
+    lines.push(
+      "MONITORING regions — recovering, not fully restricted — exercise care but do not fully block:"
+    );
+    for (const region of constraints.monitorRegions) {
+      lines.push(
+        `  - ${capitalize(region)}: reduce extreme loading and avoid high-impact stress; this area is improving — do not eliminate load entirely. Check in with the user if programming in this area.`
       );
     }
   }

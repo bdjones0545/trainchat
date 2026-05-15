@@ -745,6 +745,14 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   // This fires on every turn — only affects language when mutations are being applied.
   memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
 
+  // ── P1: STRUCTURAL APPROVAL GATE — REBUILD_PROGRAM (non-SSE) ─────────────────
+  // When requireApprovalStructural=true, prevent the program architect from
+  // auto-generating a structured program. The AI must describe and ask first.
+  if (agentSettings.behavior.requireApprovalStructural && execPlan.action === "REBUILD_PROGRAM") {
+    memoryCtx += `\n\n## STRUCTURAL REBUILD — APPROVAL REQUIRED [user preference: on]\nCRITICAL: The user has enabled "Require Approval for Structural Changes."\nYou MUST follow this protocol:\n1. Do NOT generate or output a structured training program in this response.\n2. In 2-3 sentences, briefly describe what you would build (focus, structure, key emphasis).\n3. End with exactly: "Want me to build this out for you?" — wait for confirmation.\nOnly build the full program after the user explicitly says yes.`;
+    logger.info({ userId }, "[AgentSettings] requireApprovalStructural — REBUILD_PROGRAM intercepted; injecting approval gate directive");
+  }
+
   // Agent-driven conversion hint for free/starter users
   let conversionHint = "";
   if (planInfo?.plan === "free") {
@@ -1199,6 +1207,35 @@ Keep it helpful and intelligent, never promotional.`;
       "[AgentSettings] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
     );
     break; // fall through to AI call below
+  }
+
+  // ── P1: DELOAD APPROVAL GATE (non-SSE) ──────────────────────────────────────
+  // When requireApprovalDeload=true, deload/recovery-focus intents must route
+  // to the AI describe+confirm path instead of being auto-applied.
+  if (
+    agentSettings.behavior.requireApprovalDeload &&
+    execPlan.intentFamily != null &&
+    (["fatigue_management", "recovery_focus"] as string[]).includes(execPlan.intentFamily as string)
+  ) {
+    logger.info(
+      { userId, intentFamily: execPlan.intentFamily },
+      "[AgentSettings] requireApprovalDeload — deload intent requires user confirmation, routing to AI confirm path"
+    );
+    break; // fall through to AI describe+confirm path
+  }
+
+  // ── P1: STRUCTURAL MUTATION APPROVAL GATE (non-SSE) ─────────────────────────
+  // When requireApprovalStructural=true, structural exercise mutations (add/remove/swap)
+  // must route to the AI describe+confirm path before the edit engine runs.
+  if (
+    agentSettings.behavior.requireApprovalStructural &&
+    orchMutationType === "structural"
+  ) {
+    logger.info(
+      { userId, orchMutationType, mutationType: execPlan.mutation?.type },
+      "[AgentSettings] requireApprovalStructural — structural mutation requires user confirmation, routing to AI confirm path"
+    );
+    break; // fall through to AI describe+confirm path
   }
 
   // ── CLARIFICATION_FOLLOWUP — resume a pending mutation with the user's answer ──
@@ -3505,6 +3542,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // ── Priority 3: Mutation trust language directive (SSE path) ─────────────
   memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
 
+  // ── P1: STRUCTURAL APPROVAL GATE — REBUILD_PROGRAM (SSE path) ────────────
+  // When requireApprovalStructural=true, prevent the program architect from
+  // auto-generating a structured program. The AI must describe and ask first.
+  if (agentSettings.behavior.requireApprovalStructural && execPlan.action === "REBUILD_PROGRAM") {
+    memoryCtx += `\n\n## STRUCTURAL REBUILD — APPROVAL REQUIRED [user preference: on]\nCRITICAL: The user has enabled "Require Approval for Structural Changes."\nYou MUST follow this protocol:\n1. Do NOT generate or output a structured training program in this response.\n2. In 2-3 sentences, briefly describe what you would build (focus, structure, key emphasis).\n3. End with exactly: "Want me to build this out for you?" — wait for confirmation.\nOnly build the full program after the user explicitly says yes.`;
+    logger.info({ userId }, "[AgentSettings:stream] requireApprovalStructural — REBUILD_PROGRAM intercepted; injecting approval gate directive");
+  }
+
   // ── Neural Graph Context (streaming path) ─────────────────────────────────
   let streamNeuralBias: NeuralBias | undefined;
   let streamNeuralImbalances: Imbalance[] | undefined;
@@ -4023,6 +4068,36 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       "[AgentSettings:stream] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
     );
     break; // fall through to AI call below
+  }
+
+  // ── P1: DELOAD APPROVAL GATE (SSE path) ─────────────────────────────────────
+  // When requireApprovalDeload=true, deload/recovery-focus intents must route
+  // to the AI describe+confirm path instead of being auto-applied.
+  if (
+    agentSettings.behavior.requireApprovalDeload &&
+    execPlan.intentFamily != null &&
+    (["fatigue_management", "recovery_focus"] as string[]).includes(execPlan.intentFamily as string)
+  ) {
+    logger.info(
+      { userId, intentFamily: execPlan.intentFamily },
+      "[AgentSettings:stream] requireApprovalDeload — deload intent requires user confirmation, routing to AI confirm path"
+    );
+    break; // fall through to AI describe+confirm path
+  }
+
+  // ── P1: STRUCTURAL MUTATION APPROVAL GATE (SSE path) ─────────────────────────
+  // When requireApprovalStructural=true, structural exercise mutations (add/remove/swap)
+  // must route to the AI describe+confirm path before the edit engine runs.
+  if (
+    agentSettings.behavior.requireApprovalStructural &&
+    execPlan.mutation?.type != null &&
+    (["add", "remove", "swap"] as string[]).includes(execPlan.mutation.type)
+  ) {
+    logger.info(
+      { userId, mutationType: execPlan.mutation?.type },
+      "[AgentSettings:stream] requireApprovalStructural — structural mutation requires user confirmation, routing to AI confirm path"
+    );
+    break; // fall through to AI describe+confirm path
   }
 
   // ── Short-circuit: CLARIFICATION_FOLLOWUP ────────────────────────────────

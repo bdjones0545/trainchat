@@ -1,0 +1,161 @@
+TrainChat — Settings-to-Agent Integration Fix Sprint
+
+Objective:
+Make every Settings control truthfully affect Atlas behavior per user.
+
+Core principle:
+No setting should be cosmetic.
+If the UI says Atlas will behave differently, the resolver, memory system, mutation planner, and adaptation engine must enforce it.
+
+P0 — Fix Memory Status Lifecycle
+
+Problem:
+Active / Monitor / Resolved memory states exist in Settings, but buildMemoryContext() still injects resolved memories into Atlas.
+
+Fix:
+Update memory context construction:
+- Exclude status === "resolved" from active prompt injection
+- Treat status === "monitor" as soft caution only
+- Treat status === "active" as normal memory context
+- Preserve resolved memories historically but do not let them influence programming
+
+Also verify:
+- loadHardConstraints()
+- pain_pattern enforcement
+- injury memory enforcement
+
+Resolved/healed injuries must not block exercise selection.
+Monitor injuries should warn, not hard-block.
+Active injuries should enforce strongly.
+
+P1 — Code-Gate Approval Settings
+
+Problem:
+Approval gates for structural changes and deloads are prompt-only.
+
+Fix:
+Add deterministic enforcement before APPLY_MUTATION dispatch.
+
+If requireApprovalStructural = true:
+- structural mutations
+- phase shifts
+- program rebuilds
+- focus changes
+must route to approval/clarification, not auto-apply.
+
+If requireApprovalDeload = true:
+- deload week changes
+- recovery deload mode
+must request confirmation before applying.
+
+Goal:
+Atlas cannot bypass user approval through planner routing.
+
+P1 — Inject Athlete Name Into Atlas Context
+
+Problem:
+Name is saved but never injected.
+
+Fix:
+Add user name to AgentTrainingContext and buildProfileFillContext().
+
+Example:
+- Athlete name: Bryan
+
+Atlas may use name naturally but should not overuse it.
+
+P2 — Training Aggression Enforcement
+
+Problem:
+Training aggression is prompt-only.
+
+Fix:
+Pass trainingAggression into mutation recipe generation and progression logic.
+
+Behavior:
+- Conservative: bias lower-risk edits, slower progression, stronger recovery safeguards
+- Balanced: default behavior
+- Aggressive: allow stronger overload if readiness supports it
+- Competition: performance-biased but safety constraints always override
+
+Do not let aggressive/competition override injuries, pain, hard constraints, or deload approval settings.
+
+P2 — Precision Score Updates Beyond Calibration
+
+Problem:
+Precision score only updates from calibration/check-ins/adherence, not normal memory growth.
+
+Fix:
+Update coachingPrecisionScore when:
+- new high-confidence memories are created
+- profile fields are completed
+- recovery_pattern memories form
+- consistent check-ins accumulate
+- user corrects/confirms memories
+
+Goal:
+The score should reflect Atlas learning over time.
+
+P2 — Server-Backed Active Systems Grid
+
+Problem:
+Active systems grid is derived from localStorage and can be misleading.
+
+Fix:
+Create/extend API endpoint returning real server state:
+- memory count
+- memory personalization enabled
+- readiness/check-in availability
+- forecast status
+- athlete DNA calibration status
+- adaptation engine mode
+- user plan/access level
+
+Settings UI should render from server truth, not localStorage alone.
+
+P2 — UI Conflict Disclosure
+
+Problem:
+Concise responses overrides explanation depth, but UI does not explain this.
+
+Fix:
+When Concise Responses is enabled:
+- visually dim or annotate Explanation Depth
+- show: “Concise responses overrides explanation depth.”
+
+P3 — Notification Preferences Persistence
+
+Problem:
+Notification controls are localStorage-only.
+
+Fix:
+Persist notification preferences to DB/user settings table or profile metadata.
+
+Even if delivery is future:
+- save server-side now
+- include in export
+- make available to future proactive workflows
+
+P3 — Forecasting Plan/Status Clarity
+
+Problem:
+Forecasting status may imply a premium/active system without clear backing.
+
+Fix:
+Clarify status logic:
+- Inactive
+- Learning
+- Active
+- Not available on current plan, if gated
+
+Atlas should not claim forecasting is active unless forecast engine has enough data and access is enabled.
+
+Success criteria:
+- Resolved memories no longer influence Atlas
+- Monitor memories act as soft cautions only
+- Approval gates are enforced by code
+- Athlete name is available to Atlas
+- Aggression changes actual mutation/progression behavior
+- Intelligence score reflects continuous learning
+- Active systems grid reflects server truth
+- No setting visually promises behavior that is not enforced

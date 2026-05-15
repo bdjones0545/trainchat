@@ -32,6 +32,7 @@ function makeMemory(overrides: Partial<MemoryEntry>): MemoryEntry {
     confidence: 4,
     source: "conversation",
     detail: "Test memory",
+    status: "active",
     updatedAt: baseDate,
     createdAt: baseDate,
     ...overrides,
@@ -189,6 +190,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: [],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     expect(buildConstraintEnforcementDirective(constraints)).toBeNull();
@@ -199,6 +201,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: ["belt squat"],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const directive = buildConstraintEnforcementDirective(constraints);
@@ -213,6 +216,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: [],
       dislikedItems: ["lunges"],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const directive = buildConstraintEnforcementDirective(constraints);
@@ -226,6 +230,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: [],
       dislikedItems: [],
       painRegions: ["knee"],
+      monitorRegions: [],
       sport: null,
     };
     const directive = buildConstraintEnforcementDirective(constraints);
@@ -239,6 +244,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: [],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: "golf",
     };
     const directive = buildConstraintEnforcementDirective(constraints);
@@ -252,6 +258,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: ["barbell"],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const directive = buildConstraintEnforcementDirective(constraints);
@@ -264,6 +271,7 @@ describe("buildConstraintEnforcementDirective", () => {
       bannedItems: ["belt squat"],
       dislikedItems: ["lunges"],
       painRegions: ["knee"],
+      monitorRegions: [],
       sport: "golf",
     };
     const directive = buildConstraintEnforcementDirective(constraints);
@@ -279,7 +287,7 @@ describe("buildConstraintEnforcementDirective", () => {
 describe("validateAgainstHardConstraints", () => {
   it("returns empty array when there are no hard constraints", () => {
     const program = makeProgram(["Barbell Squat", "Romanian Deadlift", "Bench Press"]);
-    const constraints: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], sport: null };
+    const constraints: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], monitorRegions: [], sport: null };
     const violations = validateAgainstHardConstraints(program, constraints);
     expect(violations).toHaveLength(0);
   });
@@ -290,6 +298,7 @@ describe("validateAgainstHardConstraints", () => {
       bannedItems: ["belt squat"],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const violations = validateAgainstHardConstraints(program, constraints);
@@ -305,6 +314,7 @@ describe("validateAgainstHardConstraints", () => {
       bannedItems: [],
       dislikedItems: ["lunges"],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const violations = validateAgainstHardConstraints(program, constraints);
@@ -319,6 +329,7 @@ describe("validateAgainstHardConstraints", () => {
       bannedItems: ["belt squat"],
       dislikedItems: ["lunges"],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const violations = validateAgainstHardConstraints(program, constraints);
@@ -349,6 +360,7 @@ describe("validateAgainstHardConstraints", () => {
       bannedItems: ["belt squat"],
       dislikedItems: ["lunges"],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const violations = validateAgainstHardConstraints(program, constraints);
@@ -364,6 +376,7 @@ describe("validateAgainstHardConstraints", () => {
       bannedItems: ["belt squat"],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const violations = validateAgainstHardConstraints(program, constraints);
@@ -376,6 +389,7 @@ describe("validateAgainstHardConstraints", () => {
       bannedItems: ["belt squat"],
       dislikedItems: [],
       painRegions: [],
+      monitorRegions: [],
       sport: null,
     };
     const violations = validateAgainstHardConstraints(program, constraints);
@@ -408,6 +422,7 @@ describe("verifyResponseAlignment — persisted_constraint_violation", () => {
         bannedItems: ["belt squat"],
         dislikedItems: [],
         painRegions: [],
+        monitorRegions: [],
         sport: null,
       },
     });
@@ -425,6 +440,7 @@ describe("verifyResponseAlignment — persisted_constraint_violation", () => {
         bannedItems: ["belt squat"],
         dislikedItems: [],
         painRegions: [],
+        monitorRegions: [],
         sport: null,
       },
     });
@@ -444,6 +460,7 @@ describe("verifyResponseAlignment — persisted_constraint_violation", () => {
         bannedItems: ["belt squat"],
         dislikedItems: [],
         painRegions: [],
+        monitorRegions: [],
         sport: null,
       },
     });
@@ -461,6 +478,7 @@ describe("verifyResponseAlignment — persisted_constraint_violation", () => {
         bannedItems: ["belt squat"],
         dislikedItems: [],
         painRegions: [],
+        monitorRegions: [],
         sport: null,
       },
     });
@@ -477,6 +495,7 @@ describe("verifyResponseAlignment — persisted_constraint_violation", () => {
         bannedItems: ["barbell"],
         dislikedItems: [],
         painRegions: [],
+        monitorRegions: [],
         sport: null,
       },
     });

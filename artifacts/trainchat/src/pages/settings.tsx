@@ -513,16 +513,34 @@ function AtlasIntelligenceSection({ profile, memories }: { profile: Record<strin
   const memoryOn = lsBool("coach_memory", true);
   const readinessOn = lsBool("coach_readiness_adapt", true);
   const autoAdjust = lsBool("coach_autoadjust", true);
-  const hasDNA = !!(profile?.athleteDNA);
   const aggression = lsGet("coach_aggression", "balanced");
 
+  // P2: Server-backed active systems grid — fetched from real server state
+  const { data: intelligenceStatus, isLoading: statusLoading } = useQuery({
+    queryKey: ["intelligence-status"],
+    queryFn: () => fetch("/api/intelligence-status", { credentials: "include" }).then(r => r.ok ? r.json() : null),
+    staleTime: 30_000,
+  });
+
+  const hasDNA = !!(intelligenceStatus?.hasDNA ?? profile?.athleteDNA);
+  const serverMemoryCount = intelligenceStatus?.memoryCount ?? memories.length;
+  const hasReadiness = intelligenceStatus?.hasReadiness ?? false;
+
+  // P3: Forecasting status based on real server data — not guessed from localStorage
+  const forecastStatus = intelligenceStatus?.forecastStatus;
+  const forecastLabel = forecastStatus === "active" ? "Active"
+    : forecastStatus === "learning" ? "Learning"
+    : forecastStatus === "unavailable" ? "Not available on current plan"
+    : "Inactive";
+  const forecastActive = forecastStatus === "active" || forecastStatus === "learning";
+
   const systems = [
-    { label: "Memory Tracking", status: memoryOn ? "Active" : "Off", active: memoryOn },
-    { label: "Recovery Monitoring", status: readinessOn ? "Active" : "Paused", active: readinessOn },
+    { label: "Memory Tracking", status: memoryOn ? (serverMemoryCount > 0 ? `Active — ${serverMemoryCount} entries` : "Active") : "Off", active: memoryOn },
+    { label: "Recovery Monitoring", status: hasReadiness ? "Active" : readinessOn ? "Enabled — no check-ins yet" : "Paused", active: readinessOn },
     { label: "Athlete DNA Calibration", status: hasDNA ? `${score}%` : "Not calibrated", active: hasDNA },
     { label: "Adaptation Engine", status: autoAdjust ? aggression.charAt(0).toUpperCase() + aggression.slice(1) : "Suggest-only", active: autoAdjust },
-    { label: "Readiness Monitoring", status: readinessOn ? "Enabled" : "Disabled", active: readinessOn },
-    { label: "Forecasting", status: memories.filter(m => m.confidence >= 4).length >= 3 ? "High confidence" : memories.length > 0 ? "Building" : "Inactive", active: memories.length > 0 },
+    { label: "Readiness Monitoring", status: hasReadiness ? "Active" : "Waiting for check-ins", active: hasReadiness },
+    { label: "Forecasting", status: forecastLabel, active: forecastActive },
   ];
 
   return (
@@ -561,10 +579,13 @@ function AtlasIntelligenceSection({ profile, memories }: { profile: Record<strin
         </p>
       </div>
 
-      {/* Active systems */}
+      {/* Active systems — server-backed */}
       <Card>
         <div className="px-4 py-3">
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-2">Active Systems</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Active Systems</p>
+            {statusLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/40" />}
+          </div>
           <div className="space-y-2">
             {systems.map(s => (
               <div key={s.label} className="flex items-center justify-between">
@@ -575,6 +596,7 @@ function AtlasIntelligenceSection({ profile, memories }: { profile: Record<strin
               </div>
             ))}
           </div>
+          <p className="text-[9px] text-muted-foreground/30 mt-2">Status reflects real server state</p>
         </div>
       </Card>
     </section>
@@ -620,9 +642,14 @@ function CoachingBehaviorSection() {
         </div>
       </div>
 
-      {/* Explanation depth */}
-      <div className="mb-3">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Explanation Depth</p>
+      {/* Explanation depth — P2: dimmed when concise responses override is on */}
+      <div className={`mb-3 transition-opacity ${concise ? "opacity-40 pointer-events-none" : ""}`}>
+        <div className="flex items-center justify-between px-1 mb-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Explanation Depth</p>
+          {concise && (
+            <p className="text-[10px] text-amber-400/80 font-medium">Overridden by concise mode</p>
+          )}
+        </div>
         <div className="grid grid-cols-3 gap-2">
           {depthOptions.map(o => (
             <button key={o.id} onClick={() => { setDepth(o.id); lsSet("coach_depth", o.id); }}
@@ -1005,23 +1032,55 @@ function NotificationsSection() {
   const [forecast, setForecast] = useState(() => localStorage.getItem("notif_forecast") === "true");
   const [recovery, setRecovery] = useState(() => localStorage.getItem("notif_recovery") === "true");
   const [plateau, setPlateau] = useState(() => localStorage.getItem("notif_plateau") === "true");
+  const [saving, setSaving] = useState(false);
 
-  function t(key: string, val: boolean, setter: (v: boolean) => void) {
-    lsSet(key, val); setter(val);
+  // P3: Persist notification preferences server-side (fire-and-forget after localStorage save)
+  async function persistToServer(updated: Record<string, boolean>) {
+    try {
+      setSaving(true);
+      await fetch("/api/intelligence-status/notifications", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+    } catch {
+      // Non-fatal — localStorage is the source of truth for delivery gating
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function t(key: string, val: boolean, setter: (v: boolean) => void, field: string) {
+    lsSet(key, val);
+    setter(val);
+    const current = {
+      preSesh: localStorage.getItem("notif_presession") === "true",
+      missedSession: localStorage.getItem("notif_missed") === "true",
+      weeklyRecap: localStorage.getItem("notif_weekly") === "true",
+      forecastAlerts: localStorage.getItem("notif_forecast") === "true",
+      recoveryWarnings: localStorage.getItem("notif_recovery") === "true",
+      plateauDetection: localStorage.getItem("notif_plateau") === "true",
+      [field]: val,
+    };
+    persistToServer(current);
   }
 
   return (
     <section>
       <SectionHeader icon={<Bell className="w-4 h-4" />} title="Notifications + Coaching Presence" subtitle="When and how Atlas reaches out" />
       <Card>
-        <SwitchRow label="Pre-session brief" description="Atlas prepares a session summary before you train" checked={preSesh} onCheckedChange={v => t("notif_presession", v, setPreSesh)} />
-        <SwitchRow label="Missed session check-in" description="Atlas checks in when you miss a scheduled session" checked={missed} onCheckedChange={v => t("notif_missed", v, setMissed)} />
-        <SwitchRow label="Weekly coaching recap" description="Weekly summary of progress, patterns, and next-week focus" checked={weekly} onCheckedChange={v => t("notif_weekly", v, setWeekly)} />
-        <SwitchRow label="Forecast alerts" description="Alerts when Atlas detects upcoming performance windows or fatigue peaks" checked={forecast} onCheckedChange={v => t("notif_forecast", v, setForecast)} />
-        <SwitchRow label="Recovery warnings" description="Alerts when recovery signals suggest adjusting intensity" checked={recovery} onCheckedChange={v => t("notif_recovery", v, setRecovery)} />
-        <SwitchRow label="Plateau detection" description="Atlas flags when progress has stalled and proposes a change" checked={plateau} onCheckedChange={v => t("notif_plateau", v, setPlateau)} />
+        <SwitchRow label="Pre-session brief" description="Atlas prepares a session summary before you train" checked={preSesh} onCheckedChange={v => t("notif_presession", v, setPreSesh, "preSesh")} />
+        <SwitchRow label="Missed session check-in" description="Atlas checks in when you miss a scheduled session" checked={missed} onCheckedChange={v => t("notif_missed", v, setMissed, "missedSession")} />
+        <SwitchRow label="Weekly coaching recap" description="Weekly summary of progress, patterns, and next-week focus" checked={weekly} onCheckedChange={v => t("notif_weekly", v, setWeekly, "weeklyRecap")} />
+        <SwitchRow label="Forecast alerts" description="Alerts when Atlas detects upcoming performance windows or fatigue peaks" checked={forecast} onCheckedChange={v => t("notif_forecast", v, setForecast, "forecastAlerts")} />
+        <SwitchRow label="Recovery warnings" description="Alerts when recovery signals suggest adjusting intensity" checked={recovery} onCheckedChange={v => t("notif_recovery", v, setRecovery, "recoveryWarnings")} />
+        <SwitchRow label="Plateau detection" description="Atlas flags when progress has stalled and proposes a change" checked={plateau} onCheckedChange={v => t("notif_plateau", v, setPlateau, "plateauDetection")} />
       </Card>
-      <p className="text-[10px] text-muted-foreground/40 px-1 mt-2">Notification delivery is coming soon. These preferences are saved for when it launches.</p>
+      <div className="flex items-center gap-1.5 px-1 mt-2">
+        <p className="text-[10px] text-muted-foreground/40">Preferences saved server-side. Delivery coming soon.</p>
+        {saving && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/30" />}
+      </div>
     </section>
   );
 }

@@ -43,6 +43,13 @@ export interface MemoryEntry {
   confidence: number;
   source: MemorySource;
   detail: string;
+  /**
+   * Memory lifecycle status.
+   * "active"   → full weight in context injection
+   * "monitor"  → soft-caution only; not a hard constraint
+   * "resolved" → historically preserved but EXCLUDED from active coaching context
+   */
+  status: "active" | "monitor" | "resolved";
   updatedAt: Date;
   createdAt: Date;
 }
@@ -100,6 +107,34 @@ export async function upsertMemory(userId: number, candidate: MemoryCandidate): 
       source: candidate.source,
       detail: candidate.detail,
     });
+    // P2: Precision score reflects continuous learning — bump for high-confidence new memories
+    if (candidate.confidence >= 4) {
+      bumpCoachingPrecisionScore(userId).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Bumps the coaching precision score by +2 (capped at 100) when a new
+ * high-confidence memory is formed. Reflects Atlas learning over time.
+ * Fire-and-forget — non-critical, does not affect the main memory write.
+ */
+async function bumpCoachingPrecisionScore(userId: number): Promise<void> {
+  try {
+    const [profile] = await db
+      .select({ score: userProfilesTable.coachingPrecisionScore })
+      .from(userProfilesTable)
+      .where(eq(userProfilesTable.userId, userId))
+      .limit(1);
+    if (!profile) return;
+    const current = profile.score ?? 0;
+    const newScore = Math.min(100, current + 2);
+    await db
+      .update(userProfilesTable)
+      .set({ coachingPrecisionScore: newScore, updatedAt: new Date() })
+      .where(eq(userProfilesTable.userId, userId));
+  } catch {
+    // Non-fatal — precision score update is best-effort
   }
 }
 
@@ -952,7 +987,9 @@ export async function syncMemoriesFromData(userId: number): Promise<number> {
  * Only includes memories with confidence ≥ 2.
  */
 export function buildMemoryContext(memories: MemoryEntry[]): string {
-  const relevant = memories.filter((m) => m.confidence >= 2);
+  // "resolved" memories are excluded from active context entirely — they must not influence coaching.
+  // "monitor" and "active" memories are included (monitor gets a soft-caution prefix).
+  const relevant = memories.filter((m) => m.confidence >= 2 && (m.status ?? "active") !== "resolved");
   if (relevant.length === 0) return "";
 
   const byType: Partial<Record<MemoryType, MemoryEntry[]>> = {};
@@ -1003,7 +1040,9 @@ export function buildMemoryContext(memories: MemoryEntry[]): string {
     lines.push(`### ${typeLabels[type]}`);
     for (const m of entries) {
       const confidenceStar = m.confidence >= 4 ? " ★" : "";
-      lines.push(`- ${m.detail}${confidenceStar}`);
+      // "monitor" entries are recovering/improving — inject as soft caution, not a hard block
+      const prefix = (m.status ?? "active") === "monitor" ? "[Monitoring — recovering, not a hard restriction] " : "";
+      lines.push(`- ${prefix}${m.detail}${confidenceStar}`);
     }
     lines.push("");
   }
