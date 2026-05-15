@@ -4,7 +4,7 @@ import {
   Dumbbell, Save, CheckCircle, Loader2, Lock, Zap, PlayCircle,
   MessageSquare, ChevronDown, ChevronUp, TrendingUp, TrendingDown, LayoutGrid,
   Calendar, Clock, RotateCcw, GitBranch, Activity, Layers,
-  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2, Wrench, HelpCircle,
+  AlertCircle, RefreshCw, Send, Leaf, CheckCircle2, Share2, Wrench, HelpCircle, Brain,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
@@ -126,6 +126,8 @@ interface Props {
   isWeekDataLoading?: boolean;
   /** Conversation ID — used for dev logging of sidebar refine submits */
   conversationId?: number | null;
+  /** Open the Athlete Intelligence Profile modal */
+  onOpenAthleteProfile?: () => void;
 }
 
 type Tab = "program" | "changes" | "history" | "forecast" | "adapted";
@@ -3724,6 +3726,7 @@ export default function LiveProgramPanel({
   onFocusModeChange,
   isWeekDataLoading = false,
   conversationId,
+  onOpenAthleteProfile,
 }: Props) {
   const { focusMode } = useFocusMode();
 
@@ -3991,12 +3994,25 @@ export default function LiveProgramPanel({
       {/* Active Program Summary Card — program identity at a glance */}
       {hasActiveSystem && program && (
         <div className="flex-shrink-0 px-3 py-2.5 border-b border-border/40 bg-muted/5">
-          <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground/35 mb-1">Current System</p>
-          <p className="text-[12px] font-semibold text-foreground leading-snug truncate">
-            {program.programName && program.programName !== "Workout Plan"
-              ? program.programName
-              : `${program.days.length}-Day ${getFocusModeConfig(sidebarFocus).label} Program`}
-          </p>
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-[8px] font-bold uppercase tracking-[0.12em] text-muted-foreground/35 mb-1">Current System</p>
+              <p className="text-[12px] font-semibold text-foreground leading-snug truncate">
+                {program.programName && program.programName !== "Workout Plan"
+                  ? program.programName
+                  : `${program.days.length}-Day ${getFocusModeConfig(sidebarFocus).label} Program`}
+              </p>
+            </div>
+            {onOpenAthleteProfile && (
+              <button
+                onClick={onOpenAthleteProfile}
+                title="Athlete Intelligence Profile"
+                className="flex-shrink-0 mt-0.5 p-1 rounded-lg text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors"
+              >
+                <Brain className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase tracking-wider ${getFocusModeConfig(sidebarFocus).theme.badgeClass}`}>
               <FocusIcon mode={sidebarFocus} className="w-2.5 h-2.5" />

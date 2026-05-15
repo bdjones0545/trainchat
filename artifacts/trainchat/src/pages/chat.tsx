@@ -42,6 +42,7 @@ import PricingModal from "@/components/PricingModal";
 import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import CalibrationModal from "@/components/chat/CalibrationModal";
+import AthleteIntelligenceProfile from "@/components/chat/AthleteIntelligenceProfile";
 import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage, type CompleteEvent, type ButtonActionPayload } from "@/hooks/useStreamMessage";
 import {
@@ -245,6 +246,7 @@ export default function Chat() {
   const [messagesUsed, setMessagesUsed] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [showAthleteProfile, setShowAthleteProfile] = useState(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [focusSwitchConfirm, setFocusSwitchConfirm] = useState<string | null>(null);
   const [showFocusInfo, setShowFocusInfo] = useState(false);
@@ -690,7 +692,14 @@ export default function Chat() {
     staleTime: 60000,
   });
 
-  const calibrationScore: number = profileRaw?.calibrationScore ?? 0;
+  const calibrationScore: number = profileRaw?.coachingPrecisionScore ?? profileRaw?.calibrationScore ?? 0;
+
+  function getPrecisionTierLabel(score: number): string {
+    if (score >= 76) return "Performance Intelligence";
+    if (score >= 51) return "Adaptive Coaching";
+    if (score >= 26) return "Context-Aware";
+    return "Basic Coaching";
+  }
 
   const createConvo = useCreateConversation();
   const stream = useStreamMessage();
@@ -2710,17 +2719,19 @@ export default function Chat() {
           </div>
           {calibrationScore > 0 && (
             <button
-              onClick={() => setShowCalibration(true)}
-              title="Plan Precision"
+              onClick={() => setShowAthleteProfile(true)}
+              title="Athlete Intelligence Profile"
               className={`flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-lg border transition-all ${
-                calibrationScore >= 70
+                calibrationScore >= 76
                   ? "text-green-400 border-green-400/30 bg-green-400/10"
-                  : calibrationScore >= 40
+                  : calibrationScore >= 51
+                  ? "text-primary border-primary/30 bg-primary/10"
+                  : calibrationScore >= 26
                   ? "text-amber-400 border-amber-400/30 bg-amber-400/10"
                   : "text-muted-foreground border-border bg-muted/20"
               }`}
             >
-              {calibrationScore}%
+              {calibrationScore}
             </button>
           )}
         </div>
@@ -3027,6 +3038,7 @@ export default function Chat() {
           activeFocusModes={activeFocusModes}
           onFocusModeChange={handleFocusSwitch}
           isWeekDataLoading={hasActiveSystem && weekDataLoading}
+          onOpenAthleteProfile={() => setShowAthleteProfile(true)}
         />
       </div>
     </div>
@@ -3171,12 +3183,17 @@ export default function Chat() {
             queryClient.invalidateQueries({ queryKey: ["profile"] });
             if (applyNow) {
               setShowCalibration(false);
-              // Route through the agent so it applies the new context to the current plan
               setTimeout(() => {
                 handleSend("Refine my current plan using my updated training profile.", {});
               }, 400);
             }
           }}
+        />
+      )}
+      {showAthleteProfile && (
+        <AthleteIntelligenceProfile
+          onClose={() => setShowAthleteProfile(false)}
+          onRecalibrate={() => setShowCalibration(true)}
         />
       )}
       {showMemoryPanel && (
@@ -3792,9 +3809,9 @@ export default function Chat() {
                           }}
                           className="text-primary font-semibold hover:underline"
                         >
-                          Improve Your Training System
+                          Teach Atlas About You
                         </button>{" "}
-                        to share your training background — the more context I have, the better I can build for you.
+                        — the more Atlas understands your training, recovery, and lifestyle, the smarter your coaching becomes.
                       </p>
                     </div>
                   </div>
@@ -3979,13 +3996,19 @@ export default function Chat() {
                   <button
                     onClick={() => setShowCalibration(true)}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all duration-150 ${
-                      calibrationScore >= 70
+                      calibrationScore >= 76
                         ? "text-green-400 border-green-400/30 hover:bg-green-400/10"
+                        : calibrationScore >= 51
+                        ? "text-primary border-primary/30 bg-primary/5 hover:bg-primary/10"
+                        : calibrationScore >= 26
+                        ? "text-amber-400 border-amber-400/30 hover:bg-amber-400/10"
                         : "text-primary border-primary/30 bg-primary/5 hover:bg-primary/10"
                     }`}
                   >
-                    <Zap className="w-3 h-3" />
-                    {calibrationScore > 0 ? `${calibrationScore}% Precision` : "Improve My Plan"}
+                    <Brain className="w-3 h-3" />
+                    {calibrationScore > 0
+                      ? `${calibrationScore} · ${getPrecisionTierLabel(calibrationScore)}`
+                      : "Teach Atlas About You"}
                   </button>
                 </div>
                 {hasActiveSystem && (
@@ -4222,6 +4245,7 @@ export default function Chat() {
                   activeFocusModes={activeFocusModes}
                   onFocusModeChange={handleFocusSwitch}
                   isWeekDataLoading={hasActiveSystem && weekDataLoading}
+                  onOpenAthleteProfile={() => setShowAthleteProfile(true)}
                 />
               </div>
             </div>

@@ -75,6 +75,7 @@ import { auditLanguageInterpretation } from "./language-audit";
 import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
 import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
 import { buildFocusModePromptContext, getFocusModeAdaptationHeuristics } from "./focus-engines/focus-mode-router";
+import { buildDNAPromptContext, type AthleteDNA } from "./athlete-dna";
 import {
   buildSpeedArchitectureBrief,
   buildSpeedResponseContract,
@@ -1909,6 +1910,27 @@ ${profile.injuries ? `- Injuries / Limitations: ${profile.injuries}` : ""}
 ${profile.sportFocus ? `- Sport / Activity Focus: ${profile.sportFocus}` : ""}
 ${profile.exercisePreferences ? `- Exercise Preferences: ${profile.exercisePreferences}` : ""}
 ${profile.exercisesToAvoid ? `- Exercises to Avoid (NEVER program these): ${profile.exercisesToAvoid}` : ""}
+${(profile as any).scheduleConsistency ? `- Schedule Consistency: ${(profile as any).scheduleConsistency}` : ""}
+${(profile as any).recoveryConsistency ? `- Recovery Approach: ${(profile as any).recoveryConsistency}` : ""}
+${(profile as any).trainingAggression ? `- Training Intensity Style: ${(profile as any).trainingAggression}` : ""}
+${(profile as any).autoregulationComfort ? `- Autoregulation Style: ${(profile as any).autoregulationComfort}` : ""}
+${(profile as any).motivationStyle ? `- Motivation Driver: ${(profile as any).motivationStyle}` : ""}
+${(profile as any).athleteDNA ? buildDNAPromptContext((profile as any).athleteDNA as AthleteDNA) : ""}
+${(() => {
+  const precision = (profile as any).coachingPrecisionScore as number | null | undefined;
+  const hasDNA = !!(profile as any).athleteDNA;
+  if (!hasDNA || (precision !== null && precision !== undefined && precision < 25)) {
+    return `
+## ATLAS CALIBRATION AWARENESS [CONTEXTUAL — DO NOT FORCE]
+
+Your coaching precision for this user is currently ${hasDNA ? `LOW (${precision ?? 0}/100)` : "UNCALIBRATED"}. You are working with limited behavioral intelligence.
+
+If the conversation naturally presents an opportunity — e.g. the user expresses frustration, mentions schedule difficulty, asks why the plan feels off, or asks for more personalized coaching — you may suggest: "If you want me to dial this in even further, you can teach me more about how you train via the 'Teach Atlas About You' option."
+
+IMPORTANT: Only suggest this once per conversation, only when genuinely relevant, and never as an opener or non-sequitur. The user's coaching request always takes priority.`;
+  }
+  return "";
+})()}
 ${homeGymConstraintBlock}
 ${SPECIALTY_EQUIPMENT_CONSTRAINT_BLOCK}
 ${routingHint}${reEntryContext}${intelligenceContext}${exerciseLibraryContext}${knowledgeContext}${researchContext}${researchProgrammingGuidance}${conditioningContext}${powerSpeedContext}${sportContext}${periodizationContext}${mobilityContext}${specialConsiderationsContext}${specialConsiderationsClarification}${returnFromInjuryContext}${returnFromInjuryClarification}`;
