@@ -1,0 +1,336 @@
+TrainChat — Readiness / Check-In System Audit
+
+Objective:
+Perform a full audit of the Check-In system and its integration with TrainChat’s intelligence architecture.
+
+Core Principle:
+The Check-In system should NOT feel like:
+- wellness tracking,
+- a survey,
+- or data entry.
+
+It should feel like:
+- the nervous system of the coaching intelligence.
+
+The user should clearly feel:
+- “TrainChat noticed this”
+- “TrainChat adapted because of this”
+- “TrainChat is monitoring me over time”
+
+==================================================
+AUDIT CATEGORY 1 — CHECK-IN UX + FRICTION
+==================================================
+
+Audit:
+- mobile usability
+- interaction speed
+- emotional tone
+- completion friction
+- clarity of scales
+- scanability
+- visual hierarchy
+
+Evaluate:
+- 1–5 scale clarity
+- wording of metrics
+- label usefulness
+- touch ergonomics
+- completion time
+- accessibility
+- visual feedback after selection
+
+Questions:
+- Does the experience feel premium?
+- Does it feel like coaching or generic tracking?
+- Is anything visually repetitive or fatiguing?
+- Is the emotional tone too clinical?
+- Is the CTA strong enough?
+
+Audit whether:
+- users understand WHY they are logging check-ins
+- the system communicates the value of the data
+
+Goal:
+The experience should feel:
+fast,
+coach-like,
+and meaningful.
+
+==================================================
+AUDIT CATEGORY 2 — READINESS SCORING LOGIC
+==================================================
+
+Audit:
+- readiness scoring architecture
+- weighting system
+- fatigue thresholds
+- adaptation triggers
+- soreness/stress interaction
+- trend smoothing
+- signal prioritization
+
+Questions:
+- Are scores treated independently or contextually?
+- Does low sleep + high soreness create compounded impact?
+- Are adaptation thresholds intelligent or too rigid?
+- Is the readiness model explainable?
+- Are repeated moderate scores handled correctly?
+
+Evaluate:
+- composite scoring logic
+- rolling averages
+- acute vs chronic fatigue
+- volatility detection
+- recovery safeguard triggers
+
+Goal:
+The readiness system should behave like:
+performance coaching logic,
+not a linear score average.
+
+==================================================
+AUDIT CATEGORY 3 — AGENT INTEGRATION
+==================================================
+
+Audit how check-ins flow into:
+- Coach Atlas
+- Behavioral Intelligence
+- Forecast Engine
+- Adaptation Engine
+- Progression Intelligence
+- Memory systems
+- Mutation logic
+
+Questions:
+- Which agents actually consume check-in data?
+- Which systems visibly react?
+- Is the integration deep or superficial?
+- Are check-ins influencing program structure?
+- Do readiness trends alter progression decisions?
+
+Audit:
+- timing of integration
+- prompt injection
+- deterministic adaptation triggers
+- forecasting impact
+- behavioral signal generation
+
+Goal:
+Check-ins should materially influence the coaching system.
+
+==================================================
+AUDIT CATEGORY 4 — POST-CHECK-IN FEEDBACK
+==================================================
+
+Audit what happens immediately after submission.
+
+Questions:
+- Does the user receive coaching feedback?
+- Is adaptation explained?
+- Is there visible intelligence?
+- Does the system communicate what it noticed?
+- Does the user feel heard?
+
+Examples:
+- “You’re showing elevated fatigue today — I’m protecting lower-body volume.”
+- “Recovery looks strong. I’m progressing intensity this week.”
+- “Sleep has been declining for 4 days. Watch recovery closely.”
+
+Audit:
+- timing
+- visibility
+- coaching tone
+- adaptation explanation
+- emotional reinforcement
+
+Goal:
+Every check-in should create a feeling of:
+TrainChat actively responding.
+
+==================================================
+AUDIT CATEGORY 5 — PROGRAM ADAPTATION INTEGRATION
+==================================================
+
+Audit whether check-ins visibly alter:
+- volume
+- intensity
+- session structure
+- progression pacing
+- exercise selection
+- recovery work
+- deload timing
+
+Questions:
+- Do adaptations happen deterministically?
+- Are adjustments visible in the program?
+- Are adaptations logged in Changes?
+- Are adaptations reversible?
+- Does the user understand WHY changes happened?
+
+Audit:
+- adaptation directive flow
+- mutation engine integration
+- readiness → program pipeline
+- adaptation persistence
+
+Goal:
+Check-ins should visibly shape training outcomes.
+
+==================================================
+AUDIT CATEGORY 6 — FORECAST + LONGITUDINAL INTELLIGENCE
+==================================================
+
+Audit how repeated check-ins influence:
+- Forecast tab
+- fatigue projections
+- plateau prediction
+- recovery risk
+- adherence trends
+- progression forecasting
+
+Questions:
+- Are trends visualized?
+- Does Forecast feel connected to check-ins?
+- Are repeated low-readiness patterns recognized?
+- Are improvement trends celebrated?
+- Is longitudinal adaptation visible?
+
+Examples:
+- “Fatigue trend increasing over 6 days.”
+- “Readiness improving steadily.”
+- “Recovery instability may affect progression.”
+
+Goal:
+Users should feel:
+the system is learning across time.
+
+==================================================
+AUDIT CATEGORY 7 — MEMORY + BEHAVIORAL INTELLIGENCE
+==================================================
+
+Audit how check-ins affect:
+- behavioral pattern detection
+- memory formation
+- coaching continuity
+- athlete identity understanding
+
+Questions:
+- Are persistent patterns remembered?
+- Does the system distinguish transient fatigue from chronic patterns?
+- Can recurring soreness influence future programming?
+- Do trends influence future onboarding/refinement?
+
+Audit:
+- memory thresholds
+- behavioral signal generation
+- confidence scoring
+- decay rules
+- recovery pattern tracking
+
+Goal:
+Check-ins should contribute to:
+persistent coaching intelligence.
+
+==================================================
+AUDIT CATEGORY 8 — VISIBILITY OF ADAPTATION
+==================================================
+
+Audit whether users can SEE:
+- what changed
+- why it changed
+- when it changed
+- what triggered it
+
+Questions:
+- Are readiness-driven changes surfaced in Changes?
+- Are adaptation reasons visible?
+- Does the Program Panel communicate readiness status?
+- Are safeguards explained?
+- Is the adaptation emotionally legible?
+
+Goal:
+Users should never wonder:
+“Did my check-in even matter?”
+
+==================================================
+AUDIT CATEGORY 9 — MOBILE EXPERIENCE
+==================================================
+
+Audit:
+- thumb ergonomics
+- vertical density
+- scale readability
+- completion speed
+- keyboard avoidance
+- responsiveness
+- animation feedback
+
+Questions:
+- Is the experience too long?
+- Does scrolling feel repetitive?
+- Is the CTA always visible?
+- Are touch targets large enough?
+- Is the completion flow satisfying?
+
+Goal:
+The mobile check-in should feel:
+fast,
+smooth,
+and habit-forming.
+
+==================================================
+AUDIT CATEGORY 10 — STRATEGIC DIFFERENTIATION
+==================================================
+
+Determine whether the Check-In system creates:
+- real coaching differentiation
+OR
+- commodity wellness tracking.
+
+Questions:
+- What makes this different from WHOOP/Oura/basic wellness apps?
+- Does the AI visibly adapt training?
+- Does the system explain coaching logic?
+- Does the user feel monitored intelligently?
+- Is this part of the moat?
+
+Identify:
+- highest leverage readiness systems
+- strongest retention opportunities
+- strongest coaching-presence opportunities
+- hidden sophistication not currently surfaced
+
+Goal:
+Clarify whether the Check-In system reinforces:
+TrainChat’s identity as a persistent coaching intelligence system.
+
+==================================================
+FINAL DELIVERABLES
+==================================================
+
+Provide:
+- UX findings
+- adaptation gaps
+- intelligence integration gaps
+- forecasting gaps
+- memory gaps
+- readiness model concerns
+- visibility weaknesses
+- mobile UX issues
+- coaching-presence opportunities
+- roadmap priorities
+- moat analysis
+
+Final assessment should answer:
+
+1. Does the Check-In system currently feel like:
+   - a wellness form
+   OR
+   - adaptive coaching intelligence?
+
+2. Do users clearly feel that their check-ins influence training?
+
+3. What changes would most strongly reinforce:
+   - adaptation visibility,
+   - coaching presence,
+   - and longitudinal intelligence?
