@@ -493,6 +493,69 @@ export async function buildExecutionPlan({
     return plan;
   }
 
+  // ── STEP 0.25: Deterministic Pre-Classifier ──────────────────────────────────
+  // Short-circuits the LLM Intent Interpreter for clearly unambiguous messages.
+  // Only fires when an active program exists — these patterns require context.
+  // Restricted to messages ≤ 8 words to minimise false positives.
+  // If a pattern matches, the plan is returned immediately and Step 0.5 is skipped.
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  if (program && !pendingClarification) {
+    const trimmedMsg = message.trim();
+    const wordCount = trimmedMsg.split(/\s+/).filter(Boolean).length;
+
+    if (wordCount <= 8) {
+      interface PreClassifyEntry { re: RegExp; family: IntentFamily; label: string }
+      const PRE_CLASSIFY_PATTERNS: PreClassifyEntry[] = [
+        // ── Difficulty ────────────────────────────────────────────────────────
+        { re: /^(make\s+it\s+harder|make\s+this\s+harder|harder|more\s+challenging|make\s+it\s+more\s+challenging|dial\s+it\s+up|ramp\s+it\s+up|push\s+me\s+harder|increase\s+difficulty|make\s+(the\s+)?program\s+harder)$/i,
+          family: "increase_difficulty", label: "make harder" },
+        { re: /^(make\s+it\s+easier|make\s+this\s+easier|easier|dial\s+it\s+back|back\s+off|reduce\s+difficulty|less\s+challenging|back\s+it\s+down|scale\s+back|make\s+(the\s+)?program\s+easier|tone\s+it\s+down)$/i,
+          family: "decrease_difficulty", label: "make easier" },
+        // ── Volume ────────────────────────────────────────────────────────────
+        { re: /^(more\s+volume|add\s+volume|increase\s+volume|more\s+sets|add\s+more\s+sets|increase\s+sets|add\s+more\s+work)$/i,
+          family: "increase_volume", label: "more volume" },
+        { re: /^(less\s+volume|reduce\s+volume|decrease\s+volume|fewer\s+sets|less\s+sets|cut\s+volume|trim\s+volume|trim\s+it\s+down)$/i,
+          family: "decrease_volume", label: "less volume" },
+        // ── Session time ──────────────────────────────────────────────────────
+        { re: /^(shorter\s+(session|workout|training)|make\s+it\s+shorter|less\s+time|reduce\s+time|cut\s+it\s+down|too\s+long|make\s+(the\s+)?(sessions?|workouts?)\s+shorter)$/i,
+          family: "reduce_time", label: "shorter" },
+        { re: /^(longer\s+(session|workout|training)|make\s+it\s+longer|more\s+time|extend\s+(it|the\s+session)|add\s+more\s+time)$/i,
+          family: "increase_time", label: "longer" },
+        // ── Fatigue / recovery ────────────────────────────────────────────────
+        { re: /^(deload|deload\s+me|i\s+need\s+a\s+deload|give\s+me\s+a\s+deload|deload\s+week|recovery\s+week|i\s+need\s+a\s+recovery\s+week|maintenance\s+week)$/i,
+          family: "fatigue_management", label: "deload" },
+      ];
+
+      for (const entry of PRE_CLASSIFY_PATTERNS) {
+        if (entry.re.test(trimmedMsg)) {
+          const prePlan: ExecutionPlan = {
+            action: "APPLY_MUTATION",
+            intentFamily: entry.family,
+            scope: { type: "program" },
+            defaultScopeUsed: true,
+            mutation: {
+              type: "transform",
+              params: {
+                transformation: entry.family,
+                interpretedCommand: trimmedMsg,
+                defaultScopeUsed: true,
+              },
+            },
+            reasoning: `[DeterministicPreClassifier] Clear "${entry.label}" command matched — LLM skipped`,
+          };
+
+          logger.info(
+            { conversationId, userId, intentFamily: entry.family, message: trimmedMsg.slice(0, 60) },
+            "[DeterministicPreClassifier] Unambiguous command — returning plan without LLM call"
+          );
+
+          return prePlan;
+        }
+      }
+    }
+  }
+
   // ── STEP 0.5: LLM Intent Interpreter ─────────────────────────────────────────
   // Lightweight AI router (gpt-4.1-mini, ≤2.5 s timeout) that converts the user
   // message into structured intent JSON BEFORE the deterministic planner runs.

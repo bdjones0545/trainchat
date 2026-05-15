@@ -110,7 +110,7 @@ import type { FocusMode } from "./focus-engines/engine-interface";
 import { buildFailSafePromptSection, type FailSafeResolution } from "./fail-safe";
 import { evaluateBuildThreshold, buildThresholdPromptSection } from "./build-threshold";
 import { detectPopulation, buildPopulationPromptSection, validatePopulationOutput } from "./population-engine";
-import { runCEOHeartbeatCheck, type CEOHeartbeatContext } from "../agents/ceo-heartbeat";
+import { type CEOHeartbeatContext } from "../agents/ceo-heartbeat";
 import {
   validateArchitectureGate,
   logValidationGateResult,
@@ -169,6 +169,24 @@ export interface ProgramStructure {
   whyItWorks?: string;
   days: ProgramDay[];
   _architectureAudit?: AIOverrideAudit;
+  /**
+   * Active intelligence signals surfaced to the user in the Live Program Panel.
+   * Populated during program generation from the periodization engine,
+   * progression intelligence engine, and behavioral intelligence engine.
+   * All fields are optional — display only what is available.
+   */
+  intelligenceStatus?: {
+    /** Current periodization phase, e.g. "Accumulation", "Intensification", "Realization", "Deload" */
+    periodizationPhase?: string;
+    /** Active progression model short label, e.g. "Wave Loading", "Double Progression", "Linear" */
+    progressionModel?: string;
+    /** Current adaptation directive from behavioral signals, e.g. "Fatigue protection active" */
+    adaptationDirective?: string;
+    /** Recovery safeguard status, e.g. "Recovery protection active" */
+    recoveryStatus?: string;
+    /** Active behavioral signals detected from recent conversation history */
+    behavioralSignals?: Array<{ type: string; label: string }>;
+  };
 }
 
 export interface ProgramDay {
@@ -4914,13 +4932,13 @@ Output the corrected program JSON and a brief calm confirmation.`;
       }
     }
 
-    // ── CEO Heartbeat Check — Final Quality Gate ──────────────────────────
-    // Runs after all upstream validation layers. Coach Atlas's final approval
-    // gate: nine coaching-standard checks before the program reaches the user.
-    // Non-blocking — logs concerns and override recommendations, never silently
-    // drops or replaces a program.
+    // ── Unified Architecture Validation Gate ─────────────────────────────
+    // CEO quality checks now run INSIDE the gate rather than as a separate
+    // post-gate pass. Safety violations are elevated to critical severity.
+    // Critical failures (empty program, empty days, safety violations) are
+    // BLOCKING — they prevent invalid programs from reaching the user.
     if (isBuildIntent && structuredData) {
-      const heartbeatCtx: CEOHeartbeatContext = {
+      const coachCtx: CEOHeartbeatContext = {
         userGoal: profile?.trainingGoal ?? extractedConstraints?.sportFocus ?? null,
         sport: extractedConstraints?.sportFocus ?? profile?.sportFocus ?? null,
         painLimitations: profile?.injuries ?? null,
@@ -4931,69 +4949,39 @@ Output the corrected program JSON and a brief calm confirmation.`;
         hasExpertJudgmentNotes: (structuredData.expertJudgmentNotes?.length ?? 0) > 0,
       };
 
-      const heartbeatResult = runCEOHeartbeatCheck(structuredData, heartbeatCtx);
-
-      if (heartbeatResult.pass) {
-        logger.info(
-          {
-            programName: structuredData.programName,
-            dayCount: structuredData.days?.length ?? 0,
-            minorAdjustments: heartbeatResult.minorAdjustments?.length ?? 0,
-            hasExpertJudgmentNotes: heartbeatCtx.hasExpertJudgmentNotes,
-          },
-          "[CEOHeartbeat] PASS — program approved"
-        );
-      } else if (heartbeatResult.overrideRecommended) {
-        logger.warn(
-          {
-            programName: structuredData.programName,
-            dayCount: structuredData.days?.length ?? 0,
-            concerns: heartbeatResult.concerns,
-            minorAdjustments: heartbeatResult.minorAdjustments,
-            overrideRecommended: true,
-          },
-          "[CEOHeartbeat] FAIL — override recommended"
-        );
-      } else {
-        logger.warn(
-          {
-            programName: structuredData.programName,
-            dayCount: structuredData.days?.length ?? 0,
-            concerns: heartbeatResult.concerns,
-            minorAdjustments: heartbeatResult.minorAdjustments,
-          },
-          "[CEOHeartbeat] FAIL — concerns detected"
-        );
-      }
-
-      logger.debug(
-        {
-          pass: heartbeatResult.pass,
-          overrideRecommended: heartbeatResult.overrideRecommended ?? false,
-          concernCount: heartbeatResult.concerns.length,
-          minorCount: heartbeatResult.minorAdjustments?.length ?? 0,
-          concerns: heartbeatResult.concerns,
-          minorAdjustments: heartbeatResult.minorAdjustments,
-          identityAlignment: heartbeatResult.identityAlignment,
-          identityConcerns: heartbeatResult.identityConcerns,
-        },
-        "[CEOHeartbeat] Detail"
-      );
-
-      // ── Architecture Validation Gate (post-generation) ─────────────────
-      // Validates structural integrity of the generated program.
-      // Non-blocking — logs issues but never drops the program.
       const gateResult = validateArchitectureGate({
         program: structuredData,
         focusMode: (focusMode as "strength" | "speed" | "mobility"),
         requestedDays: extractedConstraints?.daysPerWeek ?? null,
         isBuildIntent: true,
+        coachContext: coachCtx,
       });
+
       logValidationGateResult(gateResult, {
         focusMode: focusMode ?? "strength",
         programName: structuredData.programName,
         dayCount: structuredData.days?.length ?? 0,
       });
+
+      // BLOCKING: safety violations and empty-structure failures stop here.
+      // Other critical issues (day count mismatch) are logged but non-blocking.
+      const blockingIssue = gateResult.issues.find(
+        (i) => i.severity === "critical" &&
+          (i.type === "empty_program" || i.type === "empty_days" || i.type === "safety_violation")
+      );
+      if (blockingIssue) {
+        logger.error(
+          {
+            programName: structuredData.programName,
+            focusMode,
+            issueType: blockingIssue.type,
+            description: blockingIssue.description,
+            allIssues: gateResult.issues,
+          },
+          "[ArchitectureValidationEngine] BLOCKING — critical failure, program rejected"
+        );
+        throw new Error(`[ArchitectureValidationEngine] Critical validation failure: ${blockingIssue.description}`);
+      }
     }
 
     // ── Final Latency Audit ──────────────────────────────────────────────────
@@ -5755,6 +5743,20 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
 
   console.log("[AIOverrideAudit] Final audit:", JSON.stringify(audit));
 
+  // Derive a short progression model label from the verbose spec string
+  // e.g. "Double progression (add reps first...)" → "Double Progression"
+  const rawProgressionModel = spec.progressionModel ?? "";
+  const shortProgressionLabel = (() => {
+    if (!rawProgressionModel) return undefined;
+    const beforeParen = rawProgressionModel.includes("(")
+      ? rawProgressionModel.slice(0, rawProgressionModel.indexOf("(")).trim()
+      : rawProgressionModel.split(".")[0]?.trim() ?? rawProgressionModel;
+    // Title-case the first word if it's all-lowercase
+    return beforeParen.length > 0
+      ? beforeParen.charAt(0).toUpperCase() + beforeParen.slice(1)
+      : undefined;
+  })();
+
   return {
     programName: buildProgramName(profile),
     description: buildProgramDescription(profile, spec),
@@ -5762,6 +5764,9 @@ function buildIntelligentProgram(profile: UserProfile): ProgramStructure {
     splitType: spec.splitType,
     days,
     _architectureAudit: audit,
+    intelligenceStatus: shortProgressionLabel
+      ? { progressionModel: shortProgressionLabel }
+      : undefined,
   };
 }
 

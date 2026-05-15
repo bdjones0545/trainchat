@@ -44,6 +44,18 @@ export interface ProgramStructure {
   whyChanged?: string;
   days: ProgramDay[];
   /**
+   * Active intelligence signals from the periodization, progression, and behavioral engines.
+   * Surfaced as compact badges in the Live Program Panel header area.
+   * All fields are optional — only populated for fresh builds, not minor edits.
+   */
+  intelligenceStatus?: {
+    periodizationPhase?: string;
+    progressionModel?: string;
+    adaptationDirective?: string;
+    recoveryStatus?: string;
+    behavioralSignals?: Array<{ type: string; label: string }>;
+  };
+  /**
    * Internal tracking field: the ID of the assistant message whose structuredData
    * produced this draft. Set when latestProgram is written from the messages effect.
    * Used by resolveProgramState and the assertion layer to detect unauthorized sources.

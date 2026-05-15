@@ -23,6 +23,10 @@ import { logger } from "./logger";
 const MAX_TURNS = 2;
 const MAX_AGE_MS = 5 * 60 * 1000; // 5 minutes
 
+// MutationReference persists longer — undo/redo should feel like a document editor,
+// not a timed API call. Exercise and session references keep the shorter window.
+const MUTATION_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+
 // ─── Reference Types ──────────────────────────────────────────────────────────
 
 export interface ExerciseReference {
@@ -87,10 +91,10 @@ function getOrCreate(conversationId: string): ConversationContextState {
   return store.get(conversationId)!;
 }
 
-function isExpired(ref: { turnsRemaining: number; createdAt: Date }): boolean {
+function isExpired(ref: { turnsRemaining: number; createdAt: Date }, maxAgeMs = MAX_AGE_MS): boolean {
   if (ref.turnsRemaining <= 0) return true;
   const ageMs = Date.now() - ref.createdAt.getTime();
-  return ageMs > MAX_AGE_MS;
+  return ageMs > maxAgeMs;
 }
 
 function pruneExpired(state: ConversationContextState): void {
@@ -108,7 +112,8 @@ function pruneExpired(state: ConversationContextState): void {
     );
     state.lastSessionReference = null;
   }
-  if (state.lastMutationReference && isExpired(state.lastMutationReference)) {
+  // MutationReference uses a longer window (30 min) so undo feels like a document editor
+  if (state.lastMutationReference && isExpired(state.lastMutationReference, MUTATION_MAX_AGE_MS)) {
     logger.info(
       { mutationType: state.lastMutationReference.mutationType },
       "[ConversationContext] expired — lastMutationReference pruned"
@@ -245,6 +250,7 @@ export function storeSessionReference(
 
 /**
  * Store a mutation reference after a successful mutation turn.
+ * MutationReferences get a high turn budget so undo works across many exchanges.
  */
 export function storeMutationReference(
   conversationId: string,
@@ -253,7 +259,7 @@ export function storeMutationReference(
   const state = getOrCreate(conversationId);
   state.lastMutationReference = {
     ...ref,
-    turnsRemaining: MAX_TURNS,
+    turnsRemaining: 30,
     createdAt: new Date(),
   };
   logger.info(

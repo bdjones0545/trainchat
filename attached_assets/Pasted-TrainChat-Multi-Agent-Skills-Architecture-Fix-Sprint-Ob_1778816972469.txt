@@ -1,0 +1,354 @@
+TrainChat — Multi-Agent + Skills Architecture Fix Sprint
+
+Objective:
+Simplify and harden TrainChat’s intelligence architecture without reducing capability.
+
+Core Principle:
+Do not add more agents.
+Improve coherence, reduce duplication, surface existing intelligence, and protect the true moat.
+
+True Moat:
+- Persistent coaching identity
+- Zero-latency surgical editing
+- Explanation-first coaching
+- Proactive forecasting
+
+==================================================
+P1 — SURFACE HIDDEN INTELLIGENCE
+==================================================
+
+Expose the intelligence users currently cannot feel.
+
+Add to Program Panel / Active Program surfaces:
+- active periodization phase
+- active progression model
+- behavioral pattern signals
+- current adaptation directive
+- recovery safeguard status
+
+Examples:
+- “Wave loading active — Week 2”
+- “Accumulation phase”
+- “Recovery protection active”
+- “Fatigue trend detected”
+- “Power progression currently emphasized”
+
+Goal:
+Make existing intelligence visible before adding new intelligence.
+
+==================================================
+P1 — REDUCE INTENT DUPLICATION
+==================================================
+
+Problem:
+Intent Interpreter and Execution Planner both classify user intent.
+
+Fix:
+Add deterministic pre-classifier before the LLM Intent Interpreter.
+
+Deterministically handle:
+- sidebar button actions
+- explicit exercise swaps
+- add/remove actions
+- simple sets/reps edits
+- clear “make harder/easier” commands
+- known directional inference phrases
+
+Only call LLM Intent Interpreter when:
+- natural language is ambiguous
+- multiple possible scopes exist
+- safety context is unclear
+- user request is complex or compound
+
+Goal:
+Reduce cost, latency, and duplicated reasoning.
+
+==================================================
+P1 — BYPASS LLM FOR UI-CONTEXT ACTIONS
+==================================================
+
+Button-driven actions should never require generic intent interpretation.
+
+Examples:
+- Add exercise
+- Remove exercise
+- Swap movement
+- View changes
+- Undo
+- Load program
+- Resume program
+
+These should route through deterministic contracts.
+
+Goal:
+UI actions already contain intent. Do not re-interpret them.
+
+==================================================
+P2 — CONSOLIDATE QUALITY LAYERS
+==================================================
+
+Problem:
+Coach prompt, CEO Heartbeat, Architecture Gate, and conflict hierarchy overlap.
+
+Fix:
+Merge CEO Heartbeat into Architecture Validation Gate as a deterministic validation module.
+
+Architecture Validation Gate should own:
+- structural validity
+- safety violations
+- day count mismatch
+- focus bleed
+- empty program protection
+- volume sanity
+- progression coherence
+
+Coach Atlas should own:
+- tone
+- coaching explanation
+- conversational clarity
+- user-facing narrative
+
+Goal:
+Separate authoring from validation.
+
+==================================================
+P2 — MAKE CRITICAL VALIDATION BLOCKING
+==================================================
+
+Problem:
+Architecture Validation Gate logs critical failures but can still allow invalid programs through.
+
+Fix:
+Critical failures should block save/return.
+
+Blocking examples:
+- empty program
+- missing sessions
+- unsafe progression
+- focus bleed beyond allowed threshold
+- invalid week/day structure
+- unresolved hard-constraint violation
+
+Non-critical issues can warn and continue.
+
+Goal:
+Never let structurally invalid programs reach the user as valid systems.
+
+==================================================
+P2 — RENAME AGENTS VS ENGINES
+==================================================
+
+Clarify architecture naming.
+
+Agents:
+- Coach Atlas
+- Architect Vale
+- Dr. Sable, if kept as admin-facing research assistant
+
+Engines:
+- Behavioral Intelligence Engine
+- Progression Intelligence Engine
+- Periodization Engine
+- Forecast Engine
+- Coach Reasoning Engine
+- Memory Dominance Engine
+- Architecture Validation Engine
+
+Avoid calling deterministic modules “agents.”
+
+Goal:
+Reduce cognitive overhead and prevent agent sprawl.
+
+==================================================
+P2 — REFRAME DR. SABLE
+==================================================
+
+Problem:
+Research Librarian behaves more like a content pipeline than a live agent.
+
+Fix:
+Either:
+1. Reframe Dr. Sable as an admin-only research ingestion assistant,
+OR
+2. Convert it into a simpler Research Guidance Pipeline.
+
+Do not include it in live user-agent orchestration unless it is actively making contextual decisions.
+
+Goal:
+Keep the user-facing architecture clean and honest.
+
+==================================================
+P3 — REDIS-BACKED CONVERSATION CONTEXT
+==================================================
+
+Problem:
+Conversation Context Resolver is currently in-memory and will break under horizontal scaling.
+
+Fix:
+Move conversation context state to Redis or durable shared cache.
+
+Store:
+- lastExerciseReference
+- lastSessionReference
+- lastMutationReference
+- lastResolvedScope
+- recent deictic targets
+- undo/changeLog reference
+
+Requirements:
+- TTL-based cleanup
+- conversationId scoped
+- user ownership safeguards
+- graceful fallback if Redis unavailable
+
+Goal:
+Preserve “it / that / same thing / undo that” continuity across scale.
+
+==================================================
+P3 — EXTEND UNDO / MUTATION REFERENCE WINDOW
+==================================================
+
+Problem:
+Undo/deictic references can expire too quickly.
+
+Fix:
+Extend lastMutationReference persistence beyond 5 minutes.
+
+Preferred:
+- store last successful changeLogId per conversation
+- make it available for at least 30 minutes
+- optionally persist through session state
+
+Goal:
+Undo should feel like a document editor, not a timed API call.
+
+==================================================
+P3 — FAILSAFE LOCK VISIBILITY
+==================================================
+
+Problem:
+20-second edit lock can leave users waiting without feedback.
+
+Fix:
+Expose lock state to frontend.
+
+Show:
+- “Finishing current update…”
+- “One change at a time”
+- “Your last edit is still being verified”
+
+Goal:
+Prevent silent waiting from feeling like a crash.
+
+==================================================
+P3 — MEMORY LIFECYCLE HARDENING
+==================================================
+
+Problem:
+High-confidence injury/pain memories can become permanent without downgrade path.
+
+Fix:
+Add memory review/downgrade flow.
+
+Options:
+- user can mark memory as resolved
+- system asks after time: “Is this still relevant?”
+- downgrade confidence after contradiction
+- archive old injury memories instead of deleting silently
+
+Apply type-aware decay:
+- fatigue/adherence signals: shorter decay
+- injury/equipment/sport facts: longer decay
+- user-confirmed hard constraints: no decay unless edited
+
+Goal:
+Memory should be persistent, but correctable.
+
+==================================================
+P3 — PROMPT INJECTION CAPS
+==================================================
+
+Problem:
+Long-term users can accumulate too much injected context.
+
+Fix:
+Define max token budgets per context tier.
+
+Suggested caps:
+- hard constraints: always include, compressed
+- active injury/pain: high priority
+- active goal/sport: high priority
+- recent behavioral signals: limited to top 3
+- older memories: summarized only
+- research guidance: task-scoped only
+
+Goal:
+Prevent prompt bloat while preserving intelligence.
+
+==================================================
+P4 — VISIBILITY OF DIFFERENTIATING ENGINES
+==================================================
+
+Surface high-value deterministic engines in user-facing UX.
+
+Behavioral Intelligence:
+- “I noticed fatigue risk building.”
+- “You’ve shifted toward athletic edits recently.”
+
+Progression Intelligence:
+- “Wave progression active.”
+- “Autoregulated progression selected based on readiness.”
+
+Periodization:
+- “Accumulation block.”
+- “Power conversion phase.”
+
+Forecast:
+- “Likely plateau risk in Week 5 unless recovery improves.”
+
+Goal:
+Convert backend sophistication into perceived intelligence.
+
+==================================================
+P4 — DOCUMENT THE INTELLIGENCE ARCHITECTURE
+==================================================
+
+Create an internal architecture doc.
+
+Sections:
+- Agents vs engines
+- Ownership boundaries
+- Inputs/outputs per module
+- Which systems call LLMs
+- Which are deterministic
+- Failure behavior
+- Model routing rules
+- Token cost notes
+- User-visible surfaces
+
+Goal:
+Prevent future orchestration sprawl as TrainChat grows.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+After this sprint:
+- no unnecessary LLM calls for deterministic UI actions
+- fewer duplicated quality checks
+- clearer agent/engine boundaries
+- critical validation failures block bad outputs
+- conversation context survives scale
+- memory becomes correctable
+- hidden intelligence is more visible
+- architecture is easier to reason about
+
+Final Direction:
+TrainChat should not become “more agentic” by adding more agents.
+
+It should become more powerful by making the existing intelligence:
+cleaner,
+faster,
+more visible,
+more reliable,
+and easier to scale.

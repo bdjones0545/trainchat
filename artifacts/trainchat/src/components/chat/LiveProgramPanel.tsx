@@ -2207,6 +2207,36 @@ function ProgramTab({
           </div>
         )}
 
+        {/* Intelligence status badges — surfaces active engines to users */}
+        {(program.intelligenceStatus?.progressionModel || program.intelligenceStatus?.periodizationPhase || program.intelligenceStatus?.adaptationDirective || program.intelligenceStatus?.recoveryStatus) && (
+          <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+            {program.intelligenceStatus.periodizationPhase && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/8 border border-primary/15 text-[9.5px] text-primary/65 font-medium" title="Periodization phase">
+                <Activity className="w-2.5 h-2.5 opacity-70" />
+                {program.intelligenceStatus.periodizationPhase}
+              </span>
+            )}
+            {program.intelligenceStatus.progressionModel && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/40 border border-border/50 text-[9.5px] text-muted-foreground/65 font-medium" title="Progression model">
+                <TrendingUp className="w-2.5 h-2.5 opacity-60" />
+                {program.intelligenceStatus.progressionModel}
+              </span>
+            )}
+            {program.intelligenceStatus.adaptationDirective && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/8 border border-amber-500/20 text-[9.5px] text-amber-600/70 dark:text-amber-400/70 font-medium" title="Adaptation directive">
+                <AlertCircle className="w-2.5 h-2.5 opacity-70" />
+                {program.intelligenceStatus.adaptationDirective}
+              </span>
+            )}
+            {program.intelligenceStatus.recoveryStatus && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/8 border border-emerald-500/20 text-[9.5px] text-emerald-600/70 dark:text-emerald-400/70 font-medium" title="Recovery status">
+                <Activity className="w-2.5 h-2.5 opacity-70" />
+                {program.intelligenceStatus.recoveryStatus}
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Description — clamped to 3 lines */}
         {program.description && (
           <p

@@ -335,3 +335,22 @@ export function acquireFailSafeEditLock(key: string, ttlMs = 20_000): { acquired
     },
   };
 }
+
+/**
+ * Returns true if an edit lock is currently active for the given key.
+ * Used by the API to expose lock state to the frontend.
+ */
+export function isEditLockActive(key: string): boolean {
+  const existing = editLocks.get(key);
+  return existing !== undefined && existing > Date.now();
+}
+
+/**
+ * Returns milliseconds remaining on the edit lock, or 0 if no lock is active.
+ */
+export function getEditLockRemainingMs(key: string): number {
+  const existing = editLocks.get(key);
+  if (!existing) return 0;
+  const remaining = existing - Date.now();
+  return remaining > 0 ? remaining : 0;
+}

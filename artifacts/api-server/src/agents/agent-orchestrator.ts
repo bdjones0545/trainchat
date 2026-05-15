@@ -46,6 +46,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { logger } from "../lib/logger";
+import { runCEOHeartbeatCheck, type CEOHeartbeatContext } from "./ceo-heartbeat";
 
 // ─── Agent Roles ─────────────────────────────────────────────────────────────
 
@@ -447,7 +448,11 @@ export interface ArchitectureIssue {
     | "focus_bleed"
     | "explosive_block_violation"
     | "rep_range_violation"
-    | "empty_program";
+    | "empty_program"
+    // ── CEO Quality Checks (merged from Heartbeat) ─────────────────────────
+    | "safety_violation"
+    | "goal_misalignment"
+    | "structural_quality";
   description: string;
   severity: "critical" | "warning" | "info";
 }
@@ -479,6 +484,13 @@ export interface ArchitectureValidationInput {
   focusMode: "strength" | "speed" | "mobility";
   requestedDays: number | null;
   isBuildIntent: boolean;
+  /**
+   * Optional coaching context from the CEO Heartbeat quality checks.
+   * When present, nine coaching-standard quality checks run INSIDE the gate
+   * rather than as a separate post-gate call. Safety concerns are elevated
+   * to critical severity; other concerns become warnings.
+   */
+  coachContext?: CEOHeartbeatContext;
 }
 
 export function validateArchitectureGate(
@@ -583,6 +595,44 @@ export function validateArchitectureGate(
         description: "Speed program has session names with strength/hypertrophy language — verify this reflects intent (concurrent programming allowed)",
         severity: "info",
       });
+    }
+  }
+
+  // ── CEO Quality Checks (merged from Heartbeat) ────────────────────────────
+  // When coachContext is provided, run the nine coaching-standard quality checks
+  // that were previously a separate post-gate call. Safety violations are elevated
+  // to critical; all other quality concerns become warnings.
+  if (input.coachContext) {
+    try {
+      const heartbeatResult = runCEOHeartbeatCheck(program as Parameters<typeof runCEOHeartbeatCheck>[0], input.coachContext);
+
+      if (!heartbeatResult.pass) {
+        for (const concern of heartbeatResult.concerns) {
+          const isSafety = concern.toLowerCase().includes("safety") ||
+            concern.toLowerCase().includes("pain") ||
+            concern.toLowerCase().includes("injur") ||
+            concern.toLowerCase().includes("contraindicated");
+
+          issues.push({
+            type: isSafety ? "safety_violation" : "goal_misalignment",
+            description: concern,
+            severity: isSafety ? "critical" : "warning",
+          });
+        }
+      }
+
+      if (heartbeatResult.minorAdjustments && heartbeatResult.minorAdjustments.length > 0) {
+        for (const adj of heartbeatResult.minorAdjustments) {
+          issues.push({
+            type: "structural_quality",
+            description: adj,
+            severity: "info",
+          });
+        }
+      }
+    } catch (heartbeatErr) {
+      // CEO checks are best-effort — never throw; structural checks already ran
+      logger.warn({ err: heartbeatErr }, "[ArchitectureValidationGate] CEO Heartbeat check threw unexpectedly — skipped");
     }
   }
 

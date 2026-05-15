@@ -36,6 +36,7 @@ import {
 } from "../lib/change-log-service";
 import { logger } from "../lib/logger";
 import { fireWeekTransitionEmail } from "../lib/retentionEmails";
+import { isEditLockActive, getEditLockRemainingMs } from "../lib/fail-safe";
 
 const router: IRouter = Router();
 
@@ -798,6 +799,34 @@ router.post("/training-system/continue-block", requireAuth, async (req, res): Pr
     logger.error({ err }, "[training-system] POST /continue-block error");
     const statusCode = err.message?.includes("No") ? 404 : 500;
     res.status(statusCode).json({ error: err.message ?? "Failed to generate continuation block" });
+  }
+});
+
+// ── GET /api/training-system/edit-lock-status ──────────────────────────────
+// Returns current edit lock state for the authenticated user in a given focus
+// mode. Used by the frontend to show a "Processing..." indicator proactively
+// instead of waiting for a 409 conflict on message send.
+//
+// Query params:
+//   focusMode  — "strength" | "speed" | "mobility"  (required)
+//   source     — "chat" | "route"                    (default: "chat")
+// ──────────────────────────────────────────────────────────────────────────────
+router.get("/edit-lock-status", requireAuth, async (req, res) => {
+  try {
+    const userId = (req as any).userId as number;
+    const { focusMode = "strength", source = "chat" } = req.query as {
+      focusMode?: string;
+      source?: string;
+    };
+
+    const lockKey = `${source}:${userId}:${focusMode}`;
+    const locked = isEditLockActive(lockKey);
+    const remainingMs = getEditLockRemainingMs(lockKey);
+
+    res.json({ locked, remainingMs, lockKey });
+  } catch (err: any) {
+    logger.error({ err }, "[training-system] GET /edit-lock-status error");
+    res.status(500).json({ error: "Failed to retrieve lock status" });
   }
 });
 
