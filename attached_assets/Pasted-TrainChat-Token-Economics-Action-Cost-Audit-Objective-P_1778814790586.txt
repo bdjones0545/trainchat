@@ -1,0 +1,306 @@
+TrainChat — Token Economics + Action Cost Audit
+
+Objective:
+Perform a full token and inference-cost audit across the entire TrainChat intelligence pipeline.
+
+Goal:
+Identify:
+- high-cost / low-value operations,
+- unnecessary model usage,
+- oversized prompts,
+- repeated context injection,
+- redundant orchestration calls,
+- avoidable streaming overhead,
+- and opportunities for deterministic or cached execution.
+
+Core Principle:
+Every inference should justify its cost through:
+- visible intelligence,
+- user-perceived value,
+- retention impact,
+- or adaptation quality.
+
+This audit is NOT about reducing intelligence quality.
+It is about:
+maximizing intelligence-per-token efficiency.
+
+==================================================
+AUDIT CATEGORY 1 — COST PER USER ACTION
+==================================================
+
+Measure full end-to-end token + inference cost for:
+
+1. Guest onboarding interaction
+2. First program generation
+3. Program refinement
+4. Exercise swap
+5. Full block rebuild
+6. Direct sidebar mutation
+7. Forecast generation
+8. Memory extraction
+9. Proactive coaching message
+10. Voice command processing
+11. SSE streaming generation
+12. Cross-conversation continuity opener
+13. Behavioral intelligence adaptation
+14. Undo / restore operations
+15. Multi-turn refinement loops
+
+For each action calculate:
+- input tokens
+- output tokens
+- number of model calls
+- models used
+- orchestration layers triggered
+- average latency
+- estimated $ cost
+
+Output:
+ranked table:
+highest-cost → lowest-cost actions.
+
+==================================================
+AUDIT CATEGORY 2 — MODEL USAGE OPTIMIZATION
+==================================================
+
+Audit all model routing decisions.
+
+Questions:
+- Which actions truly require GPT-4.1?
+- Which can safely use GPT-4.1-mini?
+- Which can become deterministic?
+- Which are overpowered relative to the task?
+
+Specifically evaluate:
+- intent classification
+- mutation scope inference
+- memory extraction
+- onboarding prompts
+- proactive messages
+- coaching summaries
+- reasoning chips
+- Forecast explanations
+- session annotations
+
+Goal:
+Reserve premium models ONLY for:
+- high-complexity reasoning,
+- nuanced generation,
+- or critical coaching intelligence.
+
+==================================================
+AUDIT CATEGORY 3 — CONTEXT WINDOW EFFICIENCY
+==================================================
+
+Audit:
+- system prompt size
+- memory injection size
+- conversation history injection
+- adaptation context size
+- ontology injection
+- coaching philosophy injection
+- duplicated context
+
+Questions:
+- What is injected every call unnecessarily?
+- What can be summarized?
+- What can be cached?
+- What can become retrieval-based instead of full injection?
+- Which prompts contain repeated static instructions?
+
+Measure:
+- average prompt size by action
+- largest context offenders
+- repeated token waste across sessions
+
+Goal:
+Reduce hidden token bloat without reducing intelligence quality.
+
+==================================================
+AUDIT CATEGORY 4 — ORCHESTRATION OVERHEAD
+==================================================
+
+Audit all multi-agent flows.
+
+Measure:
+- Coach Agent calls
+- Architect Vale calls
+- verifier calls
+- reasoning engine calls
+- prediction/adaptation calls
+- memory retrieval calls
+- intent interpreter calls
+
+Questions:
+- Which orchestrations are always necessary?
+- Which can short-circuit?
+- Which can be conditionally skipped?
+- Which calls are duplicated?
+- Which reasoning passes are invisible to the user?
+
+Specifically inspect:
+- BUILD_WITH_ARCHITECT path
+- APPLY_MUTATION path
+- forecast generation pipeline
+- SSE mutation flow
+- sidebar direct mutation flow
+
+Goal:
+Preserve intelligence quality while reducing orchestration redundancy.
+
+==================================================
+AUDIT CATEGORY 5 — MEMORY COST EFFICIENCY
+==================================================
+
+Audit:
+- memory retrieval frequency
+- memory injection size
+- confidence filtering
+- stale memory inclusion
+- cross-conversation memory overhead
+
+Questions:
+- Are too many memories injected?
+- Are low-confidence memories wasting tokens?
+- Can memory summaries replace raw memory lists?
+- Can memory categories become selective by action type?
+
+Examples:
+Exercise swaps probably do NOT need:
+- full behavioral history
+- onboarding memories
+- long-term adherence context
+
+Goal:
+Dynamic memory injection based on task relevance.
+
+==================================================
+AUDIT CATEGORY 6 — STREAMING + SSE COSTS
+==================================================
+
+Audit:
+- streaming token overhead
+- partial response waste
+- interrupted generation waste
+- stage event overhead
+- redundant narrative streaming
+
+Questions:
+- Are too many narration tokens streamed?
+- Are stage descriptions overly verbose?
+- Are partial generations discarded frequently?
+- Is streaming increasing completion length unnecessarily?
+
+Evaluate:
+- average streamed completion length
+- hidden narration cost
+- cost difference:
+streamed vs non-streamed
+
+Goal:
+Keep streaming premium-feeling without unnecessary token burn.
+
+==================================================
+AUDIT CATEGORY 7 — CACHING OPPORTUNITIES
+==================================================
+
+Identify:
+- reusable reasoning
+- reusable summaries
+- reusable ontology explanations
+- repeated adaptation calculations
+- repeated Forecast analysis
+- repeated coaching annotations
+
+Potential cache targets:
+- block philosophy summaries
+- progression explanations
+- session coaching annotations
+- adaptation rationale
+- onboarding intelligence summaries
+
+Questions:
+- What is recomputed every call unnecessarily?
+- What can persist for hours/days?
+- Which outputs are deterministic from existing data?
+
+Goal:
+Reduce recomputation cost without reducing intelligence visibility.
+
+==================================================
+AUDIT CATEGORY 8 — TOKEN ROI ANALYSIS
+==================================================
+
+For each major action determine:
+
+HIGH TOKEN ROI:
+High perceived intelligence per token spent.
+
+LOW TOKEN ROI:
+Expensive operations with low user-visible value.
+
+Examples to evaluate:
+- hidden verifier passes
+- invisible reasoning generations
+- long hidden chain prompts
+- verbose stage narration
+- excessive system prompt duplication
+
+Goal:
+Prioritize:
+high perceived intelligence per token.
+
+==================================================
+AUDIT CATEGORY 9 — BUSINESS SCALING MODEL
+==================================================
+
+Estimate:
+- average daily active user cost
+- heavy-user monthly cost
+- free-tier sustainability
+- conversion economics
+- margin at:
+  - 100 users
+  - 1,000 users
+  - 10,000 users
+  - 100,000 users
+
+Model:
+- average user actions/day
+- heavy refinement users
+- passive users
+- voice-heavy users
+- proactive intelligence overhead
+
+Determine:
+- sustainable pricing thresholds
+- break-even usage patterns
+- margin compression risks
+- highest scaling bottlenecks
+
+Goal:
+Ensure TrainChat can scale economically while preserving intelligence quality.
+
+==================================================
+FINAL DELIVERABLES
+==================================================
+
+Provide:
+- cost-per-action breakdown
+- highest token waste areas
+- orchestration inefficiencies
+- oversized prompt sources
+- caching opportunities
+- deterministic replacement opportunities
+- model downgrade opportunities
+- hidden latency sources
+- highest ROI optimizations
+- scaling-risk analysis
+
+Final assessment should answer:
+
+1. What currently costs the most?
+2. What delivers the most intelligence per token?
+3. What hidden systems are burning tokens invisibly?
+4. What can be optimized immediately with minimal UX impact?
+5. Can TrainChat economically scale to large user counts in its current architecture?
