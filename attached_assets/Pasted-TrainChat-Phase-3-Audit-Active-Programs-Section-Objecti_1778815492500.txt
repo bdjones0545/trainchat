@@ -1,0 +1,326 @@
+TrainChat — Phase 3 Audit: Active Programs Section
+
+Objective:
+Audit the Active Programs experience as the persistence and longitudinal continuity layer of TrainChat.
+
+Core Philosophy:
+The chat proves intelligence.
+The Live Program Panel proves adaptation.
+The Active Programs section must prove:
+continuity,
+evolution,
+identity,
+and long-term coaching presence.
+
+The section should feel like:
+- a living athlete operating system,
+NOT:
+- a file manager of generated workouts.
+
+==================================================
+AUDIT CATEGORY 1 — PROGRAM IDENTITY
+==================================================
+
+Audit whether programs feel:
+- generic
+OR
+- uniquely tied to the athlete.
+
+Evaluate:
+- naming systems
+- visual identity
+- phase labeling
+- sport/goal association
+- adaptation status
+- coaching context
+- emotional attachment
+
+Questions:
+- Does each program feel distinct?
+- Does the user recognize it as “their system”?
+- Does the UI reinforce identity and purpose?
+- Do programs communicate personality and direction?
+
+Potential additions:
+- dynamic AI-generated subtitles
+- current mission statement
+- active training emphasis
+- readiness state
+- adaptation summary
+- athlete goal association
+
+Goal:
+Programs should feel:
+personal,
+alive,
+and intentional.
+
+==================================================
+AUDIT CATEGORY 2 — LONGITUDINAL CONTINUITY
+==================================================
+
+Audit how the section communicates:
+- progression through time
+- system evolution
+- phase transitions
+- adaptation history
+- coaching continuity
+
+Questions:
+- Can users easily understand how a program evolved?
+- Is progression through blocks/phases obvious?
+- Are major AI adaptations visible?
+- Can users orient themselves historically?
+
+Evaluate:
+- timestamps
+- phase chronology
+- adaptation logs
+- progression summaries
+- historical snapshots
+- archived versions
+
+Goal:
+Programs should feel:
+continuously evolving,
+not static exports.
+
+==================================================
+AUDIT CATEGORY 3 — ADAPTATION VISIBILITY
+==================================================
+
+Audit whether AI-driven adaptations are surfaced clearly.
+
+Evaluate:
+- fatigue adjustments
+- progression holds
+- recovery interventions
+- intensity shifts
+- athletic emphasis changes
+- structural rebuilds
+
+Questions:
+- Can users see what the AI changed over time?
+- Are major coaching interventions visible?
+- Is adaptation explained clearly?
+- Does the system communicate WHY changes occurred?
+
+Potential additions:
+- “Recently adapted” labels
+- AI coaching notes
+- adaptation timeline
+- last major adjustment summary
+- trend indicators
+
+Goal:
+Users should feel:
+actively coached across time.
+
+==================================================
+AUDIT CATEGORY 4 — STATUS + SYSTEM STATE CLARITY
+==================================================
+
+Audit whether users can instantly understand:
+- which program is active
+- which are paused
+- which are stale
+- which are adapting
+- which are completed
+- which are archived
+
+Questions:
+- Is status hierarchy visually obvious?
+- Are inactive programs distinguishable?
+- Does the system communicate current engagement state?
+- Can users quickly identify what matters NOW?
+
+Potential states:
+- Active
+- Adapting
+- Recovery Hold
+- Completed
+- Archived
+- Experimental
+- Rebuilding
+
+Goal:
+The section should communicate:
+living system state,
+not static storage.
+
+==================================================
+AUDIT CATEGORY 5 — INFORMATION HIERARCHY
+==================================================
+
+Audit:
+- scanability
+- card density
+- sorting logic
+- visual prioritization
+- mobile readability
+- longitudinal organization
+
+Questions:
+- What draws attention first?
+- Is the most important program obvious?
+- Does the hierarchy scale as users accumulate programs?
+- Is there too much visible detail?
+- Does mobile become overwhelming?
+
+Evaluate:
+- program cards
+- metadata density
+- active system prominence
+- recency indicators
+- adaptation indicators
+- session completion summaries
+
+Goal:
+Users should immediately understand:
+where they are in their training journey.
+
+==================================================
+AUDIT CATEGORY 6 — AI PRESENCE + COACHING CONTINUITY
+==================================================
+
+Audit whether the Active Programs section feels:
+actively managed by intelligence.
+
+Questions:
+- Does the AI feel present between conversations?
+- Does the system communicate ongoing awareness?
+- Are coaching insights visible?
+- Is longitudinal guidance surfaced?
+- Does the section feel maintained by TrainChat?
+
+Potential additions:
+- “TrainChat is monitoring recovery”
+- “Power progression currently active”
+- “Adapted 2 days ago”
+- “Last reviewed by Coach Atlas”
+- “Fatigue protection active”
+
+Goal:
+Programs should feel:
+continuously coached,
+not abandoned after creation.
+
+==================================================
+AUDIT CATEGORY 7 — EMOTIONAL OWNERSHIP
+==================================================
+
+Audit whether the section reinforces:
+- progress
+- identity
+- achievement
+- consistency
+- athlete evolution
+- coaching relationship
+
+Questions:
+- Do users feel proud of their systems?
+- Does the section create attachment?
+- Does it reinforce commitment and continuity?
+- Does it visually communicate progress over time?
+
+Potential additions:
+- streak indicators
+- progression milestones
+- adaptation achievements
+- system maturity
+- training age
+- “weeks evolved”
+- coaching journey summaries
+
+Goal:
+Create emotional retention through continuity.
+
+==================================================
+AUDIT CATEGORY 8 — SCALABILITY + MULTI-PROGRAM MANAGEMENT
+==================================================
+
+Audit how the architecture behaves when users:
+- create many programs
+- experiment frequently
+- switch goals
+- revisit old systems
+- maintain seasonal programs
+- run multiple focuses
+
+Questions:
+- Does organization remain understandable?
+- Is search/filtering sufficient?
+- Are old systems contextualized properly?
+- Can users safely experiment without clutter?
+- Does the section become overwhelming at scale?
+
+Potential additions:
+- tagging
+- folders/groups
+- seasonal labels
+- sport filters
+- archived intelligence summaries
+- “resume program” flows
+
+Goal:
+TrainChat should scale into:
+a lifelong athlete intelligence system.
+
+==================================================
+AUDIT CATEGORY 9 — MOBILE EXPERIENCE
+==================================================
+
+Audit:
+- mobile scanability
+- card compression
+- active system visibility
+- gesture flow
+- continuity visibility
+- adaptation discoverability
+
+Questions:
+- Does mobile prioritize the correct information?
+- Are active/adapting systems obvious?
+- Does scrolling feel clean or cluttered?
+- Are longitudinal indicators visible enough?
+- Does the section feel premium on mobile?
+
+Goal:
+The mobile experience should feel:
+clear,
+alive,
+and longitudinally intelligent.
+
+==================================================
+FINAL DELIVERABLES
+==================================================
+
+Provide:
+- categorized findings
+- continuity gaps
+- emotional UX gaps
+- adaptation visibility weaknesses
+- identity/coaching gaps
+- hierarchy issues
+- scaling risks
+- mobile UX issues
+- highest ROI improvements
+- architectural concerns
+- roadmap priorities
+
+Final assessment should answer:
+
+1. Does Active Programs currently feel like:
+   - a workout file manager
+   OR
+   - a living athlete operating system?
+
+2. What prevents users from feeling:
+   - long-term continuity,
+   - coaching presence,
+   - and emotional ownership?
+
+3. What changes would most strongly reinforce:
+   - persistent intelligence,
+   - adaptation across time,
+   - and athlete identity continuity?
