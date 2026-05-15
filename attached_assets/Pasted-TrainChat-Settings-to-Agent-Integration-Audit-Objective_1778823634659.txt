@@ -1,0 +1,199 @@
+TrainChat — Settings-to-Agent Integration Audit
+
+Objective:
+Audit whether every user-facing setting actually changes Atlas behavior per user.
+
+Core question:
+Do these settings only appear in the UI, or do they meaningfully affect coaching, adaptation, memory, forecasting, and program mutations?
+
+Audit each setting across this chain:
+
+UI control →
+database/localStorage →
+API save/load →
+agent-settings-resolver.ts →
+Atlas prompt/context →
+mutation/adaptation logic →
+visible user behavior
+
+Audit sections:
+
+1. Athlete Identity
+Check:
+- name
+- primary goal
+- experience
+- training style
+- days/week
+- session length
+- equipment
+- sport focus
+
+Verify:
+- saved correctly
+- loaded per user
+- injected into Atlas
+- affects program generation
+- affects refinement logic
+- appears in Athlete DNA / Intelligence Score where relevant
+
+2. Atlas Intelligence Score
+Check:
+- score calculation
+- tier logic
+- calibration status
+- trend delta
+- active systems grid
+
+Verify:
+- score is not just decorative
+- updates after calibration, check-ins, memories, and conversations
+- influences Atlas confidence language
+- correctly reflects “Not calibrated” / Active / Inactive states
+
+3. Coaching Behavior
+Check:
+- Direct / Supportive / Analytical
+- Minimal / Balanced / Detailed
+- proactive insights
+- memory personalization
+- concise responses
+
+Verify:
+- every setting changes Atlas response style
+- resolver injects correct behavior instructions
+- settings persist per user
+- conflicts are resolved correctly, e.g. Detailed + Concise
+
+4. Adaptation + Recovery
+Check:
+- Conservative / Balanced / Aggressive / Competition
+- auto-apply adjustments
+- approval for structural changes
+- approval for deload weeks
+- readiness triggers
+- missed-session triggers
+
+Verify:
+- progression philosophy changes actual programming decisions
+- mutation severity gates are respected
+- Atlas does not auto-apply forbidden changes
+- readiness adaptation follows the selected approval rules
+- competition mode still respects safety constraints
+
+5. Memory + Privacy
+Check:
+- memory categories
+- Active / Monitor / Resolved states
+- downgrade
+- remove
+- selective category clearing
+- export data
+
+Verify:
+- Active memories inject strongly
+- Monitor memories inject softly
+- Resolved memories do not affect programming
+- deleted memories stop appearing
+- memory personalization off still preserves safety constraints
+- exported data matches stored user state
+
+6. Safety + Constraints
+Check:
+- pain patterns
+- injury lifecycle
+- hard-limit callouts
+- healed / monitor / active states
+
+Verify:
+- active injuries block unsafe programming
+- monitor injuries create caution but do not overrestrict
+- resolved/healed injuries stop influencing program selection
+- hard constraints override all preferences
+- safety hierarchy is enforced above aggression mode
+
+7. Notifications + Coaching Presence
+Check:
+- pre-session brief
+- missed session check-ins
+- weekly recap
+- forecast alerts
+- recovery warnings
+- plateau alerts
+
+Verify:
+- settings save correctly
+- Atlas has access to the selected preferences
+- disabled notifications do not trigger proactive messaging
+- enabled settings influence future proactive workflows
+- timing preferences are respected if available
+
+8. Subscription + Usage
+Check:
+- plan
+- feature access
+- limits
+- Stripe portal
+
+Verify:
+- settings accurately reflect user plan
+- locked intelligence features are gated cleanly
+- Atlas does not reference unavailable premium features as active
+- usage state is visible and accurate
+
+Critical test cases:
+
+A. New user with no calibration
+Expected:
+Atlas should know little, show low score, and naturally suggest Teach Atlas About You.
+
+B. User sets Direct + Minimal
+Expected:
+Atlas gives short, blunt, performance-focused coaching.
+
+C. User sets Analytical + Detailed
+Expected:
+Atlas explains reasoning, adaptation logic, and progression decisions more deeply.
+
+D. User sets Conservative + active knee pain
+Expected:
+Atlas reduces risk, avoids knee-aggravating choices, and explains safety priority.
+
+E. User sets Competition + active injury
+Expected:
+Atlas pushes performance only within safety constraints.
+
+F. User marks injury as Resolved
+Expected:
+Atlas stops treating it as an active limiter but can remember it historically.
+
+G. Memory personalization off
+Expected:
+Atlas stops using preferences/patterns but still respects injuries and hard constraints.
+
+H. Require approval for structural changes
+Expected:
+Atlas proposes rebuilds/phase changes but does not apply them automatically.
+
+I. Auto-apply minor adjustments on
+Expected:
+Small set/rep/readiness tweaks can apply without extra confirmation.
+
+J. Forecasting inactive
+Expected:
+Atlas should not claim it is actively forecasting.
+
+Deliverables:
+- settings map
+- per-setting integration status
+- settings that are UI-only
+- resolver injection gaps
+- mutation/adaptation gating gaps
+- memory lifecycle bugs
+- safety hierarchy failures
+- conflicting setting behavior
+- per-user persistence risks
+- highest ROI fixes
+
+Final assessment:
+Does Settings actually control Atlas per user, or does it mostly display preferences without changing the intelligence system?
