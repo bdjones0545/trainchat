@@ -56,6 +56,18 @@
           "logo": "https://www.trainchat.ai/favicon.svg",
           "description": "TrainChat® is an AI training system that delivers adaptive, conversational coaching intelligence through a live programming interface. Built by a practicing strength and conditioning coach with an exercise science background.",
           "foundingDate": "2024",
+          "knowsAbout": [
+            "Adaptive Programming",
+            "Coaching Intelligence",
+            "Conversational Training",
+            "Living Training System",
+            "Workout Mutation",
+            "Dynamic Progression",
+            "Intelligent Periodization",
+            "Training Memory",
+            "AI Performance Coaching",
+            "Vibe Coding Your Workouts"
+          ],
           "sameAs": []
         },
         {
@@ -69,6 +81,10 @@
             "@type": "SearchAction",
             "target": "https://www.trainchat.ai/chat?q={search_term_string}",
             "query-input": "required name=search_term_string"
+          },
+          "speakable": {
+            "@type": "SpeakableSpecification",
+            "cssSelector": [".direct-answer", "h1", ".definition-block", ".faq-answer"]
           }
         },
         {
@@ -113,7 +129,13 @@
             "Adaptive Training Systems",
             "Performance Coaching",
             "Progressive Overload",
-            "Sports Performance"
+            "Sports Performance",
+            "Motor Learning",
+            "Training Load Management",
+            "CNS Adaptation",
+            "Recovery Science",
+            "AI Coaching Systems",
+            "Conversational Training"
           ],
           "hasCredential": {
             "@type": "EducationalOccupationalCredential",
@@ -122,6 +144,89 @@
           },
           "worksFor": { "@id": "https://www.trainchat.ai/#organization" },
           "founder": { "@id": "https://www.trainchat.ai/#organization" }
+        },
+        {
+          "@type": "Course",
+          "@id": "https://www.trainchat.ai/#concept-library",
+          "name": "AI Fitness Coaching Concept Library",
+          "description": "A structured knowledge system covering the core concepts of adaptive AI training — adaptive programming, coaching intelligence, training memory, workout mutation, dynamic progression, intelligent periodization, and living training systems.",
+          "url": "https://www.trainchat.ai/concepts",
+          "provider": { "@id": "https://www.trainchat.ai/#organization" },
+          "educationalLevel": "Intermediate",
+          "teaches": [
+            "Adaptive Programming",
+            "Coaching Intelligence",
+            "Training Memory",
+            "Workout Mutation",
+            "Conversational Training",
+            "Dynamic Progression",
+            "Performance Adaptation",
+            "Intelligent Periodization",
+            "Living Training System"
+          ],
+          "hasCourseInstance": {
+            "@type": "CourseInstance",
+            "courseMode": "online",
+            "url": "https://www.trainchat.ai/concepts"
+          }
+        },
+        {
+          "@type": "ItemList",
+          "@id": "https://www.trainchat.ai/#video-series",
+          "name": "TrainChat® Educational Video Series",
+          "description": "Educational video content on adaptive AI training, coaching intelligence, conversational training, and exercise science — produced by TrainChat's founder.",
+          "url": "https://www.trainchat.ai/content",
+          "numberOfItems": 18,
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "item": {
+                "@type": "VideoObject",
+                "name": "What Is Adaptive Programming? The Complete Explanation",
+                "description": "A complete explanation of adaptive programming — the training methodology where programs continuously evolve based on feedback, performance, and goals.",
+                "keywords": "adaptive programming, AI training, workout adaptation, living training system",
+                "author": { "@id": "https://www.trainchat.ai/#organization" },
+                "publisher": { "@id": "https://www.trainchat.ai/#organization" }
+              }
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "item": {
+                "@type": "VideoObject",
+                "name": "Coaching Intelligence vs AI Workout Generation — The Real Difference",
+                "description": "The technical and practical difference between AI that generates workouts and AI with coaching intelligence.",
+                "keywords": "coaching intelligence, AI workout generator, AI strength coach, adaptive programming",
+                "author": { "@id": "https://www.trainchat.ai/#organization" },
+                "publisher": { "@id": "https://www.trainchat.ai/#organization" }
+              }
+            },
+            {
+              "@type": "ListItem",
+              "position": 3,
+              "item": {
+                "@type": "VideoObject",
+                "name": "Vibe Code Your Workouts — What It Means and Why It Works",
+                "description": "Defining vibe coding your workouts — directing an AI training system through natural, intent-driven conversation rather than manual programming.",
+                "keywords": "vibe code your workouts, conversational training, AI fitness coaching, TrainChat",
+                "author": { "@id": "https://www.trainchat.ai/#organization" },
+                "publisher": { "@id": "https://www.trainchat.ai/#organization" }
+              }
+            },
+            {
+              "@type": "ListItem",
+              "position": 4,
+              "item": {
+                "@type": "VideoObject",
+                "name": "Why I Built TrainChat — A Coach's Perspective on AI and Athletic Programming",
+                "description": "The founding story of TrainChat — why a practicing strength and conditioning coach built an AI training system.",
+                "keywords": "TrainChat founder, AI training system, adaptive programming, strength coach",
+                "author": { "@id": "https://www.trainchat.ai/#founder" },
+                "publisher": { "@id": "https://www.trainchat.ai/#organization" }
+              }
+            }
+          ]
         }
       ]
     }

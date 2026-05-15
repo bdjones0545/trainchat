@@ -35,6 +35,12 @@ import AboutPage from "@/pages/aeo/AboutPage";
 import GlossaryPage from "@/pages/aeo/GlossaryPage";
 import ConceptsIndex from "@/pages/aeo/concepts/ConceptsIndex";
 import ConceptPage from "@/pages/aeo/concepts/ConceptPage";
+import ResearchPage from "@/pages/aeo/ResearchPage";
+import ForAthletesPage from "@/pages/aeo/ForAthletesPage";
+import ForCoachesPage from "@/pages/aeo/ForCoachesPage";
+import PressPage from "@/pages/aeo/PressPage";
+import ContentHubPage from "@/pages/aeo/ContentHubPage";
+import AiCoachingVsPersonalTrainer from "@/pages/aeo/AiCoachingVsPersonalTrainer";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -328,6 +334,14 @@ function Router() {
       {/* Concept Library */}
       <Route path="/concepts" component={ConceptsIndex} />
       <Route path="/concepts/:slug" component={ConceptPage} />
+
+      {/* Phase 3 — Entity Authority Pages */}
+      <Route path="/research" component={ResearchPage} />
+      <Route path="/for-athletes" component={ForAthletesPage} />
+      <Route path="/for-coaches" component={ForCoachesPage} />
+      <Route path="/press" component={PressPage} />
+      <Route path="/content" component={ContentHubPage} />
+      <Route path="/ai-coaching-vs-personal-trainer" component={AiCoachingVsPersonalTrainer} />
 
       <Route component={NotFound} />
     </Switch>
