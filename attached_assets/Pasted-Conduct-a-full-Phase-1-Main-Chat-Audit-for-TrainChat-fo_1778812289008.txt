@@ -1,0 +1,228 @@
+Conduct a full Phase 1 Main Chat Audit for TrainChat focused on conversational intelligence, orchestration quality, reliability, emotional UX, and perceived intelligence.
+
+Objective:
+TrainChat should feel less like an “AI workout generator” and more like a persistent performance intelligence system that collaboratively evolves training over time.
+
+Core Principle:
+The chat IS the product. Every interaction should reinforce:
+- continuity,
+- trust,
+- intelligence,
+- adaptability,
+- and conversational momentum.
+
+==================================================
+PHASE 1 AUDIT CATEGORIES
+==================================================
+
+1. CONVERSATIONAL INTELLIGENCE AUDIT
+
+Evaluate:
+- ambiguous request handling
+- follow-up quality
+- intent inference
+- conversational momentum
+- over-clarification loops
+- memory continuity
+- emotional/natural language understanding
+
+Key Goal:
+TrainChat should aggressively infer likely intent rather than repeatedly asking clarifying questions.
+
+Examples:
+
+Weak:
+User: “Make it more athletic.”
+AI: “What specifically do you mean?”
+
+Strong:
+AI infers:
+- more power work
+- reactive/elastic emphasis
+- reduced hypertrophy bias
+- acceleration/change-of-direction work
+
+Then explains the adaptation confidently.
+
+Audit for:
+- unnecessary friction
+- repetitive questioning
+- failure to infer implied scope
+- vague mutation handling
+- broken conversational continuity
+
+==================================================
+
+2. MUTATION TRUST + RELIABILITY AUDIT
+
+Audit all training-system mutations and edits.
+
+Verify:
+- every requested mutation actually applies
+- UI always reflects saved DB state
+- sidebar sync consistency
+- change log accuracy
+- undo integrity
+- swap verification reliability
+- no false “saved” confirmations
+
+Key Principle:
+TrainChat must feel trustworthy and deterministic.
+
+Any mismatch between:
+- AI response,
+- UI state,
+- and database truth
+damages trust immediately.
+
+Audit:
+- stale cache risks
+- missing invalidations
+- optimistic update mismatches
+- mutation race conditions
+- cross-conversation synchronization issues
+
+==================================================
+
+3. PROACTIVE INTELLIGENCE AUDIT
+
+Evaluate whether TrainChat feels:
+- observant,
+- adaptive,
+- and longitudinally aware.
+
+Audit opportunities for:
+- missed-session detection
+- fatigue trend awareness
+- behavioral pattern recognition
+- adherence adaptation
+- readiness-informed suggestions
+- proactive recommendations
+
+Examples:
+- “You’ve skipped Wednesday sessions repeatedly — should I redesign your split?”
+- “Your recent changes suggest a shift toward athletic performance.”
+- “Historically you recover better with lower lower-body frequency.”
+
+Goal:
+Move TrainChat from reactive assistant →
+persistent performance intelligence.
+
+==================================================
+
+4. ONBOARDING + BLANK STATE AUDIT
+
+Evaluate first-time conversational experience.
+
+Audit:
+- onboarding clarity
+- first-prompt confidence
+- emotional engagement
+- blank-state friction
+- value communication speed
+
+Current quick prompts should evolve toward:
+identity-driven outcomes instead of generic program structures.
+
+Examples:
+Replace:
+- “Build a 3-day strength program”
+
+With:
+- “Build me like a Division 1 athlete”
+- “Help me become explosive”
+- “Fix knee pain while keeping strength”
+- “Train around my crazy schedule”
+
+Goal:
+Users should instantly understand:
+TrainChat is collaborative intelligence, not a form-based fitness app.
+
+==================================================
+
+5. MOBILE CONVERSATIONAL UX AUDIT
+
+Audit:
+- thumb flow
+- scroll anchoring
+- keyboard behavior
+- voice-to-chat parity
+- streaming smoothness
+- input friction
+- empty-state behavior
+- mutation visibility
+
+Key Principle:
+Conversational momentum should never break.
+
+Users should always feel:
+- oriented,
+- informed,
+- and in flow.
+
+==================================================
+
+6. INTELLIGENCE VISIBILITY AUDIT
+
+Evaluate whether TrainChat’s internal sophistication is visible externally.
+
+Current strengths:
+- SSE thinking stages
+- structured mutation workflows
+- refinement architecture
+
+Expand and refine:
+- visible reasoning
+- adaptation explanation
+- confidence signaling
+- constraint awareness
+- training philosophy continuity
+
+Goal:
+Users should FEEL the intelligence system working without overwhelming them with technical detail.
+
+==================================================
+
+7. LONGITUDINAL MEMORY AUDIT
+
+Audit:
+- what gets remembered
+- what SHOULD be remembered
+- memory consistency
+- personalization quality
+- historical adaptation quality
+- recurring insight generation
+
+Key Goal:
+TrainChat should evolve with the athlete over time.
+
+This is a major moat opportunity.
+
+==================================================
+
+OVERALL PRODUCT GOAL
+==================================================
+
+TrainChat should feel:
+- persistent,
+- adaptive,
+- trustworthy,
+- collaborative,
+- emotionally intelligent,
+- and alive.
+
+The product should increasingly resemble:
+“Cursor/Replit for performance intelligence”
+rather than:
+“AI workout generator.”
+
+Final deliverables:
+- categorized findings
+- friction points
+- trust gaps
+- orchestration weaknesses
+- conversational dead zones
+- memory opportunities
+- UX improvements
+- high-impact roadmap priorities
+- highest ROI fixes first
