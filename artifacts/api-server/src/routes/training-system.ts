@@ -1,8 +1,17 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { db } from "@workspace/db";
-import { trainingSystems, conversationsTable, savedProgramsTable, activeSessionsTable } from "@workspace/db";
-import { eq, and, desc, ne } from "drizzle-orm";
+import {
+  trainingSystems,
+  trainingPhases,
+  trainingWeeks,
+  systemChangeLog,
+  systemAdjustmentEventsTable,
+  conversationsTable,
+  savedProgramsTable,
+  activeSessionsTable,
+} from "@workspace/db";
+import { eq, and, desc, ne, inArray, isNotNull } from "drizzle-orm";
 import {
   getActiveTrainingSystem,
   getAllActiveSystemsByFocus,
@@ -347,7 +356,8 @@ router.get("/training-system/history", requireAuth, async (req, res): Promise<vo
 
 // ─── GET /training-system/library ────────────────────────────────────────────
 // Returns ALL training systems for the user (active + archived) as a program library.
-// This is how the "Saved Programs" sidebar section gets its data.
+// Enriched with phase/week context, focus mode, and adaptation signals so the UI
+// can render an intelligent "living athlete operating system" instead of a file list.
 router.get("/training-system/library", requireAuth, async (req, res): Promise<void> => {
   try {
     const userId = req.session.userId!;
@@ -357,17 +367,121 @@ router.get("/training-system/library", requireAuth, async (req, res): Promise<vo
       .where(eq(trainingSystems.userId, userId))
       .orderBy(desc(trainingSystems.updatedAt));
 
+    if (systems.length === 0) {
+      res.json([]);
+      return;
+    }
+
+    const systemIds = systems.map((s) => s.id);
+
+    // ── Batch: phase names via currentPhaseId ────────────────────────────────
+    const phaseIdList = systems
+      .map((s) => s.currentPhaseId)
+      .filter((id): id is number => id != null);
+
+    const phaseMap = new Map<number, { name: string; goal: string; weekCount: number }>();
+    if (phaseIdList.length > 0) {
+      const phases = await db
+        .select({
+          id: trainingPhases.id,
+          name: trainingPhases.name,
+          goal: trainingPhases.goal,
+          weekCount: trainingPhases.weekCount,
+        })
+        .from(trainingPhases)
+        .where(inArray(trainingPhases.id, phaseIdList));
+      for (const p of phases) phaseMap.set(p.id, p);
+    }
+
+    // ── Batch: current week number for those phases ──────────────────────────
+    const weekMap = new Map<number, { weekNumber: number; volumeLevel: string }>();
+    if (phaseIdList.length > 0) {
+      const weeks = await db
+        .select({
+          trainingPhaseId: trainingWeeks.trainingPhaseId,
+          weekNumber: trainingWeeks.weekNumber,
+          volumeLevel: trainingWeeks.volumeLevel,
+        })
+        .from(trainingWeeks)
+        .where(
+          and(
+            inArray(trainingWeeks.trainingPhaseId, phaseIdList),
+            eq(trainingWeeks.status, "current")
+          )
+        );
+      for (const w of weeks) weekMap.set(w.trainingPhaseId, { weekNumber: w.weekNumber, volumeLevel: w.volumeLevel });
+    }
+
+    // ── Batch: latest adjustment event per system ────────────────────────────
+    const adjustmentMap = new Map<number, { title: string; createdAt: Date }>();
+    const allAdjustments = await db
+      .select({
+        trainingSystemId: systemAdjustmentEventsTable.trainingSystemId,
+        title: systemAdjustmentEventsTable.title,
+        createdAt: systemAdjustmentEventsTable.createdAt,
+      })
+      .from(systemAdjustmentEventsTable)
+      .where(
+        and(
+          eq(systemAdjustmentEventsTable.userId, userId),
+          isNotNull(systemAdjustmentEventsTable.trainingSystemId)
+        )
+      )
+      .orderBy(desc(systemAdjustmentEventsTable.createdAt));
+    for (const a of allAdjustments) {
+      if (a.trainingSystemId && !adjustmentMap.has(a.trainingSystemId)) {
+        adjustmentMap.set(a.trainingSystemId, { title: a.title, createdAt: a.createdAt });
+      }
+    }
+
+    // ── Batch: latest change log date per system ─────────────────────────────
+    const changeLogMap = new Map<number, Date>();
+    const allChangeLogs = await db
+      .select({
+        trainingSystemId: systemChangeLog.trainingSystemId,
+        createdAt: systemChangeLog.createdAt,
+      })
+      .from(systemChangeLog)
+      .where(
+        and(
+          eq(systemChangeLog.userId, userId),
+          inArray(systemChangeLog.trainingSystemId, systemIds)
+        )
+      )
+      .orderBy(desc(systemChangeLog.createdAt));
+    for (const c of allChangeLogs) {
+      if (!changeLogMap.has(c.trainingSystemId)) {
+        changeLogMap.set(c.trainingSystemId, c.createdAt);
+      }
+    }
+
     res.json(
-      systems.map((s) => ({
-        id: s.id,
-        name: s.name,
-        overarchingGoal: s.overarchingGoal,
-        trainingStyle: s.trainingStyle,
-        weeklyFrequency: s.weeklyFrequency,
-        status: s.status,
-        createdAt: s.createdAt.toISOString(),
-        updatedAt: s.updatedAt.toISOString(),
-      }))
+      systems.map((s) => {
+        const phase = s.currentPhaseId ? phaseMap.get(s.currentPhaseId) : null;
+        const week = s.currentPhaseId ? weekMap.get(s.currentPhaseId) : null;
+        const adjustment = adjustmentMap.get(s.id);
+        const changeLogDate = changeLogMap.get(s.id);
+        const meta = s.metadata as Record<string, unknown> | null;
+
+        return {
+          id: s.id,
+          name: s.name,
+          overarchingGoal: s.overarchingGoal,
+          trainingStyle: s.trainingStyle,
+          weeklyFrequency: s.weeklyFrequency,
+          status: s.status,
+          focusMode: (meta?.focusMode as string | undefined) ?? "strength",
+          currentPhaseName: phase?.name ?? null,
+          currentPhaseGoal: phase?.goal ?? null,
+          currentWeekNumber: week?.weekNumber ?? null,
+          currentVolumeLevel: week?.volumeLevel ?? null,
+          lastAdjustmentTitle: adjustment?.title ?? null,
+          lastAdjustmentDate: adjustment?.createdAt?.toISOString() ?? null,
+          lastChangeLogDate: changeLogDate?.toISOString() ?? null,
+          createdAt: s.createdAt.toISOString(),
+          updatedAt: s.updatedAt.toISOString(),
+        };
+      })
     );
   } catch (err) {
     logger.error({ err }, "[training-system] GET /library error");

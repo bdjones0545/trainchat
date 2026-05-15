@@ -2755,7 +2755,7 @@ export default function Chat() {
           className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 active:scale-[0.98] transition-all text-left"
         >
           <Library className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-          <span>Saved Programs</span>
+          <span>All Programs</span>
           {programLibrary.length > 0 && (
             <span className="ml-auto text-[10px] bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground flex-shrink-0">
               {programLibrary.length}
@@ -2769,67 +2769,123 @@ export default function Chat() {
         </button>
         {showProgramLibrary && programLibrary.length === 0 && (
           <div className="ml-2 px-3 py-3">
-            <p className="text-[11px] text-muted-foreground/60">No saved programs yet</p>
+            <p className="text-[11px] text-muted-foreground/60">No programs yet — start a conversation to build one.</p>
           </div>
         )}
         {showProgramLibrary && programLibrary.length > 0 && (
-          <div className="ml-2 space-y-0.5 mb-1">
-            {programLibrary.map((prog: any) => (
-              <div key={prog.id} className="group relative">
-                <button
-                  type="button"
-                  style={{ touchAction: "manipulation" }}
-                  onClick={() => {
-                    if (prog.status === "active") {
-                      setLocation("/system");
-                      setMobilePanel(null);
-                    } else if (!isSwitchingProgram) {
-                      handleSwitchProgram(prog.id);
-                    }
-                  }}
-                  disabled={isSwitchingProgram && prog.status !== "active"}
-                  className={`w-full flex items-start gap-2.5 px-3 py-2.5 pr-8 rounded-lg text-left transition-all ${
-                    prog.status === "active"
-                      ? "bg-primary/8 border border-primary/20 hover:bg-primary/12 cursor-pointer"
-                      : isSwitchingProgram
-                      ? "opacity-50 cursor-default"
-                      : "hover:bg-muted/60 active:bg-muted/80 cursor-pointer"
-                  }`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-[11px] font-semibold text-foreground truncate">{prog.name}</p>
-                      {prog.status === "active" && (
-                        <CheckCircle2 className="w-3 h-3 text-green-400 flex-shrink-0" />
+          <div className="space-y-1.5 mb-1 px-1">
+            {programLibrary.map((prog: any) => {
+              const fMode = (prog.focusMode as string) ?? "strength";
+              const focusBadgeMap: Record<string, { label: string; color: string }> = {
+                strength: { label: "Strength", color: "text-orange-400 bg-orange-500/10 border-orange-500/20" },
+                speed:    { label: "Speed",    color: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20" },
+                mobility: { label: "Mobility", color: "text-teal-400 bg-teal-500/10 border-teal-500/20" },
+              };
+              const fBadge = focusBadgeMap[fMode] ?? { label: "General", color: "text-muted-foreground bg-muted/40 border-border" };
+
+              const adaptDate = prog.lastAdjustmentDate || prog.lastChangeLogDate;
+              const adaptDays = adaptDate ? Math.floor((Date.now() - new Date(adaptDate).getTime()) / 86400000) : null;
+
+              const derivedStatus = (() => {
+                if (prog.status === "archived") return { label: "Archived", color: "text-muted-foreground/60 bg-muted/20 border-border/30" };
+                if (prog.currentVolumeLevel === "deload") return { label: "Deload", color: "text-sky-400 bg-sky-500/10 border-sky-500/20" };
+                if (adaptDays !== null && adaptDays <= 2) return { label: "Adapting", color: "text-primary bg-primary/10 border-primary/20" };
+                if (prog.status === "active") return { label: "Active", color: "text-green-400 bg-green-500/10 border-green-500/20" };
+                return { label: "Paused", color: "text-muted-foreground/50 bg-muted/20 border-border/30" };
+              })();
+
+              const adaptSignal = adaptDays === null ? null
+                : adaptDays === 0 ? "Updated today"
+                : adaptDays === 1 ? "Updated yesterday"
+                : adaptDays <= 6 ? `Updated ${adaptDays}d ago`
+                : null;
+
+              const weeksEvolved = Math.max(0, Math.floor((Date.now() - new Date(prog.createdAt).getTime()) / (7 * 86400000)));
+              const coachLine = prog.lastAdjustmentTitle ?? prog.currentPhaseGoal ?? null;
+              const isActive = prog.status === "active";
+
+              return (
+                <div key={prog.id} className="relative">
+                  <button
+                    type="button"
+                    style={{ touchAction: "manipulation" }}
+                    onClick={() => {
+                      if (isActive) {
+                        setLocation("/system");
+                        setMobilePanel(null);
+                      } else if (!isSwitchingProgram) {
+                        handleSwitchProgram(prog.id);
+                      }
+                    }}
+                    disabled={isSwitchingProgram && !isActive}
+                    className={`w-full text-left rounded-xl border transition-all duration-150 p-3 pr-9 ${
+                      isActive
+                        ? "border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/8"
+                        : isSwitchingProgram
+                        ? "border-border/30 bg-transparent opacity-50 cursor-default"
+                        : "border-border/40 bg-transparent hover:border-border/80 hover:bg-muted/40 active:bg-muted/60 cursor-pointer"
+                    }`}
+                  >
+                    {/* Name + focus badge */}
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                      <p className="text-[11px] font-semibold text-foreground leading-tight">{prog.name}</p>
+                      <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border flex-shrink-0 ${fBadge.color}`}>
+                        {fBadge.label}
+                      </span>
+                    </div>
+
+                    {/* Status + phase/week + weeks evolved */}
+                    <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+                      <span className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${derivedStatus.color}`}>
+                        {derivedStatus.label}
+                      </span>
+                      {prog.currentPhaseName && (
+                        <span className="text-[9px] text-muted-foreground/60 truncate">
+                          {prog.currentPhaseName}{prog.currentWeekNumber ? ` W${prog.currentWeekNumber}` : ""}
+                        </span>
+                      )}
+                      {weeksEvolved > 0 && (
+                        <span className="text-[9px] text-muted-foreground/40 ml-auto flex-shrink-0">{weeksEvolved}w</span>
                       )}
                     </div>
-                    <p className="text-[10px] text-muted-foreground/70 truncate mt-0.5">
-                      {[prog.weeklyFrequency ? `${prog.weeklyFrequency}x/week` : null, prog.trainingStyle].filter(Boolean).join(" · ")}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-                      {new Date(prog.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" })}
-                    </p>
-                  </div>
-                  {prog.status === "active" ? (
-                    <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">View</span>
-                  ) : !isSwitchingProgram ? (
-                    <span className="text-[9px] text-primary/70 flex-shrink-0 mt-0.5">Load</span>
-                  ) : null}
-                </button>
-                {/* Delete icon — visible on hover */}
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setDeleteConfirm({ type: "program", id: prog.id, name: prog.name });
-                  }}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-muted-foreground/40 hover:!text-destructive active:!text-destructive hover:bg-destructive/10 active:bg-destructive/10 transition-all"
-                  title="Delete program"
-                >
-                  <Trash2 className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+
+                    {/* Coaching line */}
+                    {coachLine && (
+                      <p className="text-[9px] text-muted-foreground/55 leading-snug line-clamp-1">{coachLine}</p>
+                    )}
+
+                    {/* Adaptation signal */}
+                    {adaptSignal && (
+                      <div className="flex items-center gap-1 mt-1.5">
+                        <div className="w-1 h-1 rounded-full bg-primary/60 animate-pulse flex-shrink-0" />
+                        <p className="text-[9px] text-primary/70 font-medium">{adaptSignal}</p>
+                      </div>
+                    )}
+
+                    {/* View/Load CTA */}
+                    {isActive ? (
+                      <p className="text-[9px] text-primary/60 font-medium mt-1.5">View system →</p>
+                    ) : !isSwitchingProgram ? (
+                      <p className="text-[9px] text-primary/60 font-medium mt-1.5">Load program →</p>
+                    ) : null}
+                  </button>
+
+                  {/* Delete — always visible (reduced opacity), goes red on hover/tap */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirm({ type: "program", id: prog.id, name: prog.name });
+                    }}
+                    style={{ touchAction: "manipulation" }}
+                    className="absolute right-2 top-2 p-1.5 rounded-md text-muted-foreground/30 hover:text-destructive hover:bg-destructive/10 active:text-destructive active:bg-destructive/15 transition-all"
+                    title="Delete program"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
         <button

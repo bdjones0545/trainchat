@@ -1,0 +1,271 @@
+TrainChat — Active Programs Refinement Sprint
+
+Objective:
+Upgrade Active Programs from a flat saved-workout file list into a visible persistence layer for TrainChat’s living athlete intelligence system.
+
+Core Principle:
+Active Programs should communicate:
+- identity
+- continuity
+- adaptation
+- coaching presence
+- long-term ownership
+
+It should NOT feel like cloud storage for generated workouts.
+
+==================================================
+P0 — ACTIVE PROGRAM HERO CARD
+==================================================
+
+Add a prominent Active Program hero card above the Saved Programs list.
+
+Show:
+- program name
+- focus lane badge: Strength / Speed / Mobility
+- current phase + week
+- training style + weekly frequency
+- last adapted date
+- one coaching signal line
+
+Example:
+“Power Conversion · Week 3”
+“Recovery protection active — volume held this week.”
+
+Goal:
+The user should instantly know:
+“This is my current evolving system.”
+
+==================================================
+P0 — FIX MOBILE DELETE VISIBILITY
+==================================================
+
+Problem:
+Current delete action is hover-only and effectively hidden on touch devices.
+
+Fix:
+- make delete/action menu visible on mobile
+- use explicit overflow menu or long-press action
+- prevent accidental deletion with confirmation/cancel affordance
+
+Goal:
+Program management must work cleanly on mobile.
+
+==================================================
+P1 — STATUS BADGES
+==================================================
+
+Add derived status badges to each program card.
+
+Statuses:
+- Active
+- Adapting
+- Recovery Hold
+- Deload Week
+- Phase Complete
+- Archived
+- Experimental
+
+Use existing data when possible:
+- recent change logs → Adapting
+- current week volumeLevel === “deload” → Deload Week
+- fatigue/readiness directive → Recovery Hold
+- status === archived → Archived
+
+Goal:
+Users should scan the list and immediately understand system state.
+
+==================================================
+P1 — FOCUS LANE BADGES
+==================================================
+
+Display focus mode per program:
+- Strength
+- Speed
+- Mobility
+- Hybrid / General if unknown
+
+Source:
+metadata.focusMode or closest existing program metadata.
+
+Goal:
+Each program should feel distinct and purpose-driven.
+
+==================================================
+P1 — LAST ADAPTATION SIGNAL
+==================================================
+
+Surface most recent intelligence activity per program.
+
+Examples:
+- “Adapted 3 days ago”
+- “Coach updated yesterday”
+- “Last reviewed today”
+- “No recent adaptations”
+
+Source priority:
+1. system_adjustment_events
+2. system_change_log
+3. updatedAt fallback
+
+Goal:
+Make programs feel actively maintained, not abandoned.
+
+==================================================
+P1 — EXTEND LIBRARY API
+==================================================
+
+Update /api/training-system/library to return richer fields.
+
+Add:
+- metadata.focusMode
+- overarchingGoal
+- trainingStyle
+- weeklyFrequency
+- currentPhaseName
+- currentWeekNumber
+- totalWeeksInProgram
+- lastChangeLogDate
+- lastAdjustmentTitle
+- status
+- createdAt
+- updatedAt
+- active block/phase mission statement if available
+
+Goal:
+Stop discarding intelligence before it reaches the UI.
+
+==================================================
+P2 — PROGRAM CARD REDESIGN
+==================================================
+
+Replace flat nav rows with richer program cards.
+
+Each card should include:
+- name
+- focus badge
+- status badge
+- goal or mission snippet
+- phase/week context
+- last adaptation signal
+- training age / weeks evolved
+- Load / Resume action
+- delete/archive action
+
+Design:
+- compact but scannable
+- premium AI-native feel
+- active program visually dominant
+- inactive programs secondary but still meaningful
+
+Goal:
+Programs should feel like evolving systems, not files.
+
+==================================================
+P2 — WEEKS EVOLVED COUNTER
+==================================================
+
+Calculate program age from createdAt.
+
+Examples:
+- “Week 6 of system”
+- “Evolving for 42 days”
+- “3 weeks trained”
+
+Goal:
+Create emotional ownership and continuity.
+
+==================================================
+P2 — ONE COACHING LINE PER CARD
+==================================================
+
+Surface a concise coaching/intelligence line.
+
+Examples:
+- “Power progression active this block.”
+- “Recovery safeguards currently active.”
+- “Lower-body volume reduced after fatigue trend.”
+- “Strength base progressing steadily.”
+
+Source priority:
+1. system_adjustment_events.title
+2. BlockStatusCard.summary equivalent
+3. active phase mission statement
+4. overarchingGoal fallback
+
+Goal:
+The AI should feel present between conversations.
+
+==================================================
+P3 — RESUME PROGRAM FLOW
+==================================================
+
+When loading an inactive or archived program, trigger a coach re-entry moment.
+
+Example:
+“Welcome back to your Power Conversion system. You left off in Week 3. Last major adjustment: recovery volume reduction. Want to resume as-is or update it based on where you are now?”
+
+Options:
+- Resume as-is
+- Update before resuming
+- Archive old version and rebuild
+
+Goal:
+Switching programs should feel coached, not mechanical.
+
+==================================================
+P3 — SEARCH + FILTER
+==================================================
+
+Add filtering and search for scalability.
+
+Filters:
+- Active
+- Archived
+- Strength
+- Speed
+- Mobility
+- Recently adapted
+- Completed
+- Experimental
+
+Goal:
+The section should scale beyond 5–10 programs cleanly.
+
+==================================================
+P3 — DEDICATED ACTIVE PROGRAMS VIEW
+==================================================
+
+Longer-term:
+Graduate Active Programs from a collapsible sidebar list into a dedicated page or expanded management view.
+
+Include:
+- active system hero
+- program grid/list
+- filters
+- adaptation history summaries
+- archived systems
+- resume flows
+- coaching journey summaries
+
+Goal:
+Active Programs should become the continuity hub of TrainChat.
+
+==================================================
+FINAL PRODUCT DIRECTION
+==================================================
+
+The Active Programs section should answer immediately:
+
+1. What am I currently training for?
+2. What system is active?
+3. How far into it am I?
+4. What has TrainChat adapted recently?
+5. What is the AI currently watching?
+6. What have I built over time?
+
+Success Criteria:
+The section no longer feels like:
+“Saved Programs.”
+
+It feels like:
+“My evolving athlete operating system.”
