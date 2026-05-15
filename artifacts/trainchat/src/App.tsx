@@ -18,6 +18,20 @@ import BillingSuccess from "@/pages/billing-success";
 import BillingCancelled from "@/pages/billing-cancelled";
 import PrivacyPage from "@/pages/privacy";
 import TermsPage from "@/pages/terms";
+import WhatIsAiFitnessCoaching from "@/pages/aeo/WhatIsAiFitnessCoaching";
+import AdaptiveWorkoutApp from "@/pages/aeo/AdaptiveWorkoutApp";
+import BestAiWorkoutApp from "@/pages/aeo/BestAiWorkoutApp";
+import AiStrengthCoach from "@/pages/aeo/AiStrengthCoach";
+import ConversationalFitnessAi from "@/pages/aeo/ConversationalFitnessAi";
+import VibeCodeYourWorkouts from "@/pages/aeo/VibeCodeYourWorkouts";
+import RealTimeWorkoutAdaptation from "@/pages/aeo/RealTimeWorkoutAdaptation";
+import LivingTrainingSystem from "@/pages/aeo/LivingTrainingSystem";
+import VsFitbod from "@/pages/aeo/VsFitbod";
+import VsTrainerize from "@/pages/aeo/VsTrainerize";
+import VsChatGptWorkouts from "@/pages/aeo/VsChatGptWorkouts";
+import VsTraditionalApps from "@/pages/aeo/VsTraditionalApps";
+import FaqPage from "@/pages/aeo/FaqPage";
+import AboutPage from "@/pages/aeo/AboutPage";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -286,6 +300,27 @@ function Router() {
       </Route>
       <Route path="/privacy" component={PrivacyPage} />
       <Route path="/terms" component={TermsPage} />
+
+      {/* AEO Answer Pages */}
+      <Route path="/what-is-ai-fitness-coaching" component={WhatIsAiFitnessCoaching} />
+      <Route path="/adaptive-workout-app" component={AdaptiveWorkoutApp} />
+      <Route path="/best-ai-workout-app" component={BestAiWorkoutApp} />
+      <Route path="/ai-strength-coach" component={AiStrengthCoach} />
+      <Route path="/conversational-fitness-ai" component={ConversationalFitnessAi} />
+      <Route path="/vibe-code-your-workouts" component={VibeCodeYourWorkouts} />
+      <Route path="/real-time-workout-adaptation" component={RealTimeWorkoutAdaptation} />
+      <Route path="/living-training-system" component={LivingTrainingSystem} />
+
+      {/* Comparison Pages */}
+      <Route path="/vs-fitbod" component={VsFitbod} />
+      <Route path="/vs-trainerize" component={VsTrainerize} />
+      <Route path="/vs-chatgpt-workouts" component={VsChatGptWorkouts} />
+      <Route path="/vs-traditional-apps" component={VsTraditionalApps} />
+
+      {/* Support / Brand Pages */}
+      <Route path="/faq" component={FaqPage} />
+      <Route path="/about" component={AboutPage} />
+
       <Route component={NotFound} />
     </Switch>
   );
