@@ -23,6 +23,8 @@ export default function MobileSlideLayout({
   children,
 }: MobileSlideLayoutProps) {
   const isOpen = activePanel !== null;
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -76,9 +78,24 @@ export default function MobileSlideLayout({
           className={`fixed inset-y-0 right-0 z-50 w-[85vw] max-w-sm bg-background border-l border-border flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
             activePanel === "right" ? "translate-x-0" : "translate-x-full"
           }`}
+          onTouchStart={(e) => {
+            touchStartXRef.current = e.touches[0].clientX;
+            touchStartYRef.current = e.touches[0].clientY;
+          }}
+          onTouchEnd={(e) => {
+            if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+            const dx = e.changedTouches[0].clientX - touchStartXRef.current;
+            const dy = Math.abs(e.changedTouches[0].clientY - touchStartYRef.current);
+            if (dx > 72 && dy < 50 && activePanel === "right") onPanelClose();
+            touchStartXRef.current = null;
+            touchStartYRef.current = null;
+          }}
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
-            <span className="text-sm font-bold text-foreground">Live Program</span>
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-foreground">Live Program</span>
+              <span className="text-[9px] text-muted-foreground/40 font-medium">swipe → to close</span>
+            </div>
             <button
               onClick={onPanelClose}
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"

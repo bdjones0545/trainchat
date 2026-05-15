@@ -3216,7 +3216,7 @@ export default function Chat() {
         </button>
         <button
           onClick={() => { setMobilePanel("right"); analytics.track("panel_opened", { source: "mobile_header_button" }); }}
-          className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
+          className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
             latestProgram || hasActiveSystem
               ? "text-primary bg-primary/10 hover:bg-primary/20"
               : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
@@ -3224,6 +3224,9 @@ export default function Chat() {
           aria-label="View live program"
         >
           <Dumbbell className="w-5 h-5" />
+          {(latestProgram || hasActiveSystem) && mobilePanel !== "right" && (
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-green-400 border-2 border-background" />
+          )}
         </button>
         {mobilePanelSpotlight && (
           <div className="absolute right-2 top-full mt-1 z-20 pointer-events-none">

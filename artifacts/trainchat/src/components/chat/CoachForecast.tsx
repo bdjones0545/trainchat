@@ -177,7 +177,7 @@ function PredictionCard({
       {/* "Show Why" expand */}
       {showWhy && (
         <div className="px-3.5 py-2.5 border-t border-border/30 bg-muted/10">
-          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.1em] mb-1.5">Why this forecast</p>
+          <p className="text-[9px] font-bold text-muted-foreground uppercase tracking-[0.1em] mb-1.5">Why I flagged this</p>
           <p className="text-[10px] text-muted-foreground leading-relaxed">{signal.evidence}</p>
         </div>
       )}
@@ -199,7 +199,7 @@ function PredictionCard({
               : "text-primary hover:text-primary/80"
           }`}
         >
-          {isPositive ? "Progress now" : "Adjust plan"}
+          {isPositive ? "Let's progress" : "Let's address this"}
           <ArrowRight className="w-3 h-3" />
         </button>
       </div>
@@ -211,13 +211,13 @@ function PredictionCard({
 
 function NoDataState({ onSendMessage }: { onSendMessage?: (msg: string) => void }) {
   return (
-    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
       <div className="w-10 h-10 rounded-full bg-muted/12 border border-border/25 flex items-center justify-center mb-3">
         <BarChart2 className="w-4 h-4 text-muted-foreground/25" />
       </div>
-      <p className="text-[11px] font-bold text-foreground mb-1.5">No Forecast Yet</p>
+      <p className="text-[11px] font-bold text-foreground mb-1.5">I haven't seen you train yet</p>
       <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[220px] mb-4">
-        Your Coach Forecast activates after you log training sessions and check-ins. Once TrainChat has enough real data, it will begin detecting recovery and fatigue trends.
+        Once you log your first session and check-in, I'll start tracking your recovery trends, fatigue patterns, and progression signals — before they become problems.
       </p>
       {onSendMessage && (
         <button
@@ -229,7 +229,7 @@ function NoDataState({ onSendMessage }: { onSendMessage?: (msg: string) => void 
         </button>
       )}
       <p className="text-[9px] text-muted-foreground/40 mt-3 max-w-[200px]">
-        We need real inputs before generating personalised coaching forecasts.
+        I need real training data before I can generate meaningful coaching signals.
       </p>
     </div>
   );
@@ -241,18 +241,18 @@ function WarmingUpState({ onSendMessage }: { onSendMessage?: (msg: string) => vo
   const badge = CONFIDENCE_BADGE["low"]!;
 
   return (
-    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
       <div className="w-10 h-10 rounded-full bg-amber-500/8 border border-amber-500/15 flex items-center justify-center mb-3">
         <Zap className="w-4 h-4 text-amber-400/50" />
       </div>
       <div className="flex items-center justify-center gap-1.5 mb-2">
-        <p className="text-[11px] font-bold text-foreground">Forecast Warming Up</p>
+        <p className="text-[11px] font-bold text-foreground">I'm starting to see patterns</p>
         <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${badge.color}`}>
           {badge.label}
         </span>
       </div>
       <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[220px] mb-4">
-        We're starting to learn your training patterns. Keep logging sessions and check-ins to unlock higher-confidence coaching insights.
+        I've been watching your sessions. Log a few more workouts and check-ins and I'll be able to give you higher-confidence coaching intelligence.
       </p>
       {onSendMessage && (
         <button
@@ -260,7 +260,7 @@ function WarmingUpState({ onSendMessage }: { onSendMessage?: (msg: string) => vo
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-[10px] font-semibold text-amber-400 hover:bg-amber-500/15 transition-colors"
         >
           <ClipboardList className="w-3 h-3" />
-          Complete Another Check-In
+          Log Another Session
         </button>
       )}
     </div>
@@ -271,13 +271,13 @@ function WarmingUpState({ onSendMessage }: { onSendMessage?: (msg: string) => vo
 
 function AllClearState() {
   return (
-    <div className="flex flex-col items-center justify-center py-10 px-4 text-center">
+    <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
       <div className="w-10 h-10 rounded-full bg-primary/8 border border-primary/15 flex items-center justify-center mb-3">
         <Zap className="w-4 h-4 text-primary/40" />
       </div>
-      <p className="text-[11px] font-semibold text-foreground mb-1">All clear</p>
+      <p className="text-[11px] font-semibold text-foreground mb-1">All clear — you're on track</p>
       <p className="text-[10px] text-muted-foreground leading-relaxed max-w-[200px]">
-        No significant patterns detected. Keep training — the system is watching.
+        I'm not seeing any significant risk signals right now. Keep training consistently and I'll flag anything worth acting on.
       </p>
     </div>
   );
@@ -371,7 +371,7 @@ export default function CoachForecast({ onSendMessage }: Props) {
           <h3 className="text-[11px] font-bold text-primary uppercase tracking-[0.15em]">Coach Forecast</h3>
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Early signals based on your training patterns — before they become problems.
+          I'm watching your patterns. Here's what I'm seeing — before it becomes a problem.
         </p>
       </div>
 

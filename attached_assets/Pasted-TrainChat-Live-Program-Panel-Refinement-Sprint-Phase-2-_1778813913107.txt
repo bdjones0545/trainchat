@@ -1,0 +1,369 @@
+TrainChat — Live Program Panel Refinement Sprint (Phase 2)
+
+Objective:
+Transform the Live Program Panel from:
+“a structured workout viewer”
+into:
+“a living adaptive performance intelligence system.”
+
+Core Principle:
+The sidebar is not supporting UI.
+It is the visible manifestation of TrainChat’s intelligence architecture.
+
+The chat says:
+“I understand you.”
+
+The panel must say:
+“I built, evolved, and adapted a real system around you.”
+
+==================================================
+PRIORITY 1 — TRUST + SYNCHRONIZATION HARDENING
+==================================================
+
+Problem:
+The synchronization architecture is strong, but subtle trust gaps still exist during:
+- mutation refetch windows
+- optimistic updates
+- failed mutations
+- parallel in-flight mutations
+
+Implementation:
+
+1. Add persistent panel-level syncing state
+- During any active refetch or mutation hydration:
+  - subtle shimmer overlay
+  - “Syncing…” watermark
+  - non-blocking but visible
+- Clear ONLY after query settlement succeeds
+
+2. Add client-side mutation serialization
+- Queue direct panel mutations
+- Prevent parallel panel/chat mutation collisions
+- One in-flight mutation at a time per conversation/system
+
+3. Add explicit draft/live distinction
+- programSource: "draft" must render:
+  - “Draft Program”
+  - different badge color
+  - subtle warning copy:
+    “Still being finalized”
+- Prevent draft programs from visually resembling live systems
+
+4. Add rollback animation on mutation failure
+- Failed optimistic updates should:
+  - animate affected exercise card back
+  - pulse/revert intentionally
+  - communicate safety rather than glitchiness
+
+Goal:
+The sidebar must feel:
+deterministic,
+authoritative,
+and trustworthy.
+
+==================================================
+PRIORITY 2 — “LIVING SYSTEM” PRESENCE
+==================================================
+
+Problem:
+Once stable, the panel visually settles into static document mode.
+
+Implementation:
+
+1. Persistent “AI adjusted” micro-badges
+- Exercise rows mutated within the last 24h:
+  - subtle ghost badge
+  - decays over time
+  - keyed to change_log timestamps
+
+2. Add active adaptation directive in program summary
+Examples:
+- “Recovery protection active”
+- “Power emphasis phase”
+- “Volume reduced due to fatigue trend”
+- “Progression held this week”
+
+Source:
+adaptation.ts + coach-reasoning-engine.ts
+
+3. Ambient coaching intelligence line
+Program header should surface one dynamic coaching line:
+Examples:
+- “Monitoring lower-body fatigue”
+- “Progressing power output emphasis”
+- “Recovery safeguards currently active”
+
+4. Week-over-week progression delta
+Week selector should show:
+- +5% load
+- +1 set
+- reduced fatigue accumulation
+- increased velocity emphasis
+
+Goal:
+The panel should feel:
+alive,
+adaptive,
+and continuously aware.
+
+==================================================
+PRIORITY 3 — MUTATION VISIBILITY + SATISFACTION
+==================================================
+
+Problem:
+Mutations are technically strong but emotionally transient.
+
+Implementation:
+
+1. Inline before/after mutation labels
+Examples:
+- “Replaced: Back Squat → Leg Press”
+- visible ~60 seconds post-mutation
+- collapses afterward
+
+2. Mutation reasoning chip
+Surface coach-reasoning-engine.ts output inline:
+Examples:
+- “Reduced knee stress”
+- “Improved power carryover”
+- “Lowered fatigue accumulation”
+
+3. Day-card mutation counters
+Examples:
+- “3 AI adjustments”
+- “Session adapted”
+- visible on day card headers
+
+4. Extend mutation persistence visibility
+Changed rows retain:
+- faint accent border
+- subtle glow
+until:
+- user scrolls past
+OR
+- interaction acknowledgment
+
+Goal:
+Mutations should feel:
+intentional,
+understandable,
+and rewarding.
+
+==================================================
+PRIORITY 4 — INFORMATION HIERARCHY RESTRUCTURE
+==================================================
+
+Problem:
+The panel exposes too much full-program density immediately.
+
+Implementation:
+
+1. Add pinned “Next Session” card
+Top of Program tab:
+- today’s session
+- next scheduled session
+- readiness emphasis
+- current coaching note
+
+2. Elevate Changes tab visibility
+- badge counter for new changes
+- subtle pulse when AI adaptations occur
+
+3. Move quick action chips higher
+Current placement is buried below full program.
+Move:
+- above day cards
+OR
+- sticky footer strip
+
+4. Mobile-first compact open state
+On mobile:
+default to:
+- Today’s Session
+instead of:
+- full multi-day scroll immediately
+
+Goal:
+Most relevant intelligence should surface first.
+
+==================================================
+PRIORITY 5 — EDIT CONFIDENCE + SAFETY
+==================================================
+
+Problem:
+Users need stronger confidence that experimentation is safe.
+
+Implementation:
+
+1. Inline Undo on mutation success toasts
+Examples:
+- “Exercise swapped”
+- [Undo]
+
+Directly restore via changeLogId.
+
+2. Add 3-second cancel window on destructive actions
+Examples:
+- “Removing exercise… Cancel”
+
+Delay API execution slightly.
+
+3. Focus mismatch recovery actions
+If focusMode mismatch occurs:
+show:
+- “Switch to Strength”
+- “Switch to Power”
+- inline recovery CTA
+
+4. Add safety messaging
+Subtle panel message:
+“All changes are reversible.”
+
+Goal:
+Users should feel comfortable exploring and refining.
+
+==================================================
+PRIORITY 6 — LONGITUDINAL INTELLIGENCE VISIBILITY
+==================================================
+
+Problem:
+The system adapts longitudinally but does not communicate awareness strongly enough.
+
+Implementation:
+
+1. Adherence visualization
+Simple weekly adherence indicators:
+- session completion dots
+- streaks
+- weekly completion %
+
+2. Adaptation timeline
+Inside Changes tab:
+timeline of:
+- major AI adjustments
+- fatigue responses
+- progression changes
+- recovery interventions
+
+3. Rewrite Forecast into coaching voice
+Current:
+clinical signal cards.
+
+Target:
+coach-aware intelligence.
+
+Examples:
+“I’ve noticed recovery declining over the last 5 days — I’m holding volume steady this week.”
+
+4. Session-level coaching annotations
+Every day card should surface:
+- current emphasis
+- recovery intent
+- adaptation logic
+
+Examples:
+- “High CNS demand day”
+- “Lower volume to protect recovery”
+- “Explosive emphasis this week”
+
+Goal:
+TrainChat should feel:
+aware across time,
+not merely reactive.
+
+==================================================
+PRIORITY 7 — MOBILE LIVE PANEL PRESENCE
+==================================================
+
+Problem:
+The mobile panel currently behaves too much like hidden utility navigation.
+
+Implementation:
+
+1. Persistent Live badge on mobile header button
+Not only during spotlight.
+Always visible when:
+- active system exists
+- recent mutations exist
+- unread changes exist
+
+2. Mutation count badge
+Examples:
+- “+2”
+- “3 updates”
+
+3. Swipe-right-to-close gesture
+Native-feeling mobile interaction.
+
+4. Streaming coexistence management
+If panel opens during generation:
+reduce competing animation intensity between:
+- chat
+- panel
+
+Goal:
+The mobile panel should feel:
+central,
+alive,
+and continuously relevant.
+
+==================================================
+PRIORITY 8 — INTELLIGENCE PRESENCE + COACHING PHILOSOPHY
+==================================================
+
+Problem:
+TrainChat’s reasoning engine exists internally but remains largely invisible.
+
+Implementation:
+
+1. Dynamic “Why this plan works”
+The card must update as adaptations occur.
+NOT static from initial build.
+
+2. Current block philosophy banner
+Examples:
+- “Wave Loading — Week 3 of 4”
+- “Power Conversion Phase”
+- “Recovery Emphasis Active”
+
+3. Session-level coaching intent
+Examples:
+- “Prioritizing quality over fatigue”
+- “Strength-speed emphasis”
+- “Elastic/reactive bias”
+
+4. Surface reasoning-engine outputs
+Changes tab entries should include:
+- concise coaching rationale
+- adaptation reason
+- philosophy hierarchy reference when relevant
+
+Examples:
+“Volume reduced because recovery protection took priority over progression this week.”
+
+Goal:
+Users should feel:
+coached,
+guided,
+and continuously adapted.
+
+==================================================
+OVERALL PRODUCT DIRECTION
+==================================================
+
+TrainChat should increasingly feel like:
+- a persistent adaptive coaching intelligence,
+- a living performance operating system,
+- and a continuously evolving training architecture.
+
+NOT:
+- a static generated workout viewer.
+
+The backend intelligence already exists.
+This sprint focuses on:
+- embodiment,
+- visibility,
+- continuity,
+- trust,
+- adaptation expression,
+- and coaching presence.

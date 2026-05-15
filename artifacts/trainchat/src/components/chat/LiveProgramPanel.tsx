@@ -8,6 +8,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
@@ -787,7 +788,7 @@ function ProgramTab({
   });
 
   // ── Current-week DB data for exercise ID lookup (needed for direct edits) ──
-  const { data: currentWeekDbData } = useQuery({
+  const { data: currentWeekDbData, isFetching: isWeekSyncing } = useQuery({
     // Key includes trainingSystemId so each conversation's system gets its own cache entry.
     queryKey: ["live-panel-week-ids", trainingSystemId ?? savedProgramId, panelFocusMode],
     queryFn: () => {
@@ -1109,6 +1110,26 @@ function ProgramTab({
     }
   }
 
+  // ── Undo a change by restoring to the previous state via change log ID ──────
+  const handleUndoChange = useCallback(async (changeLogId: number) => {
+    try {
+      const result = await customFetch<any>(
+        `/api/training-system/restore/${changeLogId}?focus=${encodeURIComponent(panelFocusMode)}`,
+        { method: "POST" }
+      );
+      handleTrainingSystemMutationResult(result, queryClient, panelFocusMode);
+      triggerSuccessOverlay("Change undone");
+      toast({ title: "Undone", description: "Your previous program has been restored.", duration: 2500 });
+    } catch {
+      toast({
+        title: "Couldn't undo",
+        description: "Try using the History tab to restore a previous version.",
+        variant: "destructive",
+        duration: 3500,
+      });
+    }
+  }, [panelFocusMode, queryClient]);
+
   // ── Direct exercise edit — bypasses chat, calls edit API deterministically ─
   async function handleDirectExerciseEdit(
     exerciseName: string,
@@ -1235,7 +1256,7 @@ function ProgramTab({
       highlightTimerRef.current = setTimeout(() => {
         setHighlightedNames(new Set());
         setInlineLabels(new Map());
-      }, 4000);
+      }, 30000);
       pendingScrollName.current = exerciseName;
       if (program) {
         const dayIdx = program.days.findIndex((d) =>
@@ -1244,7 +1265,14 @@ function ProgramTab({
         if (dayIdx !== -1) setExpandedDay(dayIdx);
       }
 
-      toast({ title: "Program updated", description: label, duration: 2500 });
+      toast({
+        title: "Program updated",
+        description: label,
+        duration: 8000,
+        action: editResult?.changeLogEntry?.id != null
+          ? <ToastAction altText="Undo this change" onClick={() => handleUndoChange(editResult!.changeLogEntry!.id!)}>Undo</ToastAction>
+          : undefined,
+      });
 
       if (import.meta.env.DEV) {
         const dayIdx = program
@@ -1385,7 +1413,14 @@ function ProgramTab({
       // Phase 2: Use DB-verified name from receipt (source of truth), not planned name
       const verifiedName = result.receipt?.exerciseName ?? result.exerciseName;
       const label = result.message ?? `Added ${verifiedName} to Day ${dayNumber}.`;
-      toast({ title: "Exercise added", description: label, duration: 2500 });
+      toast({
+        title: "Exercise added",
+        description: label,
+        duration: 8000,
+        action: result.changeLogEntry?.id != null
+          ? <ToastAction altText="Undo this addition" onClick={() => handleUndoChange(result.changeLogEntry!.id!)}>Undo</ToastAction>
+          : undefined,
+      });
 
       if (import.meta.env.DEV) {
         const plannedName = result.exerciseName;
@@ -1674,7 +1709,7 @@ function ProgramTab({
       highlightTimerRef.current = setTimeout(() => {
         setHighlightedNames(new Set());
         setInlineLabels(new Map());
-      }, 8000);
+      }, 30000);
 
       // Find the day containing the first target and expand it
       const firstTarget = changeTargets[0];
@@ -1968,13 +2003,13 @@ function ProgramTab({
         }
         @keyframes badge-pop {
           0%   { opacity: 0; transform: scale(0.7); }
-          40%  { opacity: 1; transform: scale(1.05); }
-          60%  { transform: scale(1); }
-          80%  { opacity: 1; }
+          8%   { opacity: 1; transform: scale(1.05); }
+          15%  { transform: scale(1); }
+          85%  { opacity: 1; }
           100% { opacity: 0; }
         }
         @keyframes label-fade {
-          0%,60% { opacity: 1; }
+          0%,75% { opacity: 1; }
           100%   { opacity: 0; }
         }
         @keyframes week-advance-in {
@@ -1997,6 +2032,10 @@ function ProgramTab({
           from { opacity: 0; transform: translateX(-4px); }
           to   { opacity: 1; transform: translateX(0); }
         }
+        @keyframes shimmer-slide {
+          0%   { transform: translateX(-100%); }
+          100% { transform: translateX(350%); }
+        }
       `}</style>
       {isUpdating && updatePhase && (
         <UpdatingBadge phase={updatePhase} stage={buildingState!.stage} actionType={buildingState?.actionType} />
@@ -2014,6 +2053,16 @@ function ProgramTab({
               ? `Applying: ${pendingChangeHint}`
               : "Updating your program…"}
           </span>
+        </div>
+      )}
+
+      {/* Panel sync shimmer — shows when week data is quietly refreshing in background */}
+      {isWeekSyncing && !isUpdating && (
+        <div className="h-0.5 w-full flex-shrink-0 overflow-hidden bg-muted/20">
+          <div
+            className="h-full bg-primary/40 rounded-full"
+            style={{ animation: "shimmer-slide 1.6s ease-in-out infinite", width: "40%" }}
+          />
         </div>
       )}
 
@@ -2071,18 +2120,36 @@ function ProgramTab({
             </h3>
           )}
           {programSource === "draft" && (
-            <span className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-[9px] font-semibold text-amber-400 uppercase tracking-wider">
-              Draft — not saved
+            <span className="flex-shrink-0 mt-0.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-400/10 border border-amber-400/30 text-[9px] font-semibold text-amber-400 uppercase tracking-wider" title="Still being built — save to lock in your program">
+              ✎ Draft
             </span>
           )}
         </div>
 
         {/* Progression tease */}
-        <p className="text-[10px] text-muted-foreground/50 font-medium mb-2.5 leading-snug">
+        <p className="text-[10px] text-muted-foreground/50 font-medium mb-2 leading-snug">
           {program.weekNumber
             ? `Week ${program.weekNumber} of 4 · Progression built in`
             : "This system adapts as you train"}
         </p>
+
+        {/* Block philosophy banner — surfaces the training intent behind this block */}
+        {blockMetadata?.missionStatement && (
+          <div className="flex items-start gap-2 mb-2.5 px-2.5 py-2 rounded-lg bg-muted/20 border border-border/40">
+            <span className="text-[9px] mt-0.5 flex-shrink-0">🎯</span>
+            <p className="text-[10px] text-muted-foreground/70 leading-relaxed italic">
+              {blockMetadata.missionStatement}
+            </p>
+          </div>
+        )}
+
+        {/* Safety chip — persistent reassurance that all changes are reversible */}
+        <div className="flex items-center gap-1.5 mb-2.5">
+          <span className="inline-flex items-center gap-1 text-[9px] text-muted-foreground/35 font-medium">
+            <RotateCcw className="w-2.5 h-2.5" />
+            All changes are reversible
+          </span>
+        </div>
 
         {/* Hierarchy breadcrumb — block phase · week number · week role */}
         {hierarchyParts.length > 0 && (
@@ -2544,6 +2611,13 @@ function ProgramTab({
 
                   {isExpanded && (
                     <div className="border-t border-border divide-y divide-border/50">
+                      {/* Coaching intent banner — surfaces training purpose for this day */}
+                      {day.notes && (
+                        <div className="px-3 py-2 flex items-start gap-2 bg-muted/10">
+                          <span className="text-[9px] flex-shrink-0 mt-0.5 text-muted-foreground/40">💬</span>
+                          <p className="text-[10px] text-muted-foreground/55 leading-relaxed italic">{day.notes}</p>
+                        </div>
+                      )}
                       {/* Session banner — Start / Resume / Active / Completed */}
                       {isPremium && isSaved && (
                         <div className="px-3 py-2.5">
@@ -2789,7 +2863,7 @@ function ProgramTab({
                               {isHighlighted && (
                                 <span
                                   className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex-shrink-0"
-                                  style={{ animation: "badge-pop 3.5s ease forwards" }}
+                                  style={{ animation: "badge-pop 30s ease forwards" }}
                                 >
                                   Updated
                                 </span>
@@ -2825,7 +2899,7 @@ function ProgramTab({
                             {isHighlighted && inlineLabel && (
                               <p
                                 className="text-[10px] text-indigo-400/80 mt-0.5 font-medium"
-                                style={{ animation: "label-fade 3.5s ease forwards" }}
+                                style={{ animation: "label-fade 30s ease forwards" }}
                               >
                                 {inlineLabel}
                               </p>
@@ -3586,7 +3660,7 @@ export default function LiveProgramPanel({
   }, [focusMode]);
 
   const [activeTab, setActiveTab] = useState<Tab>("program");
-  const [hasUnseenChange, setHasUnseenChange] = useState(false);
+  const [unseenChangeCount, setUnseenChangeCount] = useState(0);
   /** Incremented by ProgramTab after each successful sidebar mutation (add/remove exercise) */
   const [sidebarChangeSignal, setSidebarChangeSignal] = useState(0);
 
@@ -3634,7 +3708,7 @@ export default function LiveProgramPanel({
     if (newProgramSignal > 0 && newProgramSignal !== prevProgramSignalRef.current) {
       prevProgramSignalRef.current = newProgramSignal;
       setActiveTab("program");
-      setHasUnseenChange(true);
+      setUnseenChangeCount((c) => c + 1);
       hasShownOwnershipActiveRef.current = false;
       showOwnershipBanner("active");
       hasShownOwnershipActiveRef.current = true;
@@ -3648,7 +3722,7 @@ export default function LiveProgramPanel({
     if (newChangeSignal > 0 && newChangeSignal !== prevChangeSignalRef.current) {
       prevChangeSignalRef.current = newChangeSignal;
       setActiveTab("program");
-      setHasUnseenChange(true);
+      setUnseenChangeCount((c) => c + 1);
       if (!hasShownOwnershipActiveRef.current) {
         showOwnershipBanner("active");
         hasShownOwnershipActiveRef.current = true;
@@ -3666,10 +3740,10 @@ export default function LiveProgramPanel({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSaved]);
 
-  // Clear badge when user views Changes tab
+  // Clear count when user views Changes tab
   useEffect(() => {
     if (activeTab === "changes") {
-      setHasUnseenChange(false);
+      setUnseenChangeCount(0);
     }
   }, [activeTab]);
 
@@ -3870,9 +3944,8 @@ export default function LiveProgramPanel({
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
-          const showBadge =
-            (tab.id === "changes" && hasUnseenChange) ||
-            (tab.id === "adapted" && hasUnseenAdaptation);
+          const showChangeBadge = tab.id === "changes" && unseenChangeCount > 0;
+          const showAdaptedBadge = tab.id === "adapted" && hasUnseenAdaptation;
           return (
             <button
               key={tab.id}
@@ -3885,8 +3958,13 @@ export default function LiveProgramPanel({
             >
               <Icon className="w-3 h-3" />
               {tab.label}
-              {showBadge && (
-                <span className="absolute top-1.5 right-1 w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              {showChangeBadge && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-primary text-primary-foreground text-[8px] font-black flex items-center justify-center leading-none">
+                  {unseenChangeCount > 9 ? "9+" : unseenChangeCount}
+                </span>
+              )}
+              {showAdaptedBadge && (
+                <span className="absolute top-1.5 right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               )}
             </button>
           );
