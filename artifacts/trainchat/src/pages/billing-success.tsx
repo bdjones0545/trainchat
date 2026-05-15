@@ -73,13 +73,13 @@ export default function BillingSuccess() {
               <p className="text-muted-foreground mb-1">
                 Your{" "}
                 <span className="text-foreground font-semibold">
-                  TrainChat {PLAN_NAMES[plan] ?? plan}
+                  TrainChat® {PLAN_NAMES[plan] ?? plan}
                 </span>{" "}
                 {interval ? `(${interval}) ` : ""}plan is now active.
               </p>
             ) : (
               <p className="text-muted-foreground mb-1">
-                Your TrainChat plan is now active.
+                Your TrainChat® plan is now active.
               </p>
             )}
 

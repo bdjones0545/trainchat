@@ -68,11 +68,11 @@ const TYPE_THEME: Record<ShareMomentType, {
 // ─── Headline copy ────────────────────────────────────────────────────────────
 
 const HEADLINE: Record<ShareMomentType, string> = {
-  PROGRAM_GENERATED: "Look what I created with the TrainChat Agent",
-  AGENT_ADJUSTMENT: "TrainChat Agent updated my program",
+  PROGRAM_GENERATED: "Look what I created with the TrainChat® Agent",
+  AGENT_ADJUSTMENT: "TrainChat® Agent updated my program",
   BLOCK_COMPLETE: "Block complete — next phase is loading",
   NEXT_BLOCK_READY: "My next training phase is ready",
-  SESSION_LOG_ADAPTATION: "TrainChat Agent adapted my plan",
+  SESSION_LOG_ADAPTATION: "TrainChat® Agent adapted my plan",
   PROGRESS_MILESTONE: "Milestone reached",
 };
 
@@ -346,7 +346,7 @@ function Day1Fallback({
         {dayName ?? "Custom Training Day"}
       </div>
       <div style={{ fontSize: 10, color: "#ffffff30", marginTop: 4 }}>
-        Personalized by TrainChat Agent
+        Personalized by TrainChat® Agent
       </div>
     </div>
   );

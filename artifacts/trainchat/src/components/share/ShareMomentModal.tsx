@@ -76,7 +76,7 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
 
       const shareData: ShareData = {
         text: moment.captionText,
-        title: "TrainChat",
+        title: "TrainChat®",
       };
       if (file && navigator.canShare?.({ files: [file] })) {
         shareData.files = [file];

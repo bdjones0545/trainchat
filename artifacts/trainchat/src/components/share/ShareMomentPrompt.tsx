@@ -8,8 +8,8 @@ interface Props {
 }
 
 const PROMPT_COPY: Record<string, string> = {
-  PROGRAM_GENERATED: "Share what you built with the TrainChat Agent",
-  AGENT_ADJUSTMENT: "Share this TrainChat Agent adjustment",
+  PROGRAM_GENERATED: "Share what you built with the TrainChat® Agent",
+  AGENT_ADJUSTMENT: "Share this TrainChat® Agent adjustment",
   BLOCK_COMPLETE: "Share your block completion",
   NEXT_BLOCK_READY: "Share your next phase",
   SESSION_LOG_ADAPTATION: "Share what the agent changed",

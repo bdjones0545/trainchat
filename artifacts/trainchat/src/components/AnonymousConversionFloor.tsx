@@ -191,7 +191,7 @@ export default function AnonymousConversionFloor({ onCreateAccount }: AnonymousC
           Not an AI chat. A live coaching system.
         </h2>
         <p className="text-sm text-muted-foreground mb-8 leading-relaxed">
-          Generic AI fitness tools generate text. TrainChat builds and maintains a real program structure — with sessions, progressions, and logic — that you can adjust in real time.
+          Generic AI fitness tools generate text. TrainChat® builds and maintains a real program structure — with sessions, progressions, and logic — that you can adjust in real time.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {DIFFERENTIATORS.map((item) => (
@@ -226,7 +226,7 @@ export default function AnonymousConversionFloor({ onCreateAccount }: AnonymousC
           Designed for performance. Built on principles.
         </h2>
         <p className="text-sm text-muted-foreground mb-8 leading-relaxed">
-          TrainChat applies real coaching philosophy — not generic fitness content. Every program it builds reflects how actual performance coaches think about training load, adaptation, and continuity.
+          TrainChat® applies real coaching philosophy — not generic fitness content. Every program it builds reflects how actual performance coaches think about training load, adaptation, and continuity.
         </p>
         <div className="space-y-3 mb-8">
           {TRUST_POINTS.map((pt) => (
@@ -325,7 +325,7 @@ export default function AnonymousConversionFloor({ onCreateAccount }: AnonymousC
       {/* Footer bar */}
       <div className="border-t border-border/40 px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 max-w-3xl mx-auto">
         <p className="text-[11px] text-muted-foreground/40">
-          TrainChat · Your training system, always evolving
+          TrainChat® · Your training system, always evolving
         </p>
         <button
           onClick={handleCTA}

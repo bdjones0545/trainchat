@@ -98,14 +98,14 @@ export function buildShareMoment(params: {
         ?? ([freqLabel, style].filter(Boolean).join(" ") || "Custom training program");
 
       const caption = day1Title
-        ? `Look what I created with the TrainChat Agent — here's Day 1: ${day1Title}.`
+        ? `Look what I created with the TrainChat® Agent — here's Day 1: ${day1Title}.`
         : style
-          ? `Built my ${[freqLabel, style].filter(Boolean).join(" ")} program with the TrainChat Agent.`
-          : "Built my training program with the TrainChat Agent.";
+          ? `Built my ${[freqLabel, style].filter(Boolean).join(" ")} program with the TrainChat® Agent.`
+          : "Built my training program with the TrainChat® Agent.";
 
       return {
         type,
-        title: "Look what I created with the TrainChat Agent",
+        title: "Look what I created with the TrainChat® Agent",
         subtitle: subtitle.charAt(0).toUpperCase() + subtitle.slice(1),
         metrics: [],
         captionText: caption,
@@ -129,12 +129,12 @@ export function buildShareMoment(params: {
       if (blockWeek ?? weekNumber) metrics.push({ label: "Current week", value: `Week ${blockWeek ?? weekNumber}` });
 
       const caption = changeSummary
-        ? `The TrainChat Agent adjusted my ${progLabel} — ${changeSummary.toLowerCase().replace(/\.$/, "")}.`
-        : `The TrainChat Agent updated my ${progLabel} based on what I needed.`;
+        ? `The TrainChat® Agent adjusted my ${progLabel} — ${changeSummary.toLowerCase().replace(/\.$/, "")}.`
+        : `The TrainChat® Agent updated my ${progLabel} based on what I needed.`;
 
       return {
         type,
-        title: "TrainChat Agent adjusted my program",
+        title: "TrainChat® Agent adjusted my program",
         subtitle: changeSummary ?? "Real-time program adjustment",
         agentQuote,
         metrics,
@@ -163,7 +163,7 @@ export function buildShareMoment(params: {
         subtitle: blockName ? `Finished ${blockName}` : "4-week block complete",
         agentQuote,
         metrics,
-        captionText: `Finished my${blockName ? ` ${blockName}` : ""} 4-week block. TrainChat Agent already has the next phase ready.`,
+        captionText: `Finished my${blockName ? ` ${blockName}` : ""} 4-week block. TrainChat® Agent already has the next phase ready.`,
         programName,
         trainingStyle,
         triggerSource,
@@ -187,7 +187,7 @@ export function buildShareMoment(params: {
         subtitle: blockName ? `Starting ${blockName}` : "Next training block generated",
         agentQuote,
         metrics,
-        captionText: `TrainChat Agent automatically built my next training phase${blockName ? ` — ${blockName}` : ""}.`,
+        captionText: `TrainChat® Agent automatically built my next training phase${blockName ? ` — ${blockName}` : ""}.`,
         programName,
         trainingStyle,
         triggerSource,
@@ -206,11 +206,11 @@ export function buildShareMoment(params: {
 
       return {
         type,
-        title: "TrainChat Agent adapted my plan",
+        title: "TrainChat® Agent adapted my plan",
         subtitle: "Based on how today felt",
         agentQuote,
         metrics,
-        captionText: "Logged my session — TrainChat Agent adjusted my upcoming workouts automatically.",
+        captionText: "Logged my session — TrainChat® Agent adjusted my upcoming workouts automatically.",
         programName,
         trainingStyle,
         triggerSource,
@@ -237,7 +237,7 @@ export function buildShareMoment(params: {
         title: "Milestone reached",
         subtitle: milestoneText,
         metrics,
-        captionText: `${milestoneText} with the TrainChat Agent.`,
+        captionText: `${milestoneText} with the TrainChat® Agent.`,
         programName,
         trainingStyle,
         triggerSource,

@@ -123,7 +123,7 @@ export default function ProgramShareModal({ program, onClose }: Props) {
 
       const shareData: ShareData = {
         text: card.caption,
-        title: "TrainChat",
+        title: "TrainChat®",
       };
       if (file && navigator.canShare?.({ files: [file] })) {
         shareData.files = [file];

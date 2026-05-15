@@ -1220,7 +1220,7 @@ export default function SettingsPage() {
 
           {/* App version */}
           <p className="text-center text-[11px] text-muted-foreground/30 pt-2">
-            TrainChat · Settings
+            TrainChat® · Settings
           </p>
         </div>
       </div>

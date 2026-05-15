@@ -28,12 +28,12 @@ export default function PrivacyPage() {
         </div>
 
         <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-          TrainChat ("TrainChat", "we", "our", "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
+          TrainChat® ("TrainChat", "we", "our", "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, and safeguard your information when you use our application.
         </p>
 
         <PolicySection title="1. Information We Collect">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            We collect only the information necessary to operate and improve TrainChat.
+            We collect only the information necessary to operate and improve TrainChat®.
           </p>
           <PolicySubsection title="Account Information">
             <PolicyList items={["Name (if provided)", "Email address", "Authentication credentials"]} />
@@ -73,7 +73,7 @@ export default function PrivacyPage() {
 
         <PolicySection title="3. AI Personalization & Memory">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat may use your data to personalize your experience, including:
+            TrainChat® may use your data to personalize your experience, including:
           </p>
           <PolicyList items={[
             "Learning training preferences",
@@ -137,7 +137,7 @@ export default function PrivacyPage() {
 
         <PolicySection title="8. Third-Party Services">
           <p className="text-sm text-muted-foreground leading-relaxed mb-2">
-            TrainChat integrates with third-party services including:
+            TrainChat® integrates with third-party services including:
           </p>
           <PolicyList items={["Stripe"]} />
           <p className="text-sm text-muted-foreground leading-relaxed mt-3">
@@ -147,13 +147,13 @@ export default function PrivacyPage() {
 
         <PolicySection title="9. Children's Privacy">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            TrainChat is not intended for users under 13. We do not knowingly collect data from children.
+            TrainChat® is not intended for users under 13. We do not knowingly collect data from children.
           </p>
         </PolicySection>
 
         <PolicySection title="10. Changes to This Policy">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            We may update this policy at any time. Continued use of TrainChat constitutes acceptance of changes.
+            We may update this policy at any time. Continued use of TrainChat® constitutes acceptance of changes.
           </p>
         </PolicySection>
 

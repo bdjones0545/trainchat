@@ -28,12 +28,12 @@ export default function TermsPage() {
         </div>
 
         <p className="text-sm text-muted-foreground leading-relaxed mb-8">
-          By accessing or using TrainChat, you agree to these Terms of Service.
+          By accessing or using TrainChat®, you agree to these Terms of Service.
         </p>
 
         <PolicySection title="1. Nature of Service">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat provides AI-generated fitness and training guidance.
+            TrainChat® provides AI-generated fitness and training guidance.
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed mb-2">This service is:</p>
           <PolicyList items={[
@@ -44,7 +44,7 @@ export default function TermsPage() {
 
         <PolicySection title="2. No Medical Advice">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            TrainChat does not provide medical advice.
+            TrainChat® does not provide medical advice.
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed mb-2">You acknowledge:</p>
           <PolicyList items={[
@@ -55,10 +55,10 @@ export default function TermsPage() {
         </PolicySection>
 
         <PolicySection title="3. Assumption of Risk">
-          <p className="text-sm text-muted-foreground leading-relaxed mb-2">By using TrainChat, you agree:</p>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-2">By using TrainChat®, you agree:</p>
           <PolicyList items={[
             "You assume all risks related to training and physical activity",
-            "TrainChat is not liable for injury, harm, or damages resulting from use",
+            "TrainChat® is not liable for injury, harm, or damages resulting from use",
           ]} />
         </PolicySection>
 
@@ -108,7 +108,7 @@ export default function TermsPage() {
 
         <PolicySection title="9. Intellectual Property">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            All TrainChat content, systems, and technology are owned by TrainChat.
+            All TrainChat® content, systems, and technology are owned by TrainChat®.
           </p>
           <p className="text-sm text-muted-foreground leading-relaxed mb-2">You may not:</p>
           <PolicyList items={[
@@ -121,7 +121,7 @@ export default function TermsPage() {
 
         <PolicySection title="10. Limitation of Liability">
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-            To the fullest extent permitted by law, TrainChat is not liable for:
+            To the fullest extent permitted by law, TrainChat® is not liable for:
           </p>
           <PolicyList items={[
             "Injuries",
@@ -135,7 +135,7 @@ export default function TermsPage() {
 
         <PolicySection title="11. Indemnification">
           <p className="text-sm text-muted-foreground leading-relaxed mb-2">
-            You agree to indemnify TrainChat from claims resulting from:
+            You agree to indemnify TrainChat® from claims resulting from:
           </p>
           <PolicyList items={[
             "Misuse of the service",
