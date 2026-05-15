@@ -1,0 +1,302 @@
+TrainChat — Phase 2 Audit: Live Program Panel / Right Sidebar
+
+Objective:
+Audit the Live Program Panel as the visual manifestation of TrainChat’s persistent intelligence system.
+
+Core Philosophy:
+The chat creates intelligence perception.
+The sidebar creates system trust, tangibility, continuity, and edit confidence.
+
+The sidebar should feel:
+- alive,
+- synchronized,
+- adaptive,
+- trustworthy,
+- and structurally intelligent.
+
+NOT:
+- static workout cards,
+- disconnected generated content,
+- or a passive dashboard.
+
+==================================================
+AUDIT CATEGORY 1 — SYSTEM TRUST + SYNCHRONIZATION
+==================================================
+
+Audit:
+- chat ↔ sidebar synchronization
+- DB state consistency
+- mutation reflection timing
+- cache invalidation reliability
+- stale panel risks
+- optimistic update behavior
+- race conditions
+- failed mutation recovery
+
+Questions:
+- Does the sidebar ALWAYS reflect the current truth?
+- Are there windows where the chat says “updated” but the panel still shows stale data?
+- Are failed mutations visually obvious?
+- Does rapid mutation sequencing break continuity?
+- Can parallel panel/chat mutations desync state?
+
+Requirements:
+- clear syncing states
+- deterministic mutation lifecycle
+- visible verification feedback
+- graceful failure recovery
+- no false trust signals
+
+Goal:
+The sidebar must feel reliable enough that users trust it as the authoritative system state.
+
+==================================================
+AUDIT CATEGORY 2 — “LIVING SYSTEM” FEEL
+==================================================
+
+Audit whether the panel feels:
+- static
+OR
+- actively evolving.
+
+Evaluate:
+- adaptation visibility
+- live updates
+- mutation animation quality
+- session evolution visibility
+- progression visibility
+- behavioral adjustment visibility
+- coaching intelligence presence
+
+Questions:
+- Do edits feel emotionally satisfying?
+- Does the panel reinforce that the AI is actively shaping the system?
+- Are changes visually highlighted well enough?
+- Does the UI communicate evolution over time?
+
+Goal:
+The sidebar should feel like:
+a living training system,
+not a PDF workout template.
+
+==================================================
+AUDIT CATEGORY 3 — MUTATION VISIBILITY + SATISFACTION
+==================================================
+
+Audit all mutation interactions:
+- swaps
+- adds
+- removals
+- refinements
+- block rebuilds
+- adaptive adjustments
+
+Evaluate:
+- visibility speed
+- clarity
+- emotional feedback
+- before/after understanding
+- change explanation quality
+- trust reinforcement
+
+Questions:
+- Can users easily see what changed?
+- Are modifications highlighted long enough?
+- Is the reasoning visible?
+- Does the edit feel tangible and rewarding?
+
+Potential Improvements:
+- temporary glow/highlight on changed exercises
+- “AI updated this” indicators
+- structural diff visualization
+- adaptation timeline
+
+Goal:
+Mutations should feel:
+visible,
+intentional,
+and intelligent.
+
+==================================================
+AUDIT CATEGORY 4 — INFORMATION HIERARCHY
+==================================================
+
+Audit:
+- visual density
+- scanability
+- hierarchy clarity
+- cognitive load
+- mobile readability
+- section discoverability
+
+Evaluate:
+- sessions
+- coaching notes
+- changes
+- readiness
+- forecast
+- structure
+- exercise cards
+- phase/week hierarchy
+
+Questions:
+- What draws the eye first?
+- Is the most important information obvious?
+- Are advanced surfaces hidden appropriately?
+- Does the panel feel overwhelming on mobile?
+
+Goal:
+The sidebar should feel:
+powerful but understandable.
+
+==================================================
+AUDIT CATEGORY 5 — EDIT CONFIDENCE + SAFETY
+==================================================
+
+Audit all direct panel mutations:
+- add exercise
+- remove exercise
+- swap movement
+- reorder
+- edit parameters
+
+Questions:
+- Do edits feel safe?
+- Is undo discoverable?
+- Are destructive actions clearly protected?
+- Are focus mismatch failures actionable?
+- Does the system explain WHY an edit failed?
+
+Evaluate:
+- mutation locking
+- optimistic update rollback
+- undo UX
+- conflict resolution
+- destructive-action safeguards
+
+Goal:
+Users should feel:
+comfortable experimenting with the system.
+
+==================================================
+AUDIT CATEGORY 6 — LONGITUDINAL INTELLIGENCE VISIBILITY
+==================================================
+
+Audit whether the sidebar surfaces:
+- progression trends
+- adaptation history
+- fatigue adjustments
+- behavioral insights
+- projected outcomes
+- forecast intelligence
+- coaching reasoning
+
+Special focus:
+Forecast tab.
+
+Questions:
+- Does Forecast actually reinforce persistent intelligence?
+- Are future projections meaningful?
+- Are adaptation trends understandable?
+- Is longitudinal progression emotionally compelling?
+
+Potential additions:
+- plateau predictions
+- projected adaptation curves
+- readiness trend visualization
+- adherence trend tracking
+- AI recommendation timeline
+
+Goal:
+The sidebar should make TrainChat feel:
+aware across time.
+
+==================================================
+AUDIT CATEGORY 7 — MOBILE PANEL EXPERIENCE
+==================================================
+
+Audit mobile-specific behavior:
+- discoverability
+- panel open/close flow
+- thumb reach
+- panel width
+- gesture usability
+- streaming coexistence
+- orientation during mutations
+
+Questions:
+- Do users realize the panel exists?
+- Does the panel interrupt conversational flow?
+- Is the “Live Program” entry point obvious enough?
+- Are panel transitions smooth?
+- Does mobile feel integrated or secondary?
+
+Evaluate:
+- persistent indicators
+- mutation badges
+- pulse indicators
+- live update signaling
+- mobile animation smoothness
+
+Goal:
+The mobile sidebar should feel:
+integrated into the intelligence experience,
+not hidden behind navigation.
+
+==================================================
+AUDIT CATEGORY 8 — INTELLIGENCE PRESENCE
+==================================================
+
+Audit whether the panel communicates:
+- coaching philosophy
+- reasoning
+- adaptation intent
+- system awareness
+- recovery safeguards
+- training priorities
+
+Questions:
+- Does the panel communicate WHY the system is structured this way?
+- Does it surface philosophy hierarchy decisions?
+- Are adaptation explanations visible enough?
+- Does the user feel coached or just organized?
+
+Potential additions:
+- “Why this changed”
+- “Current training emphasis”
+- “Recovery protection active”
+- “Power bias phase”
+- “Volume reduced due to fatigue trend”
+
+Goal:
+The sidebar should reinforce:
+TrainChat is an intelligent coaching system,
+not just structured data.
+
+==================================================
+FINAL DELIVERABLES
+==================================================
+
+Provide:
+- categorized findings
+- synchronization risks
+- trust gaps
+- UX friction points
+- mutation visibility issues
+- mobile discoverability issues
+- intelligence-expression opportunities
+- emotional UX opportunities
+- highest ROI fixes
+- architectural risks
+- roadmap prioritization
+
+Overall evaluation should answer:
+
+Does the Live Program Panel currently feel like:
+- a living intelligence system
+OR
+- a static workout viewer?
+
+And:
+What is required to fully transform it into:
+a persistent adaptive performance operating system?
