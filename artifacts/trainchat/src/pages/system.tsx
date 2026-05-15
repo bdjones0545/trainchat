@@ -178,15 +178,25 @@ async function submitGlobalEdit(payload: string | StructuredEditPayload, focusMo
 async function submitQuickEdit(
   payload: string | StructuredEditPayload,
   targetContext?: { type: string; id: number; label: string; parentLabel?: string },
-  focusMode?: string
+  focusMode?: string,
+  signal?: AbortSignal
 ) {
   const body =
     typeof payload === "string"
       ? { request: payload, targetContext, ...(focusMode ? { focusMode } : {}) }
-      : { intent: payload.intent, request: "", source: payload.source ?? "quick_action", targetContext, ...(focusMode ? { focusMode } : {}) };
+      : {
+          intent: payload.intent,
+          scope: payload.scope,
+          request: "",
+          source: payload.source ?? "quick_action",
+          targetContext,
+          ...(focusMode ? { focusMode } : {}),
+        };
+  console.log("[AgentPanel] submitQuickEdit payload:", JSON.stringify({ ...body, signal: !!signal }));
   return customFetch<EditResult>("/api/training-system/edit", {
     method: "POST",
     body: JSON.stringify(body),
+    signal,
   });
 }
 async function fetchBlockCompletion(focusMode?: string) {
@@ -2811,7 +2821,11 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoResult, setUndoResult] = useState<string | null>(null);
   const [exampleIdx, setExampleIdx] = useState(0);
+  const [commandError, setCommandError] = useState<string | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
   const thinkingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRecoveryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const { data: memoryData, refetch: refetchMemory } = useQuery({
     queryKey: ["agent-memory"],
@@ -2849,34 +2863,91 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
 
   function buildTargetContext(scope: AgentScope): { type: string; id: number; label: string; parentLabel?: string } | undefined {
     if (scope === "block") {
-      const block: any = queryClient.getQueryData(["training-system-block"]);
+      // Use prefix matching — the cache key may have additional params (focusMode, etc.)
+      const blockEntries = queryClient.getQueriesData<any>({ queryKey: ["training-system-block"] });
+      const block = blockEntries.find(([, d]) => d != null)?.[1];
       const phase = block?.currentPhase;
       if (phase?.id) return { type: "phase", id: phase.id, label: phase.name ?? "Current Block" };
     }
     if (scope === "week") {
-      const weeks: any = queryClient.getQueryData(["training-system-weeks"]);
-      const weekNum = weeks?.currentWeekNumber ?? 1;
-      const week: any = queryClient.getQueryData(["training-system-week", weekNum]);
+      // Use prefix matching — week key has [weekNum, focusMode] params
+      const weekEntries = queryClient.getQueriesData<any>({ queryKey: ["training-system-week"] });
+      const week = weekEntries.find(([, d]) => d?.id != null)?.[1];
+      const weekNum = week?.weekNumber ?? 1;
       if (week?.id) return { type: "week", id: week.id, label: week.label ?? `Week ${weekNum}`, parentLabel: week.phase?.name };
     }
     if (scope === "today") {
-      const today: any = queryClient.getQueryData(["training-system-today"]);
+      // Use prefix matching — today key has [focusMode, activeSystemId, forceDay1] params
+      const todayEntries = queryClient.getQueriesData<any>({ queryKey: ["training-system-today"] });
+      const today = todayEntries.find(([, d]) => d?.id != null)?.[1];
       if (today?.id) return { type: "session", id: today.id, label: today.label ?? "Today" };
     }
     return undefined;
   }
 
+  function clearCommandTimeout() {
+    if (timeoutRecoveryTimer.current) {
+      clearTimeout(timeoutRecoveryTimer.current);
+      timeoutRecoveryTimer.current = null;
+    }
+  }
+
+  function abortPendingCommand() {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    clearCommandTimeout();
+  }
+
   const commandMutation = useMutation({
-    mutationFn: ({ req, scope, intent }: { req: string; scope: AgentScope; intent?: CommandIntentKey }) =>
-      submitQuickEdit(
+    mutationFn: ({ req, scope, intent }: { req: string; scope: AgentScope; intent?: CommandIntentKey }) => {
+      abortPendingCommand();
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      // 25-second hard timeout — if the backend hangs, reject and surface recovery UI
+      const timeoutId = setTimeout(() => {
+        console.warn("[AgentPanel] Command timed out after 25s — aborting");
+        controller.abort();
+      }, 25000);
+
+      const targetCtx = buildTargetContext(scope);
+      console.log("[AgentPanel] Firing command mutation", { req, scope, intent, targetCtx, focusMode: agentPanelFocusMode });
+
+      return submitQuickEdit(
         intent ? { intent, scope, source: "quick_action" } : req,
-        buildTargetContext(scope),
-        agentPanelFocusMode
-      ),
+        targetCtx,
+        agentPanelFocusMode,
+        controller.signal
+      ).finally(() => clearTimeout(timeoutId));
+    },
     onSuccess: (data) => {
+      clearCommandTimeout();
+      abortControllerRef.current = null;
+      setCommandError(null);
+      setTimedOut(false);
       setLastResult(data);
       setLastCommand(pendingCommand);
       setPhase("result");
+
+      console.log("[AgentPanel] Command succeeded", {
+        intent: data.intent,
+        scope: data.scope,
+        appliedCount: data.appliedCount,
+        changeLogId: data.changeLogId,
+      });
+
+      // Invalidate all affected query keys so panel data refreshes immediately
+      queryClient.invalidateQueries({ queryKey: ["training-system-today"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-week"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-weeks"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-block"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-active"] });
+      queryClient.invalidateQueries({ queryKey: ["training-system-history"] });
+      queryClient.invalidateQueries({ queryKey: ["live-panel-week-ids"] });
+      queryClient.invalidateQueries({ queryKey: ["mutation-audit-receipts"] });
+
       // Persist modifier to agent memory
       if (pendingCommand) {
         const memMapping = MODIFIER_TO_MEMORY[pendingCommand.label];
@@ -2893,7 +2964,26 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
       }
       onEditComplete(data);
     },
-    onError: () => { setPhase("idle"); setPendingCommand(null); },
+    onError: (err: unknown) => {
+      clearCommandTimeout();
+      abortControllerRef.current = null;
+
+      const isAbort = err instanceof Error && err.name === "AbortError";
+      const isTimeout = isAbort && timedOut;
+
+      console.error("[AgentPanel] Command failed", { err, isAbort, isTimeout });
+
+      if (isTimeout || isAbort) {
+        setTimedOut(true);
+        setCommandError("Atlas couldn't finish that edit. Try again or use chat.");
+      } else {
+        const msg =
+          err instanceof Error ? err.message : "Atlas couldn't apply that command.";
+        setCommandError(msg.length > 120 ? "Atlas couldn't apply that command." : msg);
+      }
+      setPhase("idle");
+      setPendingCommand(null);
+    },
   });
 
   const undoMutation = useMutation({
@@ -2912,6 +3002,8 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
 
   function handleCommandTap(cmd: AgentCommand) {
     if (commandMutation.isPending) return;
+    setCommandError(null);
+    setTimedOut(false);
     setPendingCommand(cmd);
     setSelectedStrength("moderate");
     setPhase("preview");
@@ -2919,8 +3011,11 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
 
   function handleConfirm() {
     if (!pendingCommand) return;
+    setCommandError(null);
+    setTimedOut(false);
     const strengthSuffix = selectedStrength === "moderate" ? "" : ` — ${selectedStrength} adjustment`;
     setPhase("thinking");
+    console.log("[AgentPanel] handleConfirm", { cmd: pendingCommand.label, scope: selectedScope, strength: selectedStrength });
     commandMutation.mutate({
       req: pendingCommand.req + strengthSuffix,
       scope: selectedScope,
@@ -2928,12 +3023,21 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
     });
   }
 
-  function handleCancel() { setPendingCommand(null); setPhase("idle"); }
+  function handleCancel() {
+    abortPendingCommand();
+    setPendingCommand(null);
+    setCommandError(null);
+    setTimedOut(false);
+    setPhase("idle");
+  }
 
   function handleFollowUp(req: string) {
     if (commandMutation.isPending) return;
+    setCommandError(null);
+    setTimedOut(false);
     setLastResult(null); setLastCommand(null); setPendingCommand(null); setUndoResult(null);
     setPhase("thinking");
+    console.log("[AgentPanel] handleFollowUp", { req, scope: selectedScope });
     commandMutation.mutate({ req, scope: selectedScope });
   }
 
@@ -2944,8 +3048,10 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
   }
 
   function handleBackToIdle() {
+    abortPendingCommand();
     setPhase("idle"); setLastResult(null); setLastCommand(null);
     setPendingCommand(null); setUndoResult(null); setIsUndoing(false);
+    setCommandError(null); setTimedOut(false);
   }
 
   function handleScopeChange(scope: AgentScope) {
@@ -3134,6 +3240,27 @@ function AgentPanel({ onEditComplete, onUndone }: AgentPanelProps) {
             <p className="text-sm font-bold text-foreground">{thinkingMessages[thinkingIdx]}</p>
             <p className="text-xs text-muted-foreground/60">Agent is adjusting your program…</p>
           </div>
+          {/* Escape hatch — allows cancelling a stuck request */}
+          <button
+            onClick={handleCancel}
+            className="mt-2 text-[11px] text-muted-foreground/50 hover:text-muted-foreground underline underline-offset-2 transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* ── Error banner — shown after phase returns to idle on failure ── */}
+      {phase === "idle" && commandError && (
+        <div className="mx-4 mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 flex items-start gap-3">
+          <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-destructive">Command failed</p>
+            <p className="text-[11px] text-destructive/80 mt-0.5 leading-snug">{commandError}</p>
+          </div>
+          <button onClick={() => setCommandError(null)} className="flex-shrink-0 text-destructive/50 hover:text-destructive transition-colors">
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 

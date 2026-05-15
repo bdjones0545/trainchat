@@ -704,6 +704,12 @@ async function interpretWithAI(
 
   const systemPrompt = buildEditSystemPrompt(systemContext, targetContext, adaptationContext, decisionMemoryContext, exerciseSwapContext, intentFamilyDirective, languageSystemSection);
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    logger.warn("[EditIntent] OpenAI call timed out after 20s — aborting");
+    controller.abort();
+  }, 20000);
+
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -721,6 +727,7 @@ async function interpretWithAI(
         temperature: 0.3,
         response_format: { type: "json_object" },
       }),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
@@ -741,8 +748,14 @@ async function interpretWithAI(
 
     return parsed;
   } catch (err) {
-    logger.error({ err }, "Failed to interpret edit with AI");
+    if (err instanceof Error && err.name === "AbortError") {
+      logger.error({ userRequest }, "[EditIntent] OpenAI call aborted due to timeout");
+    } else {
+      logger.error({ err }, "Failed to interpret edit with AI");
+    }
     return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
