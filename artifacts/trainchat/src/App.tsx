@@ -194,6 +194,7 @@ function ChatPage() {
   const [bootstrapped, setBootstrapped] = useState(false);
 
   useEffect(() => {
+    console.log("[TrainChat] ChatPage mounted");
     const deviceId = getOrCreateDeviceId();
     fetch("/api/auth/bootstrap", {
       method: "POST",
@@ -207,8 +208,8 @@ function ChatPage() {
           queryClient.setQueryData(getGetMeQueryKey(), data.user);
         }
       })
-      .catch(() => {})
-      .finally(() => setBootstrapped(true));
+      .catch((err) => { console.error("[TrainChat] bootstrap fetch failed", err); })
+      .finally(() => { console.log("[TrainChat] bootstrap complete"); setBootstrapped(true); });
   }, [queryClient]);
 
   const { data: me, isLoading } = useGetMe();
@@ -575,6 +576,7 @@ function DebugGate() {
 }
 
 function App() {
+  console.log("[TrainChat] App render");
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>

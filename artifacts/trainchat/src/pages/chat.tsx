@@ -1118,7 +1118,14 @@ export default function Chat() {
   useEffect(() => {
     if (messages.length === 0 && !optimisticUserMsg && !stream.isActive) return;
     if (!userScrolledUpRef.current && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+      // Use instant scrollIntoView — "smooth" is a known iOS Safari freeze trigger on
+      // certain versions and can lock the scroll engine on first visible render.
+      // The visual result is identical since this fires after React has already painted.
+      try {
+        messagesEndRef.current.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+      } catch {
+        messagesEndRef.current.scrollIntoView(false);
+      }
     }
   }, [messages, optimisticUserMsg, stream.isActive, stream.state.phase, stream.state.acknowledgment, me]);
 
@@ -1581,7 +1588,11 @@ export default function Chat() {
     userScrolledUpRef.current = false;
     // Immediately scroll to the bottom sentinel so the user message is visible.
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+      try {
+        messagesEndRef.current.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "end" });
+      } catch {
+        messagesEndRef.current.scrollIntoView(false);
+      }
     }
 
     // Strip old program identity from the UI context when:
