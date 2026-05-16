@@ -1,0 +1,90 @@
+[
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000001",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide01Title.tsx",
+    "title": "The Deterministic-Generative Hybrid Model",
+    "description": "Title slide — TrainChat Whitepaper Series Vol. III",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000002",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide02Abstract.tsx",
+    "title": "Abstract",
+    "description": "Core thesis: neither pure LLM nor pure deterministic is sufficient alone",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000003",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide03WhyPureLLMFails.tsx",
+    "title": "Why Pure LLM Generation Fails",
+    "description": "Constraint blindness, state amnesia, and structural drift",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000004",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide04WhyPureDeterministicFails.tsx",
+    "title": "Why Pure Deterministic Programming Fails",
+    "description": "Input rigidity, coaching inertness, and operational brittleness",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000005",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide05HybridArchitecture.tsx",
+    "title": "The Hybrid Architecture",
+    "description": "Generative layer + deterministic layer = trustworthy coaching",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000006",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide06DeterministicSequencing.tsx",
+    "title": "Deterministic Sequencing",
+    "description": "Stimulus ordering, progressive overload, and frequency spacing invariants",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000007",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide07MutationOntologies.tsx",
+    "title": "Mutation Ontologies",
+    "description": "Typed registry of coaching operations with constraint checks",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000008",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide08ValidationGates.tsx",
+    "title": "Validation Gates",
+    "description": "Four-stage pipeline: schema, local constraint, global constraint, apply or reject",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000009",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide09PullQuote.tsx",
+    "title": "Pull Quote",
+    "description": "The generative layer interprets. The deterministic layer decides.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000010",
+    "position": 10,
+    "filepath": "src/pages/slides/Slide10CoachingStatePersistence.tsx",
+    "title": "Coaching-State Persistence",
+    "description": "Athlete profile, program state, and mutation ledger",
+    "speakerNotes": ""
+  },
+  {
+    "id": "c3d4e5f6-0003-0003-0003-000000000011",
+    "position": 11,
+    "filepath": "src/pages/slides/Slide11References.tsx",
+    "title": "Metadata and References",
+    "description": "SEO metadata, canonical URL, keywords, and series cross-references",
+    "speakerNotes": ""
+  }
+]

@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/wp-conv-periodization/"
+title = "Whitepaper: Conversational Periodization"
+version = "1.0.0"
+id = "artifacts/wp-conv-periodization"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/wp-conv-periodization/" ]
+localPort = 22835
+
+[services.development]
+run = "pnpm --filter @workspace/wp-conv-periodization run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/wp-conv-periodization", "run", "build" ]
+publicDir = "artifacts/wp-conv-periodization/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22835"
+BASE_PATH = "/wp-conv-periodization/"

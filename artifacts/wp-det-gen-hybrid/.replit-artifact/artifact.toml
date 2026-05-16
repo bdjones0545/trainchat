@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/wp-det-gen-hybrid/"
+title = "Whitepaper: The Deterministic-Generative Hybrid Model"
+version = "1.0.0"
+id = "artifacts/wp-det-gen-hybrid"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/wp-det-gen-hybrid/" ]
+localPort = 21304
+
+[services.development]
+run = "pnpm --filter @workspace/wp-det-gen-hybrid run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/wp-det-gen-hybrid", "run", "build" ]
+publicDir = "artifacts/wp-det-gen-hybrid/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21304"
+BASE_PATH = "/wp-det-gen-hybrid/"

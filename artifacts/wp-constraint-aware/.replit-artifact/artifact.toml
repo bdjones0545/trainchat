@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/wp-constraint-aware/"
+title = "Whitepaper: Constraint-Aware Coaching Systems"
+version = "1.0.0"
+id = "artifacts/wp-constraint-aware"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/wp-constraint-aware/" ]
+localPort = 22301
+
+[services.development]
+run = "pnpm --filter @workspace/wp-constraint-aware run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/wp-constraint-aware", "run", "build" ]
+publicDir = "artifacts/wp-constraint-aware/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22301"
+BASE_PATH = "/wp-constraint-aware/"

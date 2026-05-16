@@ -1,0 +1,90 @@
+[
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000001",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide01Title.tsx",
+    "title": "Constraint-Aware Coaching Systems",
+    "description": "Title slide — TrainChat Whitepaper Series Vol. I",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000002",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide02Abstract.tsx",
+    "title": "Abstract",
+    "description": "Core thesis: real coaching environments are constraint-dominated; static systems fail structurally",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000003",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide03ConstraintProblem.tsx",
+    "title": "The Constraint Problem",
+    "description": "Four categories of real-world coaching constraints and why they matter architecturally",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000004",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide04FailureModes.tsx",
+    "title": "Static Programming Failure Modes",
+    "description": "Signal blindness, rebuild reflex, continuity loss, and intent drift",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000005",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide05SystemDesign.tsx",
+    "title": "Constraint-Aware System Design",
+    "description": "Hierarchical persistence, deterministic rule sets, mutation-bounded editing",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000006",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide06FatigueEconomics.tsx",
+    "title": "Fatigue Economics and Structural Preservation",
+    "description": "Priority preservation, redistribution, and fatigue ledger accounting",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000007",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide07ConversationalCoaching.tsx",
+    "title": "Conversational Coaching Systems",
+    "description": "Language as constraint input — the Conversation Context Resolver pattern",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000008",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide08ConstraintMemory.tsx",
+    "title": "Constraint Memory and Persistence",
+    "description": "Session, cycle, and longitudinal persistence layers",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000009",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide09PullQuote.tsx",
+    "title": "Pull Quote",
+    "description": "A program that cannot absorb constraint is not a training system — it is a schedule.",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000010",
+    "position": 10,
+    "filepath": "src/pages/slides/Slide10FutureSystems.tsx",
+    "title": "The Future of Adaptive Coaching Systems",
+    "description": "Five architecture requirements for the next generation of coaching systems",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-0001-0001-0001-000000000011",
+    "position": 11,
+    "filepath": "src/pages/slides/Slide11References.tsx",
+    "title": "Metadata and References",
+    "description": "SEO metadata, canonical URL, keywords, and series cross-references",
+    "speakerNotes": ""
+  }
+]
