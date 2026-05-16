@@ -336,54 +336,71 @@
 
 /* ─── Idle Intelligence Field ─────────────────────────────────────────────── */
 
-/* Dot grid slow drift */
+/* Full-screen orthogonal grid: slow opacity breathe */
+@keyframes ii-full-grid-breathe {
+  0%, 100% { opacity: 0.65; }
+  50%       { opacity: 1.00; }
+}
+
+/* Grid background-position drift — slow organic movement */
 @keyframes ii-grid-drift {
-  0%, 100% { background-position: 0px 0px; }
-  33%       { background-position: 8px 5px; }
-  66%       { background-position: 4px 11px; }
+  0%   { background-position: 0px 0px; }
+  25%  { background-position: 8px 5px; }
+  50%  { background-position: 14px 10px; }
+  75%  { background-position: 5px 14px; }
+  100% { background-position: 0px 0px; }
 }
 
-/* Neural path breathing — kept for legacy usage */
-@keyframes ii-path-breathe {
-  0%, 100% { opacity: 0.02; }
-  50%       { opacity: 0.07; }
-}
-
-/* Performance node pulse */
-@keyframes ii-node-pulse {
-  0%, 100% { opacity: 0.04; transform: scale(0.92); }
-  50%       { opacity: 0.14; transform: scale(1.06); }
+/* Ambient blob drift — two-phase translate (outer wrapper only) */
+@keyframes ii-node-drift {
+  0%   { transform: translate(0px, 0px); }
+  33%  { transform: translate(14px, -10px); }
+  67%  { transform: translate(-9px, 16px); }
+  100% { transform: translate(6px, -5px); }
 }
 
 /* Grid intersection node glow — perspective floor nodes */
 @keyframes grid-node-pulse {
   0%, 100% { opacity: 0.15; }
-  50%       { opacity: 0.80; }
+  50%       { opacity: 0.82; }
 }
 
-/* Center ambient glow breathe */
+/* Horizontal sweep — fires briefly then rests */
+@keyframes ii-sweep {
+  0%    { opacity: 0; }
+  2%    { opacity: 1; }
+  5%    { opacity: 0; }
+  100%  { opacity: 0; }
+}
+
+/* Reduced-motion: strip all animations, keep static visuals */
+@media (prefers-reduced-motion: reduce) {
+  .ii-field * {
+    animation-duration:       0.01ms !important;
+    animation-iteration-count: 1     !important;
+    transition-duration:      0.01ms !important;
+  }
+  .ii-sweep-line { display: none; }
+}
+
+/* ── Legacy / kept for compatibility ──────────────────────────── */
+@keyframes ii-path-breathe {
+  0%, 100% { opacity: 0.02; }
+  50%       { opacity: 0.07; }
+}
+@keyframes ii-node-pulse {
+  0%, 100% { opacity: 0.04; transform: scale(0.92); }
+  50%       { opacity: 0.14; transform: scale(1.06); }
+}
 @keyframes ii-ambient-breathe {
   0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1);    }
   50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
 }
-
-/* Occasional horizontal precision sweep — fires in first 7% of cycle, then waits */
-@keyframes ii-sweep {
-  0%   { opacity: 0; }
-  3%   { opacity: 0.55; }
-  7%   { opacity: 0; }
-  100% { opacity: 0; }
-}
-
-/* Neural floor grid slow scroll — creates subtle movement on the perspective plane */
 @keyframes neural-floor-scroll {
   0%   { background-position: 0px 0px; }
   100% { background-position: 0px 52px; }
 }
-
-.neural-floor-grid {
-  animation: neural-floor-scroll 4s linear infinite;
-}
+.neural-floor-grid { animation: neural-floor-scroll 4s linear infinite; }
 
 /* Input idle glow — breathes on the chat input when no messages exist */
 @keyframes ii-input-breathe {
