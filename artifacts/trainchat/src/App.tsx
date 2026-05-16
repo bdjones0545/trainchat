@@ -51,6 +51,11 @@ import FounderPage from "@/pages/aeo/FounderPage";
 import YouTubePage from "@/pages/aeo/YouTubePage";
 import WhatIsCoachingIntelligence from "@/pages/aeo/WhatIsCoachingIntelligence";
 import WhatIsAdaptiveProgramming from "@/pages/aeo/WhatIsAdaptiveProgramming";
+import WhitepapersHub from "@/pages/aeo/whitepapers/WhitepapersHub";
+import AcaWhitepaper from "@/pages/aeo/whitepapers/AcaWhitepaper";
+import MfpWhitepaper from "@/pages/aeo/whitepapers/MfpWhitepaper";
+import StaticProgrammingWhitepaper from "@/pages/aeo/whitepapers/StaticProgrammingWhitepaper";
+import TerminologyPage from "@/pages/aeo/TerminologyPage";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -368,6 +373,13 @@ function Router() {
       <Route path="/youtube" component={YouTubePage} />
       <Route path="/what-is-coaching-intelligence" component={WhatIsCoachingIntelligence} />
       <Route path="/what-is-adaptive-programming" component={WhatIsAdaptiveProgramming} />
+
+      {/* Phase 7 — Whitepapers & Terminology */}
+      <Route path="/whitepapers" component={WhitepapersHub} />
+      <Route path="/whitepapers/adaptive-coaching-architecture" component={AcaWhitepaper} />
+      <Route path="/whitepapers/mutation-first-programming" component={MfpWhitepaper} />
+      <Route path="/whitepapers/the-problem-with-static-programming" component={StaticProgrammingWhitepaper} />
+      <Route path="/terminology" component={TerminologyPage} />
 
       <Route component={NotFound} />
     </Switch>
