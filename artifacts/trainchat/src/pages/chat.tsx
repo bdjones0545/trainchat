@@ -3626,125 +3626,86 @@ export default function Chat() {
               </div>
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — only shown when no messages AND no active submission ─── */
-              <div className="relative flex flex-col items-center justify-start px-4 pt-2 md:pt-[max(8dvh,_2rem)] pb-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500 min-h-[78dvh]">
+              <div className="relative flex flex-col items-center justify-center px-6 text-center animate-in fade-in duration-700 min-h-[78dvh] pb-8" style={{ paddingTop: "clamp(48px, 10dvh, 96px)" }}>
                 <IdleIntelligenceField isTyping={inputText.trim().length > 0} />
-                {/* System core — TrainChat logo with living glow field */}
-                <div className="relative mb-5 flex items-center justify-center" style={{ width: 88, height: 88 }}>
-                  {/* Outer radial glow halo */}
-                  <div
-                    className="system-core-halo absolute rounded-full pointer-events-none"
-                    style={{
-                      inset: -16,
-                      ...getFocusModeConfig(focusMode).theme.heroGlowOuter,
-                    }}
-                  />
-                  {/* Core shell — pulses + drifts in idle state, reacts on interaction */}
+
+                {/* Logo — sole focal anchor */}
+                <div className="relative mb-10 flex items-center justify-center flex-shrink-0">
                   <div
                     className={corePulseActive ? "system-core-react" : "system-core-idle"}
                     style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
                   >
-                    {/* Inner container — subtle border glow */}
-                    <div
-                      style={getFocusModeConfig(focusMode).theme.heroGlowInner}
-                    >
+                    <div style={getFocusModeConfig(focusMode).theme.heroGlowInner}>
                       <img
                         src={trainChatLogo}
                         alt="TrainChat"
-                        style={{ width: 46, height: 46, objectFit: "contain" }}
+                        style={{ width: 54, height: 54, objectFit: "contain" }}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* ── All users: focus-mode state (handles no-system, draft, and live) ── */}
-                <>
-                    {/* Neural Hub section label */}
-                    <p className="neural-hub-label mb-3 select-none">Neural Hub</p>
+                {/* Heading — dominant type, no competing labels */}
+                <h2 className="text-[2.6rem] md:text-5xl lg:text-6xl font-bold text-foreground tracking-tight leading-[1.05] mb-4 max-w-[600px]">
+                  {displayProgramSource === "live"
+                    ? getFocusModeConfig(focusMode).emptyStateSubline ?? "Vibe Code Your Training"
+                    : "Vibe Code Your Training"}
+                </h2>
 
-                    <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-3 tracking-tight leading-tight max-w-[320px] md:max-w-[400px]">
-                      Vibe Code Your Training
-                    </h2>
-                    <p className="text-[12px] text-muted-foreground/65 max-w-[280px] leading-relaxed mb-5">
-                      {displayProgramSource === "none"
-                        ? "Tell me what you want to train, and I'll build it with you."
-                        : getFocusModeConfig(focusMode).emptyStateSubline}
-                    </p>
+                {/* System state — single dot + name, only when something is active */}
+                {displayProgramSource !== "none" && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${displayProgramSource === "live" ? "bg-green-400" : "bg-primary/60"}`} style={{ animation: "system-core-pulse 3s ease-in-out infinite" }} />
+                    <span className="text-[11px] text-muted-foreground/50 font-medium">
+                      {displayProgramSource === "live"
+                        ? (displayProgram?.programName ?? "System active")
+                        : "Draft · continue or save"}
+                    </span>
+                  </div>
+                )}
 
-                    {/* System status strip — glass pill */}
-                    <div className="flex items-center gap-2 mb-6 px-4 py-2 rounded-full adaptive-chip">
-                      {displayProgramSource === "live" ? (
-                        <>
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0 animate-pulse" style={{ animationDuration: "2.5s" }} />
-                          <span className="text-[11px] text-muted-foreground">
-                            <span className="text-foreground font-semibold">System: {displayProgram?.programName ?? "Active"}</span>
-                            {" · "}Ready to refine
-                          </span>
-                        </>
-                      ) : displayProgramSource === "draft" ? (
-                        <>
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary/70 flex-shrink-0 animate-pulse" style={{ animationDuration: "2s" }} />
-                          <span className="text-[11px] text-muted-foreground">
-                            <span className="text-foreground font-semibold">Draft ready</span>
-                            {" · "}Continue or save
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
-                          <span className="text-[11px] text-muted-foreground">
-                            No system yet · Build your first program
-                          </span>
-                        </>
-                      )}
-                    </div>
+                {/* Return session hook */}
+                {convShowReturnHook && (
+                  <div className="mt-8 w-full max-w-sm" style={{ overflowAnchor: "none" }}>
+                    <ReturnSessionHook
+                      programName={displayProgram?.programName}
+                      onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
+                      onIntensify={() => {
+                        setConvShowReturnHook(false);
+                        handleSend("Make this more intense", {
+                          buttonPayload: makeCtaRefinePayload(
+                            "Make it more intense",
+                            "Make this more intense",
+                            activeSystem?.id ?? null,
+                          ),
+                        });
+                      }}
+                      onDismiss={() => setConvShowReturnHook(false)}
+                    />
+                  </div>
+                )}
 
-                    {/* Phase 5: Return session hook — rendered BELOW the hero so it is
-                        visible at the natural resting scroll position. */}
-                    {convShowReturnHook && (
-                      <div style={{ overflowAnchor: "none", width: "100%" }}>
-                        <ReturnSessionHook
-                          programName={displayProgram?.programName}
-                          onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
-                          onIntensify={() => {
-                            setConvShowReturnHook(false);
-                            handleSend("Make this more intense", {
-                              buttonPayload: makeCtaRefinePayload(
-                                "Make it more intense",
-                                "Make this more intense",
-                                activeSystem?.id ?? null,
-                              ),
-                            });
-                          }}
-                          onDismiss={() => setConvShowReturnHook(false)}
-                        />
-                      </div>
-                    )}
-
-                    {/* Quick action chips — mode-specific */}
-                    <div className="w-full max-w-sm">
-                      <p className="neural-hub-label mb-3 text-center">Adaptive Command</p>
-                      <div className="flex flex-wrap justify-center gap-2">
-                        {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
-                          <button
-                            key={chip.label}
-                            onClick={() => {
-                              triggerCorePulse();
-                              handleSend(chip.prompt, {
-                                buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
-                              });
-                            }}
-                            className={`px-4 py-2.5 text-[12px] font-medium rounded-2xl transition-all duration-150 select-none ${
-                              chip.highlight
-                                ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " active:scale-95"
-                                : "adaptive-chip text-foreground/80 active:scale-95"
-                            }`}
-                          >
-                            {chip.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                </>
+                {/* 3 chips — no section label, generous top spacing */}
+                <div className="flex flex-wrap justify-center gap-2.5 mt-12">
+                  {getFocusModeConfig(focusMode).suggestionChips.slice(0, 3).map((chip) => (
+                    <button
+                      key={chip.label}
+                      onClick={() => {
+                        triggerCorePulse();
+                        handleSend(chip.prompt, {
+                          buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
+                        });
+                      }}
+                      className={`px-5 py-2.5 text-[13px] font-medium rounded-full transition-all duration-150 select-none active:scale-95 ${
+                        chip.highlight
+                          ? getFocusModeConfig(focusMode).theme.chipHighlightClass
+                          : "adaptive-chip text-foreground/70"
+                      }`}
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="max-w-2xl mx-auto">
@@ -4182,44 +4143,11 @@ export default function Chat() {
 
           {/* Input bar — safe-area aware, always visible above Safari chrome */}
           <div
-            className="flex-shrink-0 px-4 pt-3 border-t border-border bg-background"
+            className="flex-shrink-0 px-4 pt-3 border-t border-border/30 bg-background"
             style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
           >
             <div className="max-w-2xl mx-auto">
-              <div className="flex items-center justify-between mb-2 gap-2">
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setShowReadiness(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold text-muted-foreground border border-border hover:text-foreground hover:border-primary/30 transition-all duration-150"
-                  >
-                    <Activity className="w-3 h-3" />
-                    Check-In
-                  </button>
-                  <button
-                    onClick={() => setShowCalibration(true)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all duration-150 ${
-                      calibrationScore >= 76
-                        ? "text-green-400 border-green-400/30 hover:bg-green-400/10"
-                        : calibrationScore >= 51
-                        ? "text-primary border-primary/30 bg-primary/5 hover:bg-primary/10"
-                        : calibrationScore >= 26
-                        ? "text-amber-400 border-amber-400/30 hover:bg-amber-400/10"
-                        : "text-primary border-primary/30 bg-primary/5 hover:bg-primary/10"
-                    }`}
-                  >
-                    <Brain className="w-3 h-3" />
-                    {calibrationScore > 0
-                      ? `${calibrationScore} · ${getPrecisionTierLabel(calibrationScore)}`
-                      : "Teach Atlas About You"}
-                  </button>
-                </div>
-                {hasActiveSystem && (
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-green-500/20 bg-green-500/6">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ animation: "system-core-pulse 2.5s ease-in-out infinite" }} />
-                    <span className="text-[10px] font-semibold text-green-400/80 hidden sm:block">System active</span>
-                  </div>
-                )}
-              </div>
+              {/* Toolbar intentionally removed — Check-In and Calibration accessible via /system */}
               {/* Voice status strip — zero height when idle, no layout shift */}
               <AnimatePresence>
                 {(voice.isListening || voice.error || pttNoSpeechError) && (
