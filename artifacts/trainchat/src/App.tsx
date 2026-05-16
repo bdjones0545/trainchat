@@ -46,6 +46,11 @@ import TrainingPhilosophyPage from "@/pages/aeo/TrainingPhilosophyPage";
 import DoctrinePage from "@/pages/aeo/DoctrinePage";
 import AdaptiveCoachingArchitecture from "@/pages/aeo/AdaptiveCoachingArchitecture";
 import MutationFirstProgramming from "@/pages/aeo/MutationFirstProgramming";
+import FrameworksPage from "@/pages/aeo/FrameworksPage";
+import FounderPage from "@/pages/aeo/FounderPage";
+import YouTubePage from "@/pages/aeo/YouTubePage";
+import WhatIsCoachingIntelligence from "@/pages/aeo/WhatIsCoachingIntelligence";
+import WhatIsAdaptiveProgramming from "@/pages/aeo/WhatIsAdaptiveProgramming";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -356,6 +361,13 @@ function Router() {
       <Route path="/doctrine" component={DoctrinePage} />
       <Route path="/adaptive-coaching-architecture" component={AdaptiveCoachingArchitecture} />
       <Route path="/mutation-first-programming" component={MutationFirstProgramming} />
+
+      {/* Phase 6 — External Canon Propagation */}
+      <Route path="/frameworks" component={FrameworksPage} />
+      <Route path="/founder" component={FounderPage} />
+      <Route path="/youtube" component={YouTubePage} />
+      <Route path="/what-is-coaching-intelligence" component={WhatIsCoachingIntelligence} />
+      <Route path="/what-is-adaptive-programming" component={WhatIsAdaptiveProgramming} />
 
       <Route component={NotFound} />
     </Switch>
