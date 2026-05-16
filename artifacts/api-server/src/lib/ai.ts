@@ -2636,6 +2636,67 @@ export interface AIResponseOptions {
 
 // ─── Main entry point ────────────────────────────────────────────────────────
 
+/**
+ * generateAIResponse — Prompt Assembly Pipeline (T007 documentation — Phase 2)
+ *
+ * This function builds the full OpenAI prompt for every training turn.
+ * Understanding the assembly order is critical for debugging context drift or
+ * unexpected AI behaviour.  The pipeline runs in the following order:
+ *
+ * ── Stage 1: Destructure options ─────────────────────────────────────────────
+ *   All parameters arrive in a single `AIResponseOptions` bag. The first block
+ *   destructures them into local variables for the prompt builders below.
+ *
+ * ── Stage 2: Focus mode & intent resolution ──────────────────────────────────
+ *   `focusMode` is normalised from the raw value (handles legacy aliases).
+ *   `intentType` is read from `intentResult.type` (set by conversations.ts before
+ *   this function is called). `isBuildIntent` signals CREATE_PROGRAM / START_NEW_PROGRAM.
+ *
+ * ── Stage 3: Architecture brief (Strength / Speed / Mobility) ────────────────
+ *   On build-intent turns the matching engine is called:
+ *     - Strength: buildStrengthArchitectureBrief (slot selection, volume targets)
+ *     - Speed: buildSpeedArchitectureBrief + buildSpeedResponseContract
+ *     - Mobility: buildMobilityArchitectureBrief + buildMobilityResponseContract
+ *   The resulting `architectureBriefText` is injected into the system prompt
+ *   so the AI is constrained to a specific session skeleton before it writes JSON.
+ *   Non-build turns skip this stage (brief = null).
+ *
+ * ── Stage 4: System prompt construction ──────────────────────────────────────
+ *   `buildSystemPrompt(...)` assembles the full system message from:
+ *     - base system instructions
+ *     - currentProgram (DB-fetched ProgramStructure as JSON-in-context)
+ *     - memoryContext (user preference extracts)
+ *     - neuralContext / neuralBias / neuralImbalances
+ *     - architectureBriefText (from Stage 3)
+ *     - responsePolicy directives (tone, verbosity, clarification behaviour)
+ *     - hardConstraints (NEVER-change fields from constraint-memory)
+ *     - agentSettings (coach persona, training preferences)
+ *     - uiContext (active tab, panel state — prevents assistant hallucinating the UI)
+ *
+ * ── Stage 5: Message history assembly ────────────────────────────────────────
+ *   `buildContextMessages(history, options)` truncates the conversation history
+ *   to fit within the context budget. Older messages are dropped oldest-first.
+ *   The user message is appended last as the final human turn.
+ *
+ * ── Stage 6: OpenAI call ──────────────────────────────────────────────────────
+ *   The assembled messages array is sent to GPT-4o via the OpenAI client.
+ *   Streaming is NOT used here — the full response is awaited synchronously.
+ *   (SSE streaming to the client is handled separately in conversations.ts using
+ *   SSE chunking; this function always returns the complete text.)
+ *
+ * ── Stage 7: Response parsing & validation ───────────────────────────────────
+ *   The raw AI text is parsed for embedded JSON (ProgramStructure).
+ *   `validateProgramAgainstConstraints` checks the parsed program against the
+ *   user's hard constraints (daysPerWeek, focusMode match, etc.).
+ *   On validation failure the program is suppressed (text-only response).
+ *
+ * ── Key invariants ────────────────────────────────────────────────────────────
+ *   • The architecture brief ALWAYS precedes the system prompt in the message array.
+ *   • currentProgram is injected as a system-role message (not a user turn).
+ *   • Memory context is injected after currentProgram to avoid token starvation.
+ *   • The `uiContext` block is injected last in the system prompt so UI state
+ *     is the freshest context the model sees before the user turn.
+ */
 export async function generateAIResponse(
   userMessage: string,
   history: ChatMessage[],

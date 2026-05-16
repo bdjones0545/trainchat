@@ -1746,6 +1746,39 @@ export default function Chat() {
       // CASE C: no program content — nothing to do, normal render
     }
 
+    // T001 — savedProgram wiring (Phase 2)
+    // Use the server-confirmed saved program from the SSE complete event to ensure
+    // latestProgram reflects exactly what was persisted to DB.  This matters when:
+    //  (a) CASE B/C fired (no structuredData in assistantMessage) but the backend
+    //      still saved a program — without this block the panel would show a stale draft.
+    //  (b) The backend normalised the program during save — this keeps frontend state
+    //      consistent with what's actually in the DB before the React Query refetch lands.
+    if (
+      result.systemSaved &&
+      result.savedProgram != null &&
+      Array.isArray((result.savedProgram as any)?.days) &&
+      (result.savedProgram as any).days.length > 0
+    ) {
+      const sp = result.savedProgram as any;
+      const savedMsgId = result.assistantMessage?.id ?? 0;
+      setLatestProgram((prev) => {
+        // Only overwrite if this message is already the active draft (CASE A was
+        // already committed) OR if no draft was set at all (CASE B/C).
+        const prevId = prev?.messageId ?? 0;
+        if (prevId === savedMsgId || prevId === 0 || !prev) {
+          return {
+            ...sp,
+            messageId: savedMsgId,
+            days: (sp.days as any[]).map((d: any) => ({
+              ...d,
+              exercises: Array.isArray(d.exercises) ? d.exercises : [],
+            })),
+          };
+        }
+        return prev;
+      });
+    }
+
     // Signal the messages effect that a new message just arrived via streaming.
     // If that message contains program structuredData it will be registered as
     // the session draft (sessionDraftMsgIdRef) so the sidebar can display it.

@@ -11,6 +11,31 @@
  * Future extensibility:
  * - source field supports: ai_edit, quick_action, restore, initialize, auto_adjust
  * - decisionMetadata supports arbitrary structured context (wearable data, readiness, etc.)
+ *
+ * ── T008 Durable Undo Investigation (Phase 2) ────────────────────────────────
+ * Finding: Undo IS fully DB-backed. There is NO in-memory undo risk.
+ *
+ * The undo / restore flow:
+ *   1. Every mutation calls createChangeLogEntry() below, writing a row to
+ *      system_change_log with a stable integer ID.
+ *   2. The change log ID is returned to the route handler (conversations.ts)
+ *      and forwarded in the SSE complete event as `changeLogId`.
+ *   3. The frontend passes that ID to POST /training-system/restore/:changeId
+ *      (in training-system-history.ts) which calls restoreFromChange() from
+ *      restore-service.ts.
+ *   4. restoreFromChange() uses getChangeDetail() (this file, below) to fetch
+ *      the full before-snapshot and entity diffs from the DB, then writes the
+ *      restored state back as a new row (source: "restore").
+ *
+ * The "last mutation reference" tracked by conversation-context-resolver.ts
+ * (storeMutationReference / lastMutationReferenceFor) stores the changeLogId
+ * from the DB — NOT an in-memory program snapshot — so deictic undo requests
+ * like "undo that" safely round-trip through the DB.
+ *
+ * Implication: rolling back a change after a server restart is safe because
+ * the only required state is the integer changeLogId stored in the client's
+ * SSE event or conversation history. There is no in-memory session state
+ * that must be preserved for undo to succeed.
  */
 
 import { db } from "@workspace/db";

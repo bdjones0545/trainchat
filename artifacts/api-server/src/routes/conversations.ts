@@ -4,7 +4,7 @@ import { eq, desc, count, and } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
 import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
-import { getLastMonthlyPlan } from "../lib/program-architecture-engine";
+// getLastMonthlyPlan moved to program-build-service (Phase 2 extraction — no longer called directly here)
 import { classifyIntent, logIntentSummary, extractConstraints, detectSport, type IntentResult, type ExtractedConstraints } from "../lib/intent";
 import { extractAgentIntentProfile } from "../lib/language-system";
 import { auditLanguageInterpretation } from "../lib/language-audit";
@@ -81,7 +81,7 @@ import {
 import { buildActionContract, type ActionContract } from "../lib/action-contract";
 import { enforceActionContract, buildContractPromptDirective, type TurnOutcome } from "../lib/action-contract-enforcer";
 import { orchestrate, logOrchestratorDecision } from "../agents/agent-orchestrator";
-import { fireFirstBuildEmail } from "../lib/retentionEmails";
+// fireFirstBuildEmail moved to program-build-service (called inside saveOrUpdateProgram)
 import {
   hasStructuralChanges,
   isMinorAttributeEdit,
@@ -102,6 +102,10 @@ import {
   inferSessionReferenceFromMutation,
 } from "../lib/conversation-context-resolver";
 import { buildSessionLogContext } from "../lib/session-log-adaptation-analyzer";
+// ── Phase 2 service imports ───────────────────────────────────────────────────
+import { buildCompleteEvent } from "../services/streaming-response-service";
+import { saveOrUpdateProgram } from "../services/program-build-service";
+import { interpretMutationRequest } from "../services/mutation-execution-service";
 
 const router: IRouter = Router();
 
@@ -179,62 +183,7 @@ function isVibeEditIntent(intentResult: IntentResult): boolean {
   );
 }
 
-/**
- * Builds a meaningful change log summary for the initial program build.
- * Uses extracted constraints to produce specific, accurate history entries.
- */
-function buildInitialBuildSummary(
-  program: ProgramStructure,
-  constraints: ExtractedConstraints | null
-): string {
-  const days = program.days.length;
-  const parts: string[] = [];
-
-  parts.push(`Created new program from user request`);
-
-  if (constraints?.primaryGoal) {
-    const goalLabels: Record<string, string> = {
-      strength: "Strength",
-      hypertrophy: "Hypertrophy",
-      athletic_performance: "Athletic Performance",
-      fat_loss: "Fat Loss / Body Composition",
-      general_fitness: "General Fitness",
-    };
-    parts.push(`Goal: ${goalLabels[constraints.primaryGoal] ?? constraints.primaryGoal}`);
-  }
-
-  parts.push(`Frequency: ${days} days/week`);
-
-  if (constraints?.sportFocus) {
-    const sportLabel = constraints.sportFocus.replace(/_/g, " ");
-    parts.push(`Sport context: ${sportLabel.charAt(0).toUpperCase() + sportLabel.slice(1)}`);
-  }
-
-  if (constraints?.seasonContext) {
-    const seasonLabels: Record<string, string> = {
-      off_season: "Off-Season",
-      pre_season: "Pre-Season",
-      in_season: "In-Season",
-      post_season: "Post-Season",
-      return_to_play: "Return to Play",
-    };
-    parts.push(`Season phase: ${seasonLabels[constraints.seasonContext] ?? constraints.seasonContext}`);
-  }
-
-  if (constraints?.sessionDuration) {
-    parts.push(`Session duration: ${constraints.sessionDuration} minutes`);
-  }
-
-  if (constraints?.equipment) {
-    parts.push(`Equipment: ${constraints.equipment}`);
-  }
-
-  if (constraints?.experienceLevel) {
-    parts.push(`Experience level: ${constraints.experienceLevel}`);
-  }
-
-  return parts.join(" · ");
-}
+// buildInitialBuildSummary moved to ../services/program-build-service (Phase 2 T004 extraction)
 
 /**
  * Builds an agentic, coaching-style response when an edit request could not be applied.
@@ -2183,13 +2132,14 @@ Keep it helpful and intelligent, never promotional.`;
         "[MutationTrace] ENTRY — direct vibe edit (non-SSE)",
       );
 
-      const directEditPlan = await interpretEditRequest(
-        parsed.data.content,
-        directFullSystem,
-        directTarget,
-        adaptationCtx || undefined,
-        directDecisionMemory?.decisionMemoryContext || undefined
-      );
+      // T003: interpretMutationRequest adapter (Phase 2 extraction)
+      const directEditPlan = await interpretMutationRequest({
+        effectiveMessage: parsed.data.content,
+        fullSystem: directFullSystem,
+        target: directTarget,
+        adaptationCtx: adaptationCtx || undefined,
+        decisionMemoryContext: directDecisionMemory?.decisionMemoryContext || undefined,
+      });
 
       logger.info(
         {
@@ -3144,122 +3094,34 @@ Keep it helpful and intelligent, never promotional.`;
   let autoSavedSystemId: number | undefined;
   let changeLogId: number | undefined;
 
+  // ── T004: saveOrUpdateProgram (Phase 2 extraction) ───────────────────────────
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
     try {
-      // Attach block metadata from the most recent architecture brief build (side-effect)
-      const lastPlan = getLastMonthlyPlan();
-      if (lastPlan) {
-        (structuredData as any).blockMetadata = {
-          blockType: String(lastPlan.blockType),
-          blockDisplayName: lastPlan.displayName,
-          missionStatement: lastPlan.missionStatement,
-          weekProgressionArc: lastPlan.weekProgressionArc,
-          primaryAdaptation: lastPlan.primaryAdaptation,
-          volumeProfile: lastPlan.volumeProfile,
-          intensityProfile: lastPlan.intensityProfile,
-        };
-      }
-
-      const isNewProgramBuild =
-        intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
-      let savedSystem: { id: number; [key: string]: any };
-      let isUpdate: boolean;
-      if (isNewProgramBuild) {
-        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, params.data.id, nonStreamFocusMode);
-        isUpdate = false;
-      } else {
-        const result = await upsertTrainingSystemFromProgram(userId, structuredData, nonStreamFocusMode, params.data.id);
-        savedSystem = result.system;
-        isUpdate = result.isUpdate;
-      }
+      const _saveResult = await saveOrUpdateProgram({
+        userId,
+        structuredData: structuredData as any,
+        conversationId: params.data.id,
+        focusMode: nonStreamFocusMode,
+        intentType: intentResult.type,
+        editSubtype: intentResult.editSubtype ?? null,
+        requestText: parsed.data.content,
+        extractedConstraints: extractedConstraints ?? null,
+      });
       systemSaved = true;
-      autoSavedSystemId = savedSystem.id;
-
-      // ── Action Contract TurnOutcome tracking ────────────────────────────────
-      if (isNewProgramBuild) {
-        turnOutcome.programRebuilt = true;
-        // P0-5: fire first-build retention email (idempotent, non-blocking)
-        fireFirstBuildEmail(userId).catch(() => {});
-      } else {
+      autoSavedSystemId = _saveResult.system.id as number;
+      changeLogId = _saveResult.changeLogId;
+      // TurnOutcome tracking stays in the route (not in the service)
+      if (_saveResult.isUpdate) {
         turnOutcome.mutationApplied = true;
         turnOutcome.verificationStatus = "verified";
+      } else {
+        turnOutcome.programRebuilt = true;
       }
-
       if (nonStreamFocusMode === "speed" || nonStreamFocusMode === "mobility") {
         logger.info(
-          {
-            userId,
-            systemId: savedSystem.id,
-            focusMode: nonStreamFocusMode,
-            programName: structuredData.programName,
-            dayCount: structuredData.days?.length ?? 0,
-            programSaved: true,
-          },
-          "[SpeedBuildCompletionAudit] Build completed successfully — program saved to DB"
+          { userId, systemId: _saveResult.system.id, focusMode: nonStreamFocusMode, programName: structuredData.programName, dayCount: structuredData.days?.length ?? 0, programSaved: true },
+          "[SpeedBuildCompletionAudit] Build completed successfully — program saved to DB",
         );
-      }
-
-      const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
-      const fullProgramSnapshot = structuredData as unknown as Record<string, unknown>;
-
-      if (isUpdate) {
-        logger.info(
-          { userId, systemId: savedSystem.id, programName: structuredData.programName },
-          "[ChangeEngine] Active program updated in place"
-        );
-        try {
-          const updateSummary = structuredData.whatChanged
-            ?? `Program updated: ${structuredData.days.length} days/week · ${structuredData.programName}`;
-          const updateMeta: Record<string, unknown> = {
-            intentType: intentResult.type,
-            editSubtype: intentResult.editSubtype ?? undefined,
-            programDays: structuredData.days.length,
-            programGoal: extractedConstraints?.primaryGoal ?? null,
-            programSport: extractedConstraints?.sportFocus ?? null,
-          };
-          if (structuredData.whyChanged) updateMeta.whyChanged = structuredData.whyChanged;
-          changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: savedSystem.id, source: "ai_edit",
-            intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
-            scope: "system", changeSummary: updateSummary,
-            requestText: parsed.data.content.slice(0, 300),
-            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
-            fullProgramSnapshot,
-            appliedCount: 1, skippedCount: 0,
-            versionOverrides: { isMajorVersion: true },
-            decisionMetadata: updateMeta,
-          });
-        } catch (logErr) {
-          logger.warn({ logErr }, "[ChangeEngine] Failed to write AI change log entry — non-fatal");
-        }
-      } else {
-        logger.info(
-          { userId, systemId: savedSystem.id, programName: structuredData.programName },
-          "[AutoSave] New training system created — logging Initial Build version"
-        );
-        try {
-          // Build a constraint-aware change summary for the Initial Build entry
-          const initialBuildSummary = buildInitialBuildSummary(structuredData, extractedConstraints);
-          changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: savedSystem.id, source: "initialize",
-            intent: "create_program", scope: "system",
-            changeSummary: initialBuildSummary,
-            requestText: parsed.data.content.slice(0, 300),
-            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
-            fullProgramSnapshot,
-            appliedCount: 1, skippedCount: 0,
-            versionOverrides: { isMajorVersion: true, versionLabel: "V1 Initial Build" },
-            decisionMetadata: {
-              intentType: intentResult.type,
-              extractedConstraints: extractedConstraints ?? {},
-              programDays: structuredData.days.length,
-              programGoal: extractedConstraints?.primaryGoal ?? null,
-              programSport: extractedConstraints?.sportFocus ?? null,
-            },
-          });
-        } catch (logErr) {
-          logger.warn({ logErr }, "[AutoSave] Failed to write Initial Build log — non-fatal");
-        }
       }
     } catch (err) {
       logger.error({ err, userId }, "[AutoSave] Failed to save training system — user can still save manually");
@@ -4010,65 +3872,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // Emit classifying stage — intent and action type are now known
   emit(buildStageEvent("classifying", intentResult.type, execPlan.action, _narrationCtx));
 
-  // ── Helper: build the final SSE complete response ─────────────────────────
-  function buildCompleteEvent(opts: {
-    userMsg: typeof userMessage;
-    assistantMsg: { id: number; conversationId: number; role: string; content: string; createdAt: Date; structuredData: string | null };
-    planInfoVal: typeof planInfo;
-    intentResultVal: typeof intentResult;
-    systemSavedVal: boolean;
-    systemIdVal?: number;
-    systemEditVal?: { applied: boolean; changeSummary?: string; systemId?: number };
-    changeLogIdVal?: number;
-    outcomeTypeVal?: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure";
-    auditReceiptVal?: unknown;
-    /** Global mutation outcome from finalizeMutationOutcome() — present on shouldMutate=true paths. */
-    mutationOutcomeVal?: MutationOutcomeResult | null;
-    /**
-     * The saved program payload from the DB-write path.
-     * Present when systemSavedVal=true so the panel can update immediately
-     * without a separate refetch round-trip.
-     */
-    savedProgramVal?: unknown | null;
-  }) {
-    const outcomeType: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure" =
-      opts.outcomeTypeVal ?? "conversation_only";
-    return {
-      type: "complete",
-      outcomeType,
-      userMessage: {
-        id: opts.userMsg.id,
-        conversationId: opts.userMsg.conversationId,
-        role: opts.userMsg.role,
-        content: opts.userMsg.content,
-        createdAt: opts.userMsg.createdAt.toISOString(),
-        structuredData: null,
-      },
-      assistantMessage: {
-        id: opts.assistantMsg.id,
-        conversationId: opts.assistantMsg.conversationId,
-        role: opts.assistantMsg.role,
-        content: opts.assistantMsg.content,
-        createdAt: opts.assistantMsg.createdAt.toISOString(),
-        structuredData: opts.assistantMsg.structuredData ?? null,
-      },
-      planInfo: opts.planInfoVal
-        ? { plan: opts.planInfoVal.plan, messagesRemaining: opts.planInfoVal.messagesRemaining }
-        : null,
-      intentDebug: {
-        type: opts.intentResultVal.type,
-        confidence: opts.intentResultVal.confidence,
-        editSubtype: opts.intentResultVal.editSubtype ?? null,
-      },
-      systemSaved: opts.systemSavedVal,
-      systemId: opts.systemIdVal,
-      systemEdit: opts.systemEditVal,
-      changeLogId: opts.changeLogIdVal,
-      auditReceipt: opts.auditReceiptVal ?? null,
-      mutationOutcome: opts.mutationOutcomeVal ?? null,
-      savedProgram: opts.savedProgramVal ?? null,
-    };
-  }
+  // ── T002: buildCompleteEvent imported from ../services/streaming-response-service ──
+  // The function was extracted verbatim; all existing done(buildCompleteEvent({...}))
+  // call sites below remain unchanged — the imported signature is identical.
 
   if (failSafeResolution.strategy === "redirect_focus") {
     const content = failSafeResolution.userFacingMessage ?? "That request fits a different training focus. Switch focus modes and I’ll build it with the right engine.";
@@ -4815,13 +4621,14 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         "[MutationTrace] ENTRY — direct vibe edit (SSE)",
       );
 
-      const streamEditPlan = await interpretEditRequest(
+      // T003: interpretMutationRequest adapter (Phase 2 extraction)
+      const streamEditPlan = await interpretMutationRequest({
         effectiveMessage,
-        streamFullSystem,
-        streamTarget,
-        adaptationCtx || undefined,
-        streamDecisionMemory?.decisionMemoryContext || undefined
-      );
+        fullSystem: streamFullSystem,
+        target: streamTarget,
+        adaptationCtx: adaptationCtx || undefined,
+        decisionMemoryContext: streamDecisionMemory?.decisionMemoryContext || undefined,
+      });
 
       logger.info(
         {
@@ -5636,121 +5443,34 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return false;
   })();
 
+  // ── T004: saveOrUpdateProgram (Phase 2 extraction, SSE path) ────────────────
   if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0 && !_hasCriticalStructuralIssue) {
     try {
-      // Attach block metadata from the most recent architecture brief build (side-effect)
-      const lastPlanSSE = getLastMonthlyPlan();
-      if (lastPlanSSE) {
-        (structuredData as any).blockMetadata = {
-          blockType: String(lastPlanSSE.blockType),
-          blockDisplayName: lastPlanSSE.displayName,
-          missionStatement: lastPlanSSE.missionStatement,
-          weekProgressionArc: lastPlanSSE.weekProgressionArc,
-          primaryAdaptation: lastPlanSSE.primaryAdaptation,
-          volumeProfile: lastPlanSSE.volumeProfile,
-          intensityProfile: lastPlanSSE.intensityProfile,
-        };
-      }
-
-      const isNewProgramBuildSSE =
-        intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM";
-      let savedSystem: { id: number; [key: string]: any };
-      let isUpdate: boolean;
-      if (isNewProgramBuildSSE) {
-        savedSystem = await createTrainingSystemFromProgram(userId, structuredData, params.data.id, streamFocusMode);
-        isUpdate = false;
-      } else {
-        const result = await upsertTrainingSystemFromProgram(userId, structuredData, streamFocusMode, params.data.id);
-        savedSystem = result.system;
-        isUpdate = result.isUpdate;
-      }
+      const _saveResultSSE = await saveOrUpdateProgram({
+        userId,
+        structuredData: structuredData as any,
+        conversationId: params.data.id,
+        focusMode: streamFocusMode,
+        intentType: intentResult.type,
+        editSubtype: intentResult.editSubtype ?? null,
+        requestText: parsed.data.content,
+        extractedConstraints: extractedConstraints ?? null,
+      });
       systemSaved = true;
-      autoSavedSystemId = savedSystem.id;
-
-      // ── Action Contract TurnOutcome tracking (SSE path) ─────────────────────
-      if (isNewProgramBuildSSE) {
-        turnOutcomeSSE.programRebuilt = true;
-        // P0-5: fire first-build retention email (idempotent, non-blocking)
-        fireFirstBuildEmail(userId).catch(() => {});
-      } else {
+      autoSavedSystemId = _saveResultSSE.system.id as number;
+      changeLogId = _saveResultSSE.changeLogId;
+      // TurnOutcome tracking stays in the route (not in the service)
+      if (_saveResultSSE.isUpdate) {
         turnOutcomeSSE.mutationApplied = true;
         turnOutcomeSSE.verificationStatus = "verified";
+      } else {
+        turnOutcomeSSE.programRebuilt = true;
       }
-
       if (streamFocusMode === "speed" || streamFocusMode === "mobility") {
         logger.info(
-          {
-            userId,
-            systemId: savedSystem.id,
-            focusMode: streamFocusMode,
-            programName: structuredData.programName,
-            dayCount: structuredData.days?.length ?? 0,
-            programSaved: true,
-          },
-          "[SpeedBuildCompletionAudit] Build completed successfully — program saved to DB (stream path)"
+          { userId, systemId: _saveResultSSE.system.id, focusMode: streamFocusMode, programName: structuredData.programName, dayCount: structuredData.days?.length ?? 0, programSaved: true },
+          "[SpeedBuildCompletionAudit] Build completed successfully — program saved to DB (stream path)",
         );
-      }
-
-      const emptySnapshot = { exercises: {}, sessions: {}, weeks: {}, phases: {} };
-      const fullProgramSnapshot = structuredData as unknown as Record<string, unknown>;
-
-      if (isUpdate) {
-        logger.info(
-          { userId, systemId: savedSystem.id, programName: structuredData.programName },
-          "[ChangeEngine:stream] Active program updated in place"
-        );
-        try {
-          const updateSummary = structuredData.whatChanged
-            ?? `Program updated: ${structuredData.days.length} days/week · ${structuredData.programName}`;
-          const updateMeta: Record<string, unknown> = {
-            intentType: intentResult.type,
-            editSubtype: intentResult.editSubtype ?? undefined,
-            programDays: structuredData.days.length,
-            programGoal: extractedConstraints?.primaryGoal ?? null,
-            programSport: extractedConstraints?.sportFocus ?? null,
-          };
-          if (structuredData.whyChanged) updateMeta.whyChanged = structuredData.whyChanged;
-          changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: savedSystem.id, source: "ai_edit",
-            intent: intentResult.editSubtype ?? intentResult.type.toLowerCase(),
-            scope: "system", changeSummary: updateSummary,
-            requestText: parsed.data.content.slice(0, 300),
-            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
-            fullProgramSnapshot,
-            appliedCount: 1, skippedCount: 0,
-            versionOverrides: { isMajorVersion: true },
-            decisionMetadata: updateMeta,
-          });
-        } catch (logErr) {
-          logger.warn({ logErr }, "[ChangeEngine:stream] Failed to write AI change log — non-fatal");
-        }
-      } else {
-        logger.info(
-          { userId, systemId: savedSystem.id, programName: structuredData.programName },
-          "[AutoSave:stream] New training system created — logging Initial Build version"
-        );
-        try {
-          const initialBuildSummary = buildInitialBuildSummary(structuredData, extractedConstraints);
-          changeLogId = await createChangeLogEntry({
-            userId, trainingSystemId: savedSystem.id, source: "initialize",
-            intent: "create_program", scope: "system",
-            changeSummary: initialBuildSummary,
-            requestText: parsed.data.content.slice(0, 300),
-            beforeSnapshot: emptySnapshot, afterSnapshot: emptySnapshot,
-            fullProgramSnapshot,
-            appliedCount: 1, skippedCount: 0,
-            versionOverrides: { isMajorVersion: true, versionLabel: "V1 Initial Build" },
-            decisionMetadata: {
-              intentType: intentResult.type,
-              extractedConstraints: extractedConstraints ?? {},
-              programDays: structuredData.days.length,
-              programGoal: extractedConstraints?.primaryGoal ?? null,
-              programSport: extractedConstraints?.sportFocus ?? null,
-            },
-          });
-        } catch (logErr) {
-          logger.warn({ logErr }, "[AutoSave:stream] Failed to write Initial Build log — non-fatal");
-        }
       }
     } catch (err) {
       logger.error({ err, userId }, "[AutoSave:stream] Failed to save training system — non-fatal");
@@ -5846,6 +5566,28 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       logger.warn({ enforceErrSSE }, "[ActionContract/SSE] Enforcer failed — non-fatal");
     }
   }
+
+  // ── T005: Structured Turn Audit Log (Phase 2) ─────────────────────────────
+  // Emitted on every SSE turn. Provides a single log line that captures the full
+  // outcome of a turn — intent, mutation, save, validation, and latency — so
+  // production traces can be analysed per-turn without joining multiple log events.
+  logger.info(
+    {
+      conversationId: params.data.id,
+      userId,
+      action: execPlan.action,
+      intentFamily: execPlan.intentFamily ?? null,
+      intentType: intentResult.type,
+      activeSystemId: autoSavedSystemId ?? null,
+      mutationApplied: turnOutcomeSSE.mutationApplied ?? false,
+      programSaved: systemSaved,
+      programRebuilt: turnOutcomeSSE.programRebuilt ?? false,
+      validationPassed: !_hasCriticalStructuralIssue,
+      latencyMs: Date.now() - _pipeline_t0,
+      focusMode: streamFocusMode,
+    },
+    "[TurnAudit] SSE turn complete",
+  );
 
   done(buildCompleteEvent({
     userMsg: userMessage, assistantMsg: _alignedAssistantMsg, planInfoVal: planInfo,

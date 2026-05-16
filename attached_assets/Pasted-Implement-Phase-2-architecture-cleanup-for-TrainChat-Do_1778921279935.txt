@@ -1,0 +1,206 @@
+Implement Phase 2 architecture cleanup for TrainChat.
+
+Do NOT add new features.
+Do NOT rewrite the agent system.
+Do NOT replace custom architecture with outside frameworks.
+Do NOT change user-facing behavior unless required for stability.
+
+Goal:
+Reduce production risk from god-files, improve service boundaries, and make TrainChat easier to debug without altering the core coaching experience.
+
+Start with a full inspection, then make surgical extractions.
+
+========================
+PHASE 2 PRIORITIES
+========================
+
+1. Verify Phase 1 wiring first
+Before refactoring, confirm:
+- savedProgram from SSE complete is actually consumed by the frontend Live Program Panel
+- React Query refetch remains background reconciliation
+- SSE error events display correctly
+- OpenAI timeout wrappers cover all main AI call paths
+- critical validation guard blocks empty/invalid programs before save
+- rate limiter works on authenticated user ID
+
+If anything is half-wired, fix it before proceeding.
+
+2. Extract MutationExecutionService
+From conversations.ts, extract mutation/edit execution logic into a dedicated service.
+
+Create:
+server/services/mutation-execution-service.ts
+
+Responsibilities:
+- receive execution plan + active training system context
+- call interpretEditRequest
+- call applyEditPlan
+- handle change log creation
+- run post-mutation validation
+- return a typed mutation result
+- never directly write SSE events
+- never directly manipulate frontend-specific state
+
+Keep conversations.ts responsible only for orchestration and streaming.
+
+3. Extract ProgramBuildService
+Create:
+server/services/program-build-service.ts
+
+Responsibilities:
+- build architecture brief
+- call Coach Agent generation
+- validate Architecture Gate
+- run CEO Heartbeat
+- save/upsert training system
+- return typed build result
+- expose critical validation status
+- expose saved training system payload for SSE complete
+
+Do not move prompt logic yet.
+Do not rewrite program-architecture-engine.ts.
+Do not rewrite ai.ts.
+
+4. Extract StreamingResponseService
+Create:
+server/services/streaming-response-service.ts
+
+Responsibilities:
+- emit SSE stage events
+- emit SSE error events
+- emit complete events
+- normalize event payload shapes
+- centralize stream-safe error handling
+- prevent hanging streams
+
+The route should not manually construct many SSE payloads after this.
+
+5. Reduce conversations.ts responsibility
+After extraction, conversations.ts should mainly:
+- authenticate request
+- load conversation/user context
+- call ConversationContextResolver
+- call buildExecutionPlan
+- call orchestrator route
+- delegate to MutationExecutionService or ProgramBuildService
+- delegate streaming to StreamingResponseService
+- return response
+
+Do not aim for perfect under 200 lines yet.
+First target:
+- remove the riskiest duplicated logic
+- reduce file complexity
+- improve readability
+- preserve behavior
+
+6. DB-canonical active program source
+Clean up resolveCurrentProgram usage.
+
+Rules:
+- getActiveTrainingSystem() / getFullTrainingSystem() should be preferred whenever a saved system exists
+- message-history JSON parsing should only be fallback for first-build or legacy data
+- edit/mutation paths must never rely on stale message-history JSON if DB state exists
+- add typed helper if needed:
+  resolveCanonicalProgramContext(conversationId, userId)
+
+7. Structured turn audit log
+Add a lightweight structured audit log per user message turn.
+
+Include:
+- conversationId
+- userId
+- executionPlan action
+- intent family
+- orchestrator route
+- activeSystemId
+- AI call count if available
+- mutation/build success status
+- validation pass/fail
+- latencyMs
+- error code if failed
+
+This can be console/log-based for now.
+Do not build a dashboard yet.
+
+8. Prompt assembly documentation only
+Do not refactor ai.ts yet.
+
+Add a short internal document or code comment describing:
+- major prompt sections
+- intended order
+- highest-priority constraints
+- token budget risks
+- future extraction plan into PromptAssembler
+
+9. Durable undo investigation
+Inspect change-log-service.ts and current undo flow.
+
+Do not fully rebuild undo unless simple.
+
+Report:
+- whether lastMutationReference.changeLogId can be recovered from DB
+- what minimal schema or query change would make undo durable across restarts
+- whether this belongs in Phase 2 or Phase 3
+
+========================
+IMPORTANT CONSTRAINTS
+========================
+
+- Preserve all current TrainChat behavior.
+- Prefer adapters/wrappers over rewrites.
+- Do not change prompts unless necessary.
+- Do not change program generation logic unless necessary.
+- Do not add Firecrawl, LangChain, CrewAI, Claude Code, or outside frameworks.
+- Do not flatten the three-agent architecture.
+- Do not remove deterministic validation layers.
+- Do not remove SSE streaming.
+- If a refactor becomes risky, stop and report before proceeding.
+
+========================
+OUTPUT REPORT
+========================
+
+After implementation, provide:
+
+A. Phase 1 verification results
+- what was fully wired
+- what needed fixing
+- what remains risky
+
+B. Files changed
+
+C. Services extracted
+For each service:
+- responsibilities
+- inputs
+- outputs
+- what logic moved from conversations.ts
+
+D. Behavior preserved
+Explain how you confirmed the user-facing behavior did not change.
+
+E. Remaining god-file risk
+- current conversations.ts line count
+- current ai.ts line count
+- current program-architecture-engine.ts line count
+- recommended next extraction
+
+F. Canonical program source cleanup
+- what changed
+- remaining fallback paths
+
+G. Turn audit logging
+- fields logged
+- sample log shape
+
+H. Durable undo findings
+- current limitation
+- recommended fix
+
+I. Tests/typecheck
+- commands run
+- results
+- pre-existing errors, if any
+
+J. Next recommended Phase 3
+Only recommend after Phase 2 is complete.
