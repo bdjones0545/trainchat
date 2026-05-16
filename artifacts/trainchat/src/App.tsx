@@ -56,6 +56,8 @@ import AcaWhitepaper from "@/pages/aeo/whitepapers/AcaWhitepaper";
 import MfpWhitepaper from "@/pages/aeo/whitepapers/MfpWhitepaper";
 import StaticProgrammingWhitepaper from "@/pages/aeo/whitepapers/StaticProgrammingWhitepaper";
 import TerminologyPage from "@/pages/aeo/TerminologyPage";
+import DiagramsPage from "@/pages/aeo/DiagramsPage";
+import CurriculumPage from "@/pages/aeo/CurriculumPage";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -380,6 +382,10 @@ function Router() {
       <Route path="/whitepapers/mutation-first-programming" component={MfpWhitepaper} />
       <Route path="/whitepapers/the-problem-with-static-programming" component={StaticProgrammingWhitepaper} />
       <Route path="/terminology" component={TerminologyPage} />
+
+      {/* Phase 8 — Visual Artifacts & Curriculum */}
+      <Route path="/diagrams" component={DiagramsPage} />
+      <Route path="/curriculum" component={CurriculumPage} />
 
       <Route component={NotFound} />
     </Switch>
