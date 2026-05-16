@@ -2469,9 +2469,6 @@ function ProgramTab({
               releaseLabel="Release to refine"
               listeningLabel="Listening…"
             />
-            <p className="mt-1.5 text-[10px] text-muted-foreground/45 leading-relaxed px-1">
-              Tap mic to dictate · Hold mic for push-to-talk
-            </p>
           </div>
         </div>
       )}
