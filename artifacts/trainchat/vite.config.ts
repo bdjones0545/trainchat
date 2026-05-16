@@ -98,14 +98,15 @@ export default defineConfig({
         manualChunks(id) {
           if (!id.includes("node_modules")) return undefined;
 
-          // React runtime — the most stable, most shared dependency
-          if (
-            id.includes("/react/") ||
-            id.includes("/react-dom/") ||
-            id.includes("/scheduler/")
-          ) {
-            return "vendor-react";
-          }
+          // NOTE: React (react, react-dom, scheduler) is intentionally NOT
+          // assigned its own chunk. Giving React a separate chunk causes a
+          // circular chunk dependency on Safari/JavaScriptCore:
+          //   vendor-react imports Rollup helpers from vendor
+          //   vendor imports React exports from vendor-react
+          // V8 (Chrome) tolerates circular ES module live bindings; Safari does
+          // not — the live binding is still undefined when React tries to assign
+          // `x.Children = {...}`, crashing the entire app silently.
+          // React is small enough to live in the shared vendor chunk safely.
 
           // Framer Motion — large animation library, isolated for cache efficiency
           if (id.includes("/framer-motion/")) {
