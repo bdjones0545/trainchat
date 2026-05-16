@@ -250,6 +250,7 @@ export default function Chat() {
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
   const [showAthleteProfile, setShowAthleteProfile] = useState(false);
+  const wasLiveProgramOpenBeforeBrainRef = useRef(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [focusSwitchConfirm, setFocusSwitchConfirm] = useState<string | null>(null);
   const [showFocusInfo, setShowFocusInfo] = useState(false);
@@ -1402,6 +1403,22 @@ export default function Chat() {
     setFocusSwitchConfirm(cfg.theme.confirmLabel);
     if (focusSwitchTimerRef.current) clearTimeout(focusSwitchTimerRef.current);
     focusSwitchTimerRef.current = setTimeout(() => setFocusSwitchConfirm(null), 2400);
+  }
+
+  function handleOpenAthleteProfile() {
+    wasLiveProgramOpenBeforeBrainRef.current = mobilePanel === "right";
+    if (mobilePanel === "right") {
+      setMobilePanel(null);
+    }
+    setShowAthleteProfile(true);
+  }
+
+  function handleCloseAthleteProfile() {
+    setShowAthleteProfile(false);
+    if (wasLiveProgramOpenBeforeBrainRef.current) {
+      wasLiveProgramOpenBeforeBrainRef.current = false;
+      setMobilePanel("right");
+    }
   }
 
   /**
@@ -3041,7 +3058,7 @@ export default function Chat() {
           activeFocusModes={activeFocusModes}
           onFocusModeChange={handleFocusSwitch}
           isWeekDataLoading={hasActiveSystem && weekDataLoading}
-          onOpenAthleteProfile={() => setShowAthleteProfile(true)}
+          onOpenAthleteProfile={handleOpenAthleteProfile}
         />
       </div>
     </div>
@@ -3195,7 +3212,7 @@ export default function Chat() {
       )}
       {showAthleteProfile && (
         <AthleteIntelligenceProfile
-          onClose={() => setShowAthleteProfile(false)}
+          onClose={handleCloseAthleteProfile}
           onRecalibrate={() => setShowCalibration(true)}
         />
       )}
@@ -4294,7 +4311,7 @@ export default function Chat() {
                   activeFocusModes={activeFocusModes}
                   onFocusModeChange={handleFocusSwitch}
                   isWeekDataLoading={hasActiveSystem && weekDataLoading}
-                  onOpenAthleteProfile={() => setShowAthleteProfile(true)}
+                  onOpenAthleteProfile={handleOpenAthleteProfile}
                 />
               </div>
             </div>
