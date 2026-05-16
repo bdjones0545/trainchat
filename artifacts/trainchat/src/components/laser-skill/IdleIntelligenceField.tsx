@@ -4,37 +4,44 @@
  * Layer stack (bottom → top):
  *  L1  Full-screen CSS flat grid (masked to mid-section only)
  *  L2  Readability dark gradient
- *  L3  Ambient floating glow blobs (framer-motion drift entrance)
- *  L4  NeuralTerrainR3F — WebGL perspective mesh with bloom + sparkles
- *  L5  Sweep lines (framer-motion entrance, staggered)
+ *  L3  Ambient glow blobs — varied color palette matching terrain
+ *        electric blue / cyan / deep indigo / soft violet
+ *  L4  NeuralTerrainR3F — WebGL vertex-colored mesh
+ *  L5  Sweep lines (staggered entrance, framer-motion)
  *
  * Props:
- *  isTyping    — reduces field opacity while user is composing
- *  isThinking  — triggers faster wave + violet color shift in terrain
+ *  isTyping   — reduces field opacity while user is composing
+ *  isThinking — passed to terrain; triggers faster wave + violet drift
  */
 
 import { motion } from "framer-motion";
 import { NeuralTerrainR3F } from "./NeuralTerrainR3F";
 
+// Ambient blobs — each carries its own color from the terrain palette.
+// Using inline rgba tuples so the gradient matches the vertex color system.
+//   Electric blue: 79,125,255   Cyan: 102,227,255
+//   Deep indigo:   75,77,255    Soft violet: 122,92,255
 const AMBIENT_BLOBS = [
-  { x: 14, y: 20, size: 280, opacity: 0.042, dur: 22, delay: 0  },
-  { x: 80, y: 10, size: 220, opacity: 0.034, dur: 28, delay: 5  },
-  { x: 50, y: 52, size: 340, opacity: 0.048, dur: 18, delay: 9  },
-  { x: 88, y: 68, size: 240, opacity: 0.038, dur: 24, delay: 2  },
-  { x: 18, y: 80, size: 200, opacity: 0.044, dur: 26, delay: 7  },
-  { x: 62, y: 88, size: 300, opacity: 0.052, dur: 20, delay: 13 },
+  { x: 14, y: 20, size: 290, dur: 22, delay: 0,  op: 0.038, core: "79,125,255",  outer: "75,77,255"   },
+  { x: 80, y: 12, size: 230, dur: 28, delay: 5,  op: 0.030, core: "102,227,255", outer: "79,125,255"  },
+  { x: 50, y: 50, size: 350, dur: 18, delay: 9,  op: 0.042, core: "79,125,255",  outer: "75,77,255"   },
+  { x: 88, y: 66, size: 245, dur: 24, delay: 2,  op: 0.034, core: "122,92,255",  outer: "75,77,255"   },
+  { x: 18, y: 78, size: 210, dur: 26, delay: 7,  op: 0.040, core: "102,227,255", outer: "79,125,255"  },
+  { x: 62, y: 86, size: 310, dur: 20, delay: 13, op: 0.048, core: "79,125,255",  outer: "122,92,255"  },
+  // Indigo haze near horizon (background depth cue)
+  { x: 50, y: 6,  size: 400, dur: 32, delay: 4,  op: 0.022, core: "75,77,255",   outer: "122,92,255"  },
 ];
 
 const SWEEP_LINES = [
   {
     top:        "55%",
-    gradient:   "linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.28) 20%, rgba(147,197,253,0.62) 50%, rgba(96,165,250,0.28) 80%, transparent 100%)",
+    gradient:   "linear-gradient(90deg, transparent 0%, rgba(79,125,255,0.22) 15%, rgba(102,227,255,0.55) 50%, rgba(79,125,255,0.22) 85%, transparent 100%)",
     animation:  "ii-sweep 16s ease-in-out 0.5s infinite",
     enterDelay: 0.6,
   },
   {
     top:        "30%",
-    gradient:   "linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.10) 30%, rgba(147,197,253,0.24) 50%, rgba(96,165,250,0.10) 70%, transparent 100%)",
+    gradient:   "linear-gradient(90deg, transparent 0%, rgba(75,77,255,0.08) 25%, rgba(102,227,255,0.20) 50%, rgba(75,77,255,0.08) 75%, transparent 100%)",
     animation:  "ii-sweep 24s ease-in-out 9.5s infinite",
     enterDelay: 1.0,
   },
@@ -63,14 +70,14 @@ export function IdleIntelligenceField({
         className="absolute inset-0"
         style={{
           backgroundImage: [
-            "linear-gradient(rgba(96,165,250,0.030) 1px, transparent 1px)",
-            "linear-gradient(90deg, rgba(96,165,250,0.030) 1px, transparent 1px)",
+            "linear-gradient(rgba(79,125,255,0.028) 1px, transparent 1px)",
+            "linear-gradient(90deg, rgba(79,125,255,0.028) 1px, transparent 1px)",
           ].join(", "),
           backgroundSize: "56px 56px",
           maskImage:
-            "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.10) 18%, rgba(0,0,0,0.22) 40%, rgba(0,0,0,0.07) 60%, transparent 70%)",
+            "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.09) 18%, rgba(0,0,0,0.20) 40%, rgba(0,0,0,0.06) 60%, transparent 70%)",
           WebkitMaskImage:
-            "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.10) 18%, rgba(0,0,0,0.22) 40%, rgba(0,0,0,0.07) 60%, transparent 70%)",
+            "linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.09) 18%, rgba(0,0,0,0.20) 40%, rgba(0,0,0,0.06) 60%, transparent 70%)",
           animation: "ii-full-grid-breathe 14s ease-in-out infinite, ii-grid-drift 22s ease-in-out infinite",
         }}
       />
@@ -83,24 +90,24 @@ export function IdleIntelligenceField({
             "linear-gradient(",
             "  to bottom,",
             "  hsl(var(--background) / 0.92) 0%,",
-            "  hsl(var(--background) / 0.56) 14%,",
-            "  hsl(var(--background) / 0.07) 34%,",
+            "  hsl(var(--background) / 0.55) 14%,",
+            "  hsl(var(--background) / 0.06) 34%,",
             "  transparent 50%,",
-            "  hsl(var(--background) / 0.24) 84%,",
-            "  hsl(var(--background) / 0.56) 100%",
+            "  hsl(var(--background) / 0.22) 84%,",
+            "  hsl(var(--background) / 0.55) 100%",
             ")",
           ].join(""),
         }}
       />
 
-      {/* ── L3: Ambient glow blobs ────────────────────────────────────────── */}
+      {/* ── L3: Atmospheric glow blobs (terrain color palette) ───────────── */}
       {AMBIENT_BLOBS.map((blob, i) => (
         <motion.div
           key={i}
           className="absolute"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 1.8, delay: blob.delay * 0.12 }}
+          transition={{ duration: 2.2, delay: i * 0.14 }}
           style={{
             left:      `${blob.x}%`,
             top:       `${blob.y}%`,
@@ -113,13 +120,13 @@ export function IdleIntelligenceField({
               height:       blob.size,
               transform:    "translate(-50%, -50%)",
               borderRadius: "50%",
-              background:   `radial-gradient(circle, rgba(96,165,250,${blob.opacity}) 0%, rgba(99,102,241,${(blob.opacity * 0.4).toFixed(3)}) 45%, transparent 70%)`,
+              background:   `radial-gradient(circle, rgba(${blob.core},${blob.op}) 0%, rgba(${blob.outer},${(blob.op * 0.38).toFixed(3)}) 45%, transparent 70%)`,
             }}
           />
         </motion.div>
       ))}
 
-      {/* ── L4: WebGL perspective neural terrain ─────────────────────────── */}
+      {/* ── L4: WebGL vertex-colored neural terrain ───────────────────────── */}
       <div
         className="absolute bottom-0 left-0 right-0"
         style={{
@@ -134,7 +141,7 @@ export function IdleIntelligenceField({
         <NeuralTerrainR3F isThinking={isThinking} />
       </div>
 
-      {/* ── L5: Horizontal sweep lines ────────────────────────────────────── */}
+      {/* ── L5: Sweep lines ───────────────────────────────────────────────── */}
       {SWEEP_LINES.map((line, i) => (
         <motion.div
           key={i}
