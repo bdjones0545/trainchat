@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { X, Download, Copy, Share2, Check } from "lucide-react";
 import { toPng } from "html-to-image";
 import ShareMomentCard from "./ShareMomentCard";
@@ -104,8 +105,8 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
 
   const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end sm:justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-end sm:justify-center">
       {/* Backdrop — always tappable to close */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -113,8 +114,9 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
       />
 
       {/* Sheet — constrained to viewport, scrollable inside */}
-      <div className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 flex flex-col bg-card border border-border rounded-2xl shadow-2xl"
-        style={{ maxHeight: "90vh" }}
+      <div
+        className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 flex flex-col bg-card border border-border rounded-2xl shadow-2xl"
+        style={{ maxHeight: "90dvh" }}
       >
         {/* Header — always visible at top, never scrolls away */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/50">
@@ -134,7 +136,10 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+        >
           {/* Card preview */}
           <div className="flex justify-center px-5 pt-5 pb-5">
             <div
@@ -158,7 +163,7 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
         </div>
 
         {/* Actions — always visible at bottom, never scrolls away */}
-        <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5">
+        <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5" style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}>
           <button
             onClick={handleSaveImage}
             disabled={exporting}
@@ -209,6 +214,7 @@ export default function ShareMomentModal({ moment, onClose }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

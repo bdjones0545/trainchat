@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { X, Download, Copy, Share2, Check, Loader2 } from "lucide-react";
 import { toPng } from "html-to-image";
 import ProgramShareCard, { type ProgramCardData } from "./ProgramShareCard";
@@ -152,8 +153,8 @@ export default function ProgramShareModal({ program, onClose }: Props) {
 
   const canNativeShare = typeof navigator !== "undefined" && "share" in navigator;
 
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-end sm:justify-center">
+  return createPortal(
+    <div className="fixed inset-0 z-[60] flex flex-col items-center justify-end sm:justify-center">
       {/* Backdrop — always tappable to close */}
       <div
         className="absolute inset-0 bg-black/70 backdrop-blur-sm"
@@ -163,7 +164,7 @@ export default function ProgramShareModal({ program, onClose }: Props) {
       {/* Sheet — constrained to viewport, scrollable inside */}
       <div
         className="relative w-full max-w-sm mx-4 mb-4 sm:mb-0 flex flex-col bg-card border border-border rounded-2xl shadow-2xl"
-        style={{ maxHeight: "90vh" } as React.CSSProperties}
+        style={{ maxHeight: "90dvh" } as React.CSSProperties}
       >
         {/* Header — always visible at top, never scrolls away */}
         <div className="flex-shrink-0 flex items-center justify-between px-5 pt-5 pb-3 border-b border-border/50">
@@ -183,7 +184,10 @@ export default function ProgramShareModal({ program, onClose }: Props) {
         </div>
 
         {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain">
+        <div
+          className="flex-1 overflow-y-auto overscroll-contain"
+          style={{ WebkitOverflowScrolling: "touch", touchAction: "pan-y" }}
+        >
           {/* Card preview */}
           <div className="flex justify-center px-5 pt-5 pb-5">
             {loading ? (
@@ -240,7 +244,7 @@ export default function ProgramShareModal({ program, onClose }: Props) {
 
         {/* Actions — always visible at bottom, never scrolls away */}
         {card && !loading && (
-          <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5">
+          <div className="flex-shrink-0 px-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5" style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}>
             <button
               onClick={handleSaveImage}
               disabled={exporting}
@@ -294,7 +298,7 @@ export default function ProgramShareModal({ program, onClose }: Props) {
 
         {/* Loading state — placeholder actions */}
         {loading && (
-          <div className="flex-shrink-0 px-5 pb-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5">
+          <div className="flex-shrink-0 px-5 pt-3 border-t border-border/50 grid grid-cols-3 gap-2.5" style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}>
             {[0, 1, 2].map((i) => (
               <div
                 key={i}
@@ -304,6 +308,7 @@ export default function ProgramShareModal({ program, onClose }: Props) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
