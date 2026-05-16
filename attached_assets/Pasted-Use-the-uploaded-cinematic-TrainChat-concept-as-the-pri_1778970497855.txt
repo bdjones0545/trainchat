@@ -1,0 +1,144 @@
+Use the uploaded cinematic TrainChat concept as the primary production interface direction.
+
+Do not treat it as concept art anymore.
+
+This is now the foundation for the real TrainChat conversational experience.
+
+Important:
+Do not redesign the interface into a dashboard or traditional SaaS application.
+
+TrainChat should feel:
+- conversational first
+- adaptive
+- immersive
+- AI-native
+- cinematic
+- alive
+- emotionally intelligent
+
+The uploaded reference successfully captures:
+- AI presence
+- adaptive coaching atmosphere
+- neural intelligence
+- focused interaction
+- immersive emotional design
+- premium futuristic coaching experience
+
+Now evolve this design into the real production chat interface.
+
+CORE EXPERIENCE:
+The main interface should feel like:
+a living AI performance coach operating inside a neural environment.
+
+Atlas should feel present.
+
+The interface should feel like:
+the user is inside an adaptive performance intelligence system.
+
+LAYOUT DIRECTION:
+Preserve the overall structure of the uploaded concept:
+- immersive full-screen conversational interface
+- atmospheric neural terrain
+- AI-led interaction
+- adaptive command suggestions
+- premium glass input bar
+- minimal UI chrome
+- focused conversational hierarchy
+
+Do NOT:
+- overload the screen
+- add dashboard clutter
+- expose too many controls
+- make it feel enterprise/SaaS-heavy
+- make it feel like a generic fitness app
+
+NEURAL TERRAIN SYSTEM:
+The animated neural terrain is now a core part of the TrainChat identity.
+
+Implement:
+- cinematic wave-like neural field
+- true depth perspective
+- subtle motion
+- ambient node pulsing
+- adaptive glow propagation
+- soft cyan/violet energy movement
+- atmospheric fade into darkness
+
+The terrain should:
+- sit behind the UI
+- feel environmental
+- create immersion
+- support the AI presence
+- never overpower readability
+
+AI CONVERSATIONAL PRESENCE:
+The interface should feel like Atlas is actively coaching.
+
+Examples:
+- “I analyzed your recent load patterns.”
+- “Your recovery trend suggests reducing lower-body intensity.”
+- “Shall we refine tomorrow’s power phase?”
+- “I detected elevated fatigue accumulation.”
+
+The AI should feel:
+- calm
+- observant
+- intelligent
+- adaptive
+- highly contextual
+
+INTERACTION MODEL:
+The interface should be conversational-first.
+
+Primary actions:
+- typing
+- voice
+- adaptive suggestions
+- refinement prompts
+- streaming AI responses
+
+Advanced functionality should progressively reveal itself only when contextually relevant.
+
+ANIMATION SYSTEM:
+Implement subtle production-quality animation:
+- streaming AI response transitions
+- adaptive command fades
+- neural terrain wave motion
+- subtle glow pulses
+- node propagation
+- atmospheric depth movement
+- tactile button hover/tap feedback
+- intelligent loading states
+
+Avoid:
+- flashy sci-fi effects
+- gaming animations
+- cyberpunk overload
+- distracting motion
+
+SIDEBAR INTEGRATION:
+The existing right sidebar/training system architecture should remain intact.
+
+However:
+it should emerge progressively from the conversational experience rather than dominating the interface initially.
+
+The sidebar should feel like:
+a live memory/training intelligence layer attached to the AI conversation.
+
+VISUAL LANGUAGE:
+The app should feel like:
+ChatGPT + Apple Vision Pro + adaptive performance intelligence.
+
+Key emotional goals:
+- immersive
+- calm
+- futuristic
+- premium
+- intelligent
+- adaptive
+- emotionally compelling
+
+Very important:
+Prioritize atmosphere, focus, and emotional immersion over feature density.
+
+TrainChat should feel fundamentally different from every existing fitness application.

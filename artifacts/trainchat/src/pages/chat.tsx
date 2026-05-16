@@ -4319,7 +4319,7 @@ export default function Chat() {
                   aria-label="Send message"
                   onClick={() => submitUserMessage({ message: inputText.trim(), source: "typed" })}
                   disabled={!inputText.trim() || stream.isActive}
-                  className="m-2 flex items-center gap-1.5 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-20 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm touch-manipulation font-semibold text-[13px]"
+                  className="m-2 flex items-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-[0_0_14px_rgba(96,165,250,0.28)] touch-manipulation font-semibold text-[13px] tracking-wide"
                 >
                   {stream.isActive ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
