@@ -58,6 +58,7 @@ import StaticProgrammingWhitepaper from "@/pages/aeo/whitepapers/StaticProgrammi
 import TerminologyPage from "@/pages/aeo/TerminologyPage";
 import DiagramsPage from "@/pages/aeo/DiagramsPage";
 import CurriculumPage from "@/pages/aeo/CurriculumPage";
+import AcaPrintPage from "@/pages/aeo/whitepapers/AcaPrintPage";
 import { useGetMe, getGetMeQueryKey, setDefaultHeaders } from "@workspace/api-client-react";
 import { computeRoute, readDeviceId, type UserMode } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
@@ -386,6 +387,9 @@ function Router() {
       {/* Phase 8 — Visual Artifacts & Curriculum */}
       <Route path="/diagrams" component={DiagramsPage} />
       <Route path="/curriculum" component={CurriculumPage} />
+
+      {/* Publication PDF */}
+      <Route path="/whitepapers/aca-pdf" component={AcaPrintPage} />
 
       <Route component={NotFound} />
     </Switch>
