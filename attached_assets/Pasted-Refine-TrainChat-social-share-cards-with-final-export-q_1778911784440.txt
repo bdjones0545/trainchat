@@ -1,0 +1,138 @@
+Refine TrainChat social share cards with final export-quality polish.
+
+Goal:
+Preserve the current premium adaptive AI coaching aesthetic while improving:
+- readability
+- social clarity
+- export quality
+- visual hierarchy
+- adaptive system identity
+
+Do NOT redesign the card.
+This is a refinement pass only.
+
+1. Social-safe exercise naming
+Problem:
+Long technical exercise names wrap awkwardly and clutter the card.
+
+Example:
+"Trap Bar Deadlift (squat-mode, low handles)"
+
+Implement:
+- Add a social/export label formatter.
+- Share cards should prefer concise social labels over full internal exercise names.
+- Keep the detailed exercise names inside the app only.
+
+Examples:
+- "Trap Bar Deadlift — 4x5"
+- "RFESS — 3x6"
+- "Nordic Curl — 3x5"
+
+Rules:
+- preserve recognizable exercise identity
+- remove setup details/variants unless critical
+- preserve prescriptions
+- avoid multi-line wrapping whenever possible
+
+Add:
+formatExerciseForShareCard(exercise)
+
+2. Active week emphasis refinement
+Current:
+W2 node is good but could lock visual attention faster.
+
+Implement:
+- Slightly increase active week node glow
+- Slightly brighten active connector lines
+- Slightly increase contrast between active vs inactive weeks
+- Keep subtle — no excessive neon
+
+Goal:
+Eye should immediately identify the active phase/week.
+
+3. Add subtle adaptive intelligence cue
+Add a small adaptive status line when applicable.
+
+Examples:
+- "Adaptive coaching active"
+- "AI-adjusted from recent performance"
+- "Built from live training feedback"
+
+Rules:
+- Only show when real adaptation/session data exists
+- Keep extremely subtle
+- Typography secondary to headline
+- No fake claims
+
+4. Improve export readability
+Increase readability slightly for compressed social exports.
+
+Adjust:
+- Secondary text contrast slightly upward
+- Exercise panel readability
+- Small text inside week timeline
+- Low-opacity gray text that may wash out after Instagram compression
+
+Rules:
+- Preserve dark premium aesthetic
+- No harsh white text blocks
+- Maintain layered depth
+
+5. Export-safe rendering audit
+Verify cards render cleanly in:
+- iOS save image
+- Instagram feed crops
+- Instagram story crops
+- X/Twitter compression
+- LinkedIn image compression
+
+Specifically check:
+- text clipping
+- glow bloom artifacts
+- exercise wrapping
+- week timeline alignment
+- chip readability
+- safe margins
+
+6. Add export mode support foundation
+Prepare architecture for future:
+- 4:5 Instagram feed
+- 9:16 Story
+- landscape/X mode
+- LinkedIn clean mode
+
+Implementation:
+Add optional:
+shareAspectMode:
+- square
+- portrait
+- landscape
+
+No major UI changes yet.
+Just make the renderer architecture responsive/future-safe.
+
+7. Maintain restraint rules
+Do NOT:
+- increase laser intensity dramatically
+- add animation
+- clutter the card
+- overpower typography
+- turn it into cyberpunk/gamer UI
+
+The card should still feel:
+- elite
+- intelligent
+- adaptive
+- premium
+- performance-focused
+
+8. Regression tests
+- Long exercise names no longer wrap awkwardly
+- Active week visually obvious
+- Exported image matches preview
+- Text remains readable after compression
+- Adaptive cue only appears with real adaptation data
+- No clipping in portrait/social crops
+
+Goal:
+Make the TrainChat share cards feel like a polished premium adaptive coaching brand identity, not just a feature screenshot.

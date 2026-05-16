@@ -1,4 +1,5 @@
 import { forwardRef } from "react";
+import { formatExerciseForShareCard } from "./shareCardUtils";
 
 export interface ProgramCardData {
   title: string;
@@ -12,12 +13,15 @@ export interface ProgramCardData {
   caption: string;
 }
 
+export type ShareAspectMode = "square" | "portrait" | "landscape";
+
 interface Props {
   card: ProgramCardData;
   focusMode?: "strength" | "speed" | "mobility";
   selectedWeekNumber?: number | null;
   weekPhase?: string | null;
   isAdapted?: boolean;
+  shareAspectMode?: ShareAspectMode;
 }
 
 const FOCUS_THEME = {
@@ -46,11 +50,18 @@ const FOCUS_THEME = {
 
 const PHASE_SHORT = ["ESTABLISH", "BUILD", "INTENSIFY", "PEAK"];
 
+const ADAPTIVE_CUES = [
+  "AI-adjusted from recent performance",
+  "Adaptive coaching active",
+  "Built from live training feedback",
+];
+
 const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
-  ({ card, focusMode = "strength", selectedWeekNumber, weekPhase, isAdapted }, ref) => {
+  ({ card, focusMode = "strength", selectedWeekNumber, weekPhase, isAdapted, shareAspectMode = "square" }, ref) => {
     const theme = FOCUS_THEME[focusMode] ?? FOCUS_THEME.strength;
     const { accent, gradientFrom, gradientMid, gradientTo, chipLabels } = theme;
 
+    // Detect active week: explicit prop wins, then scan phases for ◀ marker
     const activeWeekIdx: number =
       selectedWeekNumber != null
         ? selectedWeekNumber - 1
@@ -62,6 +73,14 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
     const activePhaseLabel =
       weekPhase?.toUpperCase() ??
       (activeWeekIdx >= 0 ? (PHASE_SHORT[activeWeekIdx] ?? null) : null);
+
+    // Stable adaptive cue — pick from list based on week index so it varies
+    const adaptiveCue = isAdapted
+      ? (ADAPTIVE_CUES[activeWeekIdx >= 0 ? activeWeekIdx % ADAPTIVE_CUES.length : 0] ?? ADAPTIVE_CUES[0])
+      : null;
+
+    // shareAspectMode is wired for future layout variation; width stays 320 for now
+    void shareAspectMode;
 
     return (
       <div
@@ -134,7 +153,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
           }}
         />
 
-        {/* Diagonal energy streak — secondary (fainter) */}
+        {/* Diagonal energy streak — secondary */}
         <div
           style={{
             position: "absolute",
@@ -241,7 +260,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
             fontSize: 11.5,
             color: `${accent}cc`,
             fontWeight: 500,
-            marginBottom: 16,
+            marginBottom: adaptiveCue ? 6 : 16,
             letterSpacing: "0.005em",
             position: "relative",
           }}
@@ -249,13 +268,33 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
           {card.subtitle}
         </div>
 
+        {/* ── Adaptive intelligence cue ─────────────────────────────────── */}
+        {adaptiveCue && (
+          <div
+            style={{
+              fontSize: 9,
+              fontWeight: 600,
+              color: `${accent}65`,
+              letterSpacing: "0.04em",
+              marginBottom: 14,
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              position: "relative",
+            }}
+          >
+            <span style={{ fontSize: 7, color: `${accent}50`, lineHeight: 1 }}>◆</span>
+            {adaptiveCue}
+          </div>
+        )}
+
         {/* ── Week timeline: W1 ── W2 ● ── W3 ── W4 ─────────────────────── */}
         <div style={{ marginBottom: isAdapted ? 10 : 14, position: "relative" }}>
           <div
             style={{
               fontSize: 7.5,
               fontWeight: 700,
-              color: "#ffffff28",
+              color: "#ffffff42",
               letterSpacing: "0.14em",
               textTransform: "uppercase",
               marginBottom: 9,
@@ -267,7 +306,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
             {[0, 1, 2, 3].map((i) => {
               const isActive = i === activeWeekIdx;
               const isPast = activeWeekIdx >= 0 && i < activeWeekIdx;
-              const nodeSz = isActive ? 11 : 7;
+              const nodeSz = isActive ? 12 : 7;
 
               return (
                 <div
@@ -284,7 +323,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                   <div
                     style={{
                       position: "absolute",
-                      top: isActive ? 4 : 3,
+                      top: isActive ? 5 : 3,
                       left: 0,
                       right: "50%",
                       height: 1,
@@ -292,17 +331,17 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                         i === 0
                           ? "transparent"
                           : isActive
-                          ? `linear-gradient(90deg, ${accent}50, ${accent}90)`
+                          ? `linear-gradient(90deg, ${accent}60, ${accent}aa)`
                           : isPast
-                          ? `${accent}45`
-                          : "#ffffff12",
+                          ? `${accent}55`
+                          : "#ffffff18",
                     }}
                   />
                   {/* Right half connector */}
                   <div
                     style={{
                       position: "absolute",
-                      top: isActive ? 4 : 3,
+                      top: isActive ? 5 : 3,
                       left: "50%",
                       right: 0,
                       height: 1,
@@ -310,24 +349,24 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                         i === 3
                           ? "transparent"
                           : isActive
-                          ? `linear-gradient(90deg, ${accent}90, ${accent}50)`
+                          ? `linear-gradient(90deg, ${accent}aa, ${accent}60)`
                           : isPast
-                          ? `${accent}45`
-                          : "#ffffff12",
+                          ? `${accent}55`
+                          : "#ffffff18",
                     }}
                   />
-                  {/* Active glow ring */}
+                  {/* Active glow halo */}
                   {isActive && (
                     <div
                       style={{
                         position: "absolute",
-                        top: -5,
+                        top: -6,
                         left: "50%",
                         transform: "translateX(-50%)",
-                        width: 21,
-                        height: 21,
+                        width: 24,
+                        height: 24,
                         borderRadius: "50%",
-                        background: `radial-gradient(circle, ${accent}30 0%, transparent 70%)`,
+                        background: `radial-gradient(circle, ${accent}38 0%, transparent 70%)`,
                         pointerEvents: "none",
                       }}
                     />
@@ -341,14 +380,14 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                       background: isActive
                         ? accent
                         : isPast
-                        ? `${accent}55`
-                        : "#ffffff15",
+                        ? `${accent}60`
+                        : "#ffffff18",
                       boxShadow: isActive
-                        ? `0 0 10px ${accent}a0, 0 0 22px ${accent}38`
+                        ? `0 0 12px ${accent}c0, 0 0 28px ${accent}55`
                         : "none",
                       border: isActive
-                        ? `1px solid ${accent}cc`
-                        : "1px solid #ffffff12",
+                        ? `1px solid ${accent}dd`
+                        : `1px solid #ffffff18`,
                       position: "relative",
                       zIndex: 1,
                       marginTop: isActive ? -2 : 0,
@@ -357,9 +396,13 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                   {/* W label */}
                   <div
                     style={{
-                      fontSize: isActive ? 8.5 : 7.5,
+                      fontSize: isActive ? 9 : 7.5,
                       fontWeight: isActive ? 700 : 500,
-                      color: isActive ? accent : isPast ? `${accent}60` : "#ffffff25",
+                      color: isActive
+                        ? accent
+                        : isPast
+                        ? `${accent}75`
+                        : "#ffffff42",
                       marginTop: 5,
                       letterSpacing: "0.04em",
                     }}
@@ -370,9 +413,9 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                   {isActive && activePhaseLabel && (
                     <div
                       style={{
-                        fontSize: 6.5,
+                        fontSize: 7,
                         fontWeight: 700,
-                        color: `${accent}88`,
+                        color: `${accent}90`,
                         letterSpacing: "0.1em",
                         marginTop: 2,
                         textTransform: "uppercase",
@@ -403,7 +446,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
               overflow: "hidden",
             }}
           >
-            {/* Strip glow bloom */}
+            {/* Strip bloom */}
             <div
               style={{
                 position: "absolute",
@@ -446,7 +489,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
         {/* ── Session preview ───────────────────────────────────────────── */}
         <div
           style={{
-            background: "#ffffff04",
+            background: "#ffffff05",
             border: `1px solid ${accent}1c`,
             borderLeft: `2px solid ${accent}cc`,
             borderRadius: "0 10px 10px 0",
@@ -488,11 +531,13 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                 key={i}
                 style={{
                   fontSize: 11,
-                  color: i === 0 ? "#ffffffcc" : "#ffffff90",
+                  color: i === 0 ? "#ffffffd0" : "#ffffffaa",
                   fontWeight: i === 0 ? 500 : 400,
                   display: "flex",
                   alignItems: "center",
                   gap: 7,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
                 }}
               >
                 <span
@@ -501,11 +546,19 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
                     width: 3,
                     height: 3,
                     borderRadius: "50%",
-                    background: i === 0 ? `${accent}90` : "#ffffff20",
+                    background: i === 0 ? `${accent}90` : "#ffffff28",
                     flexShrink: 0,
                   }}
                 />
-                {ex}
+                <span
+                  style={{
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {formatExerciseForShareCard(ex)}
+                </span>
               </div>
             ))}
           </div>
@@ -519,9 +572,9 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
               style={{
                 fontSize: 7.5,
                 fontWeight: 700,
-                color: i === 0 ? accent : `${accent}78`,
+                color: i === 0 ? accent : `${accent}92`,
                 background: i === 0 ? `${accent}14` : `${accent}08`,
-                border: `1px solid ${i === 0 ? `${accent}35` : `${accent}15`}`,
+                border: `1px solid ${i === 0 ? `${accent}35` : `${accent}18`}`,
                 borderRadius: 100,
                 padding: "2px 8px",
                 letterSpacing: "0.1em",
@@ -537,7 +590,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
         <div
           style={{
             paddingTop: 11,
-            borderTop: "1px solid #ffffff0a",
+            borderTop: "1px solid #ffffff0e",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -557,7 +610,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
             <span
               style={{
                 fontSize: 8,
-                color: "#ffffff28",
+                color: "#ffffff42",
                 fontWeight: 700,
                 letterSpacing: "0.1em",
               }}
@@ -565,7 +618,7 @@ const ProgramShareCard = forwardRef<HTMLDivElement, Props>(
               AI COACHING
             </span>
           </div>
-          <span style={{ fontSize: 8, color: "#ffffff1c", fontWeight: 500 }}>
+          <span style={{ fontSize: 8, color: "#ffffff30", fontWeight: 500 }}>
             trainchat.app
           </span>
         </div>

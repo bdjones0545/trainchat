@@ -1,5 +1,6 @@
 import { forwardRef } from "react";
 import type { ShareMoment, ShareMomentType, ShareDay1Exercise } from "@/types/share-moments";
+import { formatExerciseForShareCard } from "./shareCardUtils";
 
 interface Props {
   moment: ShareMoment;
@@ -18,7 +19,7 @@ const TYPE_THEME: Record<ShareMomentType, {
 }> = {
   PROGRAM_GENERATED: {
     accent: "#818cf8",
-    gradientA: "#19173000",
+    gradientA: "#191730",
     gradientB: "#0c0b1a",
     badge: "PROGRAM CREATED",
     badgeBg: "#818cf815",
@@ -26,7 +27,7 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   AGENT_ADJUSTMENT: {
     accent: "#34d399",
-    gradientA: "#0d211800",
+    gradientA: "#0d2118",
     gradientB: "#07100d",
     badge: "PROGRAM UPDATED",
     badgeBg: "#34d39915",
@@ -35,7 +36,7 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   BLOCK_COMPLETE: {
     accent: "#fbbf24",
-    gradientA: "#231a0600",
+    gradientA: "#231a06",
     gradientB: "#120e03",
     badge: "BLOCK COMPLETE",
     badgeBg: "#fbbf2415",
@@ -43,7 +44,7 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   NEXT_BLOCK_READY: {
     accent: "#60a5fa",
-    gradientA: "#0f1e3000",
+    gradientA: "#0f1e30",
     gradientB: "#070e18",
     badge: "NEXT PHASE READY",
     badgeBg: "#60a5fa15",
@@ -51,7 +52,7 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   SESSION_LOG_ADAPTATION: {
     accent: "#a78bfa",
-    gradientA: "#1a142900",
+    gradientA: "#1a1429",
     gradientB: "#0d0a14",
     badge: "PLAN ADAPTED",
     badgeBg: "#a78bfa15",
@@ -60,7 +61,7 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   PROGRESS_MILESTONE: {
     accent: "#fb923c",
-    gradientA: "#23140800",
+    gradientA: "#231408",
     gradientB: "#110a04",
     badge: "MILESTONE",
     badgeBg: "#fb923c15",
@@ -86,7 +87,7 @@ function StatTile({ value, label, accent }: { value: string; label: string; acce
     <div
       style={{
         background: `${accent}08`,
-        border: `1px solid ${accent}18`,
+        border: `1px solid ${accent}1c`,
         borderRadius: 8,
         padding: "8px 10px",
         flex: "1 1 0",
@@ -110,7 +111,7 @@ function StatTile({ value, label, accent }: { value: string; label: string; acce
       <div
         style={{
           fontSize: 8,
-          color: `${accent}70`,
+          color: `${accent}80`,
           fontWeight: 600,
           marginTop: 3,
           letterSpacing: "0.07em",
@@ -155,7 +156,16 @@ function ExerciseRow({
         borderBottom: isLast ? "none" : "1px solid #ffffff09",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0, flex: 1 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 7,
+          minWidth: 0,
+          flex: 1,
+          overflow: "hidden",
+        }}
+      >
         <div
           style={{
             width: 3,
@@ -176,7 +186,7 @@ function ExerciseRow({
             textOverflow: "ellipsis",
           }}
         >
-          {ex.name}
+          {formatExerciseForShareCard(ex.name)}
         </span>
       </div>
       {prescription && (
@@ -184,7 +194,7 @@ function ExerciseRow({
           style={{
             fontSize: 10,
             fontWeight: 700,
-            color: `${accent}bb`,
+            color: `${accent}cc`,
             letterSpacing: "0.03em",
             flexShrink: 0,
             fontVariantNumeric: "tabular-nums",
@@ -310,7 +320,7 @@ function Day1Panel({
                   borderTop: "1px solid #ffffff09",
                   fontSize: 10,
                   fontWeight: 600,
-                  color: "#ffffff35",
+                  color: "#ffffff45",
                   letterSpacing: "0.04em",
                 }}
               >
@@ -319,7 +329,7 @@ function Day1Panel({
             )}
           </div>
         ) : (
-          <div style={{ fontSize: 11, color: "#ffffff30", fontStyle: "italic" }}>
+          <div style={{ fontSize: 11, color: "#ffffff40", fontStyle: "italic" }}>
             Exercise details loading…
           </div>
         )}
@@ -364,7 +374,7 @@ function Day1Fallback({ dayName, accent }: { dayName?: string; accent: string })
       >
         {dayName ?? "Custom Training Day"}
       </div>
-      <div style={{ fontSize: 10, color: "#ffffff30", marginTop: 4 }}>
+      <div style={{ fontSize: 10, color: "#ffffff40", marginTop: 4 }}>
         Personalized by TrainChat® Agent
       </div>
     </div>
@@ -457,15 +467,12 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
   const hasDay1Data = !!(moment.day1?.exercises?.length);
   const day1Name = moment.day1?.name ?? moment.currentDayName;
 
-  // Derive base gradient top color from per-type gradientA (was opaque, now transparent top)
-  const gradientTop = gradientA.replace("00", "") || gradientB;
-
   return (
     <div
       ref={ref}
       style={{
         width: 320,
-        background: `linear-gradient(158deg, ${gradientTop} 0%, ${gradientB} 100%)`,
+        background: `linear-gradient(158deg, ${gradientA} 0%, ${gradientB} 100%)`,
         borderRadius: 22,
         padding: "22px 20px 18px",
         fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif",
@@ -627,7 +634,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
         style={{
           fontSize: 11.5,
           fontWeight: 500,
-          color: `${accent}bb`,
+          color: `${accent}cc`,
           marginBottom: isAdaptation ? 12 : 18,
           letterSpacing: "0.01em",
           lineHeight: 1.4,
@@ -667,7 +674,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
       <div
         style={{
           paddingTop: 12,
-          borderTop: "1px solid #ffffff0a",
+          borderTop: "1px solid #ffffff0e",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -687,7 +694,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
           <span
             style={{
               fontSize: 8,
-              color: "#ffffff28",
+              color: "#ffffff42",
               fontWeight: 700,
               letterSpacing: "0.1em",
               textTransform: "uppercase",
@@ -696,7 +703,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
             AI Coaching
           </span>
         </div>
-        <span style={{ fontSize: 8.5, color: "#ffffff1c", fontWeight: 500 }}>
+        <span style={{ fontSize: 8.5, color: "#ffffff30", fontWeight: 500 }}>
           trainchat.app
         </span>
       </div>
