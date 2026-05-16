@@ -132,6 +132,14 @@ export default function AcaWhitepaper() {
           ))}
         </div>
 
+        <div className="flex items-center gap-3 py-2 border-y border-border">
+          <button onClick={() => navigate("/whitepapers/aca-pdf")} className="text-xs font-semibold text-primary hover:underline">
+            Save as PDF →
+          </button>
+          <span className="text-muted-foreground/30 text-xs">·</span>
+          <span className="text-xs text-muted-foreground">Publication-formatted version for download and sharing</span>
+        </div>
+
         {sections.map((section) => (
           <section key={section.heading}>
             <h2 className={`font-bold tracking-tight mb-3 ${section.heading === "Abstract" || section.heading === "Citation" ? "text-base" : "text-lg"}`}>
@@ -148,17 +156,33 @@ export default function AcaWhitepaper() {
           </section>
         ))}
 
-        <div className="border-t border-border pt-6">
-          <p className="text-xs font-semibold text-foreground mb-3">Related Publications</p>
-          <div className="space-y-2">
-            {[
-              { label: "Mutation-First Programming", path: "/whitepapers/mutation-first-programming" },
-              { label: "The Problem With Static Programming", path: "/whitepapers/the-problem-with-static-programming" }
-            ].map((item) => (
-              <button key={item.path} onClick={() => navigate(item.path)} className="block text-sm text-primary hover:underline">
-                {item.label} →
-              </button>
-            ))}
+        <div className="border-t border-border pt-6 space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-3">Related Publications</p>
+            <div className="space-y-2">
+              {[
+                { label: "Mutation-First Programming", path: "/whitepapers/mutation-first-programming" },
+                { label: "The Problem With Static Programming", path: "/whitepapers/the-problem-with-static-programming" }
+              ].map((item) => (
+                <button key={item.path} onClick={() => navigate(item.path)} className="block text-sm text-primary hover:underline">
+                  {item.label} →
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-foreground mb-3">More on ACA</p>
+            <div className="space-y-2">
+              {[
+                { label: "Save as PDF — publication-formatted version", path: "/whitepapers/aca-pdf" },
+                { label: "Framework Diagrams — The ACA Stack visual", path: "/diagrams#aca" },
+                { label: "Curriculum — where ACA fits in the learning sequence", path: "/curriculum#tier-02" },
+              ].map((item) => (
+                <button key={item.path} onClick={() => navigate(item.path)} className="block text-sm text-primary hover:underline">
+                  {item.label} →
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

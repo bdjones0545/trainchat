@@ -211,6 +211,28 @@ export default function FrameworksPage() {
         </section>
 
         <FaqBlock items={faqs} />
+
+        <section className="border-t border-border pt-6">
+          <p className="text-sm font-semibold text-foreground mb-3">Visual and Educational Resources</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => navigate("/diagrams")}
+              className="text-left border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-muted/20 transition-colors group"
+            >
+              <p className="text-xs font-mono text-primary mb-1">Visual Artifacts</p>
+              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Framework Diagrams</p>
+              <p className="text-xs text-muted-foreground mt-1">The ACA Stack, MFP Hierarchy, DPF Loop, LSM Triad, CTM Map — five CSS-built visual artifacts with canonical names and URLs.</p>
+            </button>
+            <button
+              onClick={() => navigate("/curriculum")}
+              className="text-left border border-border rounded-xl p-4 hover:border-primary/50 hover:bg-muted/20 transition-colors group"
+            >
+              <p className="text-xs font-mono text-primary mb-1">Curriculum</p>
+              <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Adaptive Coaching Curriculum</p>
+              <p className="text-xs text-muted-foreground mt-1">A five-tier, 37-resource learning sequence — from foundational concepts through framework core, scientific grounding, doctrine, and advanced publications.</p>
+            </button>
+          </div>
+        </section>
       </div>
     </AeoLayout>
   );

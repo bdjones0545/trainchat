@@ -8,6 +8,7 @@ const publications = [
     abbr: "ACA",
     description: "Defines the structural design of TrainChat's AI coaching system — three layers (coaching intelligence, adaptive programming, conversational interface) with distinct responsibilities — and argues that architectural separation is the minimum condition for principled coaching decisions.",
     path: "/whitepapers/adaptive-coaching-architecture",
+    pdfPath: "/whitepapers/aca-pdf",
     year: "2025",
     pages: "~12 pages"
   },
@@ -69,10 +70,9 @@ export default function WhitepapersHub() {
 
         <div className="space-y-4">
           {publications.map((pub) => (
-            <button
+            <div
               key={pub.path}
-              onClick={() => navigate(pub.path)}
-              className="w-full text-left border border-border rounded-xl p-5 hover:border-primary/50 hover:bg-muted/20 transition-all group"
+              className="border border-border rounded-xl p-5 hover:border-primary/50 hover:bg-muted/20 transition-all"
             >
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
@@ -80,12 +80,22 @@ export default function WhitepapersHub() {
                   <span className="text-xs text-muted-foreground">{pub.year}</span>
                   <span className="text-xs text-muted-foreground">{pub.pages}</span>
                 </div>
+                {"pdfPath" in pub && pub.pdfPath && (
+                  <button
+                    onClick={() => navigate(pub.pdfPath!)}
+                    className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors flex-shrink-0 border border-border rounded px-2 py-0.5 hover:border-primary"
+                  >
+                    Save as PDF
+                  </button>
+                )}
               </div>
-              <h2 className="text-base font-bold text-foreground group-hover:text-primary transition-colors mb-0.5">{pub.title}</h2>
-              <p className="text-xs text-muted-foreground italic mb-2">{pub.subtitle}</p>
-              <p className="text-sm text-muted-foreground leading-relaxed">{pub.description}</p>
-              <p className="text-xs font-semibold text-primary mt-3">Read →</p>
-            </button>
+              <button className="w-full text-left group" onClick={() => navigate(pub.path)}>
+                <h2 className="text-base font-bold text-foreground group-hover:text-primary transition-colors mb-0.5">{pub.title}</h2>
+                <p className="text-xs text-muted-foreground italic mb-2">{pub.subtitle}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{pub.description}</p>
+                <p className="text-xs font-semibold text-primary mt-3">Read →</p>
+              </button>
+            </div>
           ))}
         </div>
 
