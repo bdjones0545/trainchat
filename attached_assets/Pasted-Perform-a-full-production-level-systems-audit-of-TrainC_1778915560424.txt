@@ -1,0 +1,468 @@
+Perform a full production-level systems audit of TrainChat.
+
+This is NOT a rewrite request.
+Do NOT immediately refactor large systems.
+First inspect, map, analyze, stress test, diagnose, and compare.
+
+The goal is to identify:
+- hidden architectural weaknesses
+- production risks
+- synchronization failures
+- agent logic issues
+- UX inconsistencies
+- coaching-quality problems
+- scalability bottlenecks
+- state-management drift
+- opportunities for intelligence improvements
+- competitive positioning versus other AI fitness/coaching apps
+
+========================
+SECTION 1 — AGENT ARCHITECTURE AUDIT
+========================
+
+Identify every agent, orchestrator, service, helper, and AI-driven workflow.
+
+Map:
+- responsibilities
+- inputs/outputs
+- tool access
+- memory usage
+- state ownership
+- handoffs
+- fallback behavior
+- deterministic vs LLM-controlled logic
+
+Audit:
+- prompt quality
+- role clarity
+- duplicated responsibilities
+- prompt drift
+- unsafe autonomy
+- overuse of LLM reasoning
+- underuse of deterministic systems
+- orchestration inefficiencies
+- recursive failure loops
+- silent failure states
+
+Explain whether the architecture feels:
+- cohesive
+- fragmented
+- over-engineered
+- under-engineered
+- scalable
+- production-safe
+
+========================
+SECTION 2 — PROGRAM GENERATION PIPELINE
+========================
+
+Trace the full lifecycle:
+user input → intent detection → generation → persistence → hydration → sidebar sync → edit refinement.
+
+Audit:
+- program generation quality
+- save consistency
+- stale UI risks
+- cache invalidation
+- race conditions
+- conversation scoping
+- active system selection
+- failed generation recovery
+- streaming stability
+- synchronization between DB and frontend
+
+Identify any place where:
+- the UI can lie
+- state can drift
+- the agent can hallucinate successful changes
+- saved data can mismatch displayed data
+
+========================
+SECTION 3 — MUTATION / EDIT SYSTEM
+========================
+
+Audit:
+- swaps
+- exercise replacements
+- volume/intensity edits
+- week edits
+- block edits
+- remove/add exercise flows
+- “make it harder/easier”
+- “make it more explosive”
+- “reduce fatigue”
+- “change this whole week”
+- “make it 3 days”
+
+Confirm:
+- mutations are DB verified
+- changes are reflected in UI immediately
+- rollback/undo works
+- change receipts are accurate
+- no stale cache exists after edits
+- the system never claims success before persistence succeeds
+
+Identify:
+- dangerous mutation paths
+- duplicated logic
+- hidden state mismatches
+- brittle flows
+
+========================
+SECTION 4 — INTENT DETECTION + SCOPE RESOLUTION
+========================
+
+Audit:
+- rule-based intent logic
+- LLM intent interpretation
+- fallback behavior
+- spoken-number normalization
+- ambiguity handling
+
+Stress test commands like:
+- “swap that”
+- “make this harder”
+- “remove squats”
+- “change day 2”
+- “fix this week”
+- “more athletic”
+- “more explosive”
+- “lower fatigue”
+- “adjust everything”
+
+Identify:
+- unnecessary clarification loops
+- wrong scope assumptions
+- hallucinated context
+- intent misses
+- inconsistent behavior
+
+========================
+SECTION 5 — CONSTRAINT MEMORY + SAFETY
+========================
+
+Audit:
+- injuries
+- pain regions
+- equipment limitations
+- disliked exercises
+- session duration
+- experience level
+- sport context
+- training goals
+
+Confirm:
+- constraints persist across turns
+- constraints influence edits
+- constraints influence generation
+- constraints are enforced structurally
+
+Identify:
+- places constraints are remembered conversationally but ignored behaviorally
+- unsafe programming logic
+- contradictory outputs
+
+========================
+SECTION 6 — EXERCISE LIBRARY + CLASSIFICATION
+========================
+
+Audit:
+- exercise taxonomy
+- movement categories
+- role assignments
+- substitutions
+- duplicate exercises
+- classification quality
+
+Verify:
+- power movements
+- Olympic variations
+- sprint/jump work
+- med ball throws
+- strength lifts
+- accessories
+- trunk/core work
+
+Check whether:
+- exercise selection feels coach-like
+- substitutions make sense
+- exercise ordering is logical
+
+========================
+SECTION 7 — TRAINING QUALITY AUDIT
+========================
+
+Audit the actual coaching intelligence.
+
+Evaluate:
+- progression quality
+- fatigue management
+- power-before-strength sequencing
+- hypertrophy structure
+- sport transfer
+- movement balance
+- beginner vs advanced scaling
+- deload logic
+- intensity management
+- session structure
+- weekly organization
+
+Identify where outputs feel:
+- generic
+- repetitive
+- random
+- unrealistic
+- non-coach-like
+
+Also identify where TrainChat feels:
+- genuinely intelligent
+- adaptive
+- advanced
+- differentiated from normal AI fitness apps
+
+========================
+SECTION 8 — RESEARCH AGENT AUDIT
+========================
+
+Audit:
+- research workflows
+- knowledge evaluation
+- source scoring
+- citation handling
+- update logic
+- safety layers
+
+Identify:
+- whether the research agent needs web tools
+- whether current capabilities are sufficient
+- whether external tools would help or add unnecessary complexity
+
+DO NOT recommend:
+- LangChain
+- CrewAI
+- Firecrawl
+- Claude Code
+- generic frameworks
+
+unless there is a specific, justified bottleneck.
+
+Preserve TrainChat’s custom architecture.
+
+========================
+SECTION 9 — FRONTEND UX + LIVE EXPERIENCE
+========================
+
+Audit:
+- streaming feel
+- sidebar synchronization
+- loading states
+- mobile UX
+- scroll anchoring
+- animation polish
+- “intelligence feel”
+- mutation visibility
+- feedback clarity
+
+Identify:
+- dead states
+- confusing states
+- stale UI
+- trust-breaking behavior
+- UX friction
+
+Explain whether the product feels:
+- premium
+- responsive
+- alive
+- intelligent
+- trustworthy
+
+========================
+SECTION 10 — STATE / CACHE / PERSISTENCE
+========================
+
+Audit:
+- React Query keys
+- invalidation patterns
+- local state sync
+- DB sync
+- optimistic updates
+- hydration logic
+- conversation-scoped state
+- stale cache risks
+
+Identify:
+- race conditions
+- memory leaks
+- unnecessary rerenders
+- duplicated state ownership
+- brittle synchronization logic
+
+========================
+SECTION 11 — BACKEND + SERVICES
+========================
+
+Map:
+- routes
+- services
+- orchestration helpers
+- persistence layers
+- LLM integrations
+
+Audit:
+- timeout handling
+- retries
+- validation
+- fallback handling
+- error recovery
+- partial failure handling
+- duplicated logic
+
+Identify:
+- fragile architecture
+- hidden dependencies
+- production risks
+
+========================
+SECTION 12 — OBSERVABILITY + TESTING
+========================
+
+Audit:
+- logs
+- tracing
+- monitoring
+- debug tooling
+- test coverage
+
+Recommend tests for:
+- generation
+- mutations
+- intent resolution
+- constraints
+- sidebar hydration
+- persistence
+- research agent behavior
+- failed LLM calls
+- stale cache recovery
+
+========================
+SECTION 13 — COMPETITIVE INDUSTRY COMPARISON
+========================
+
+Compare TrainChat against:
+- traditional workout apps
+- AI workout generators
+- AI fitness chatbots
+- coaching platforms
+- enterprise wellness systems
+- emerging AI agent products
+
+Rate TrainChat from 1–10 in:
+- coaching intelligence
+- personalization depth
+- conversational UX
+- live adaptation
+- mutation/edit capability
+- memory/persistence
+- orchestration sophistication
+- technical architecture
+- training quality
+- realism of coaching behavior
+- innovation
+- business potential
+- defensibility
+- scalability
+- uniqueness
+- product vision
+
+Also rate:
+- how difficult TrainChat would be to replicate
+for:
+  - solo developers
+  - small startups
+  - funded AI companies
+  - traditional fitness companies
+
+Identify:
+- what feels “next generation”
+- what still feels unfinished
+- where TrainChat is genuinely differentiated
+- where competitors could catch up
+
+Provide an honest comparison against:
+- generic GPT wrappers
+- template agent apps
+- modern AI products
+- advanced SaaS fitness platforms
+
+========================
+FINAL OUTPUT FORMAT
+========================
+
+A. Executive Summary
+- Overall system rating out of 10
+- Biggest strength
+- Biggest weakness
+- Highest-risk issue
+- Highest-ROI improvement
+
+B. Architecture Map
+- Explain every major system and connection
+
+C. Critical Bugs / Risks
+For each:
+- files involved
+- root cause
+- user-facing symptom
+- severity
+- recommended fix
+
+D. Competitive Ratings Table
+Compare TrainChat against:
+- traditional fitness apps
+- AI workout generators
+- AI chatbot apps
+- coaching software
+- emerging AI agents
+
+Use scoring tables.
+
+E. System Strengths
+- What TrainChat does unusually well
+- What feels advanced
+- What feels difficult to replicate
+
+F. Weaknesses + Technical Debt
+- Immediate risks
+- Long-term risks
+- Scaling concerns
+
+G. Architecture Improvements
+Separate into:
+- Must fix now
+- Should fix soon
+- Nice to have
+- Do not touch yet
+
+H. Search Existing Codebase For Solutions
+Before recommending rewrites:
+- inspect existing helpers
+- existing services
+- existing patterns
+- reusable utilities
+
+Avoid duplicate systems.
+
+I. Phased Improvement Plan
+Phase 1 — Stability + safety
+Phase 2 — Architecture cleanup
+Phase 3 — Coaching intelligence
+Phase 4 — UX refinement
+Phase 5 — Research agent evolution
+
+Important constraints:
+- Preserve TrainChat’s custom architecture.
+- Prefer surgical improvements over rewrites.
+- Do not replace custom systems with generic frameworks.
+- Prioritize production stability, coaching quality, intelligence feel, and user trust.
+- Be brutally honest and technically thorough.
