@@ -33,6 +33,305 @@
 
 import { logger } from "./logger";
 
+// ─── Movement Classification (fine-grained) ────────────────────────────────────
+//
+// More precise than ExerciseRole for prescription protection purposes.
+// Used to enforce hard rules per movement quality (e.g. explosive ceiling).
+
+export type MovementClassification =
+  | "power"               // Olympic lifts: clean, snatch, jerk, kettlebell swing
+  | "plyometric"          // Jumps: box jump, broad jump, standing long jump, squat jump
+  | "elastic"             // Continuous/cyclic: pogo hop, ankle hop, bounding, triple hop
+  | "reactive"            // Depth/drop jumps: reactive SSC, depth jump, hurdle hop
+  | "sprint"              // Linear sprints, acceleration runs, resisted sprints
+  | "medball_power"       // Med ball throws, slams, rotational power
+  | "maximal_strength"    // Barbell compounds at high intensity
+  | "hypertrophy"         // Accessory/isolation with moderate-high reps
+  | "resilience"          // Isometrics, tempo, slow eccentrics
+  | "aerobic_density"     // Long-duration circuits, aerobic intervals
+  | "mobility_corrective" // Mobility flows, correctives, prehab
+  | "conditioning_metabolic"; // Metabolic conditioning: sleds, bike intervals, rowers
+
+// ─── Primary Intent ────────────────────────────────────────────────────────────
+//
+// High-level intent that MUST be preserved across adaptation remapping.
+
+export type PrimaryIntent =
+  | "explosive"           // Velocity, neural drive, elastic energy — NEVER convert to fatigue
+  | "maximal_strength"    // Max force production at low reps
+  | "hypertrophy"         // Mechanical tension + metabolic stress at moderate reps
+  | "resilience"          // Connective tissue, control, tempo
+  | "aerobic_density"     // Cardiovascular and mitochondrial adaptation
+  | "mobility_corrective" // Tissue quality, range, activation
+  | "conditioning_metabolic"; // Metabolic fatigue tolerance
+
+// Classifications whose biomechanical/neural intent must NEVER be overridden by endurance remapping
+const EXPLOSIVE_CLASSIFICATIONS = new Set<MovementClassification>([
+  "power", "plyometric", "elastic", "reactive", "sprint", "medball_power",
+]);
+
+// Hard prescription ceilings for explosive exercises
+const EXPLOSIVE_REP_CEILING = 5;
+const EXPLOSIVE_REST_FLOOR_SECONDS = 60; // minimum rest in seconds
+
+// Fine-grained classification patterns (checked before role fallback)
+const MOVEMENT_CLASSIFICATION_PATTERNS: Array<{
+  classification: MovementClassification;
+  patterns: RegExp[];
+}> = [
+  {
+    classification: "sprint",
+    patterns: [
+      /\bsprint\b/i, /\bacceleration\s+(run|drill)/i, /fly\s+sprint/i,
+      /\d+m\s+sprint/i, /resisted\s+sprint/i, /wicket\s+run/i,
+    ],
+  },
+  {
+    classification: "medball_power",
+    patterns: [
+      /med(icine)?\s+ball\s+(slam|throw|toss|pass|rotational|chest)/i,
+      /rotational\s+(med\s+ball|throw)/i,
+      /overhead\s+med(icine)?\s+ball/i,
+      /chest\s+pass/i,
+      /side\s+throw/i,
+    ],
+  },
+  {
+    classification: "elastic",
+    patterns: [
+      /pogo\s+hop/i, /ankle\s+hop/i, /continuous\s+hop/i,
+      /elastic\s+bound/i, /triple\s+hop/i, /alternating\s+bound/i,
+      /single\s+leg\s+hop/i, /\bhop\s+for\s+distance/i,
+    ],
+  },
+  {
+    classification: "reactive",
+    patterns: [
+      /drop\s+jump/i, /depth\s+jump/i, /reactive\s+jump/i,
+      /hurdle\s+hop/i, /hurdle\s+jump/i, /box\s+drop/i,
+      /shock\s+method/i, /reactive\s+drop/i,
+    ],
+  },
+  {
+    classification: "plyometric",
+    patterns: [
+      /box\s+jump/i, /squat\s+jump/i, /jump\s+squat/i,
+      /broad\s+jump/i, /standing\s+long\s+jump/i, /vertical\s+jump/i,
+      /tuck\s+jump/i, /split\s+jump/i, /lateral\s+bound/i,
+      /\bbound\b/i, /plyometric/i, /\bplyo\b/i,
+      /countermovement\s+jump/i, /cmj\b/i,
+    ],
+  },
+  {
+    classification: "power",
+    patterns: [
+      /power\s+clean/i, /power\s+snatch/i, /hang\s+clean/i, /hang\s+snatch/i,
+      /clean\s+(and\s+)?jerk/i, /clean\s+pull/i, /snatch\s+pull/i, /\bjerk\b/i,
+      /kettlebell\s+swing/i, /kb\s+swing/i,
+    ],
+  },
+];
+
+const INTENT_BY_CLASSIFICATION: Record<MovementClassification, PrimaryIntent> = {
+  power:                 "explosive",
+  plyometric:            "explosive",
+  elastic:               "explosive",
+  reactive:              "explosive",
+  sprint:                "explosive",
+  medball_power:         "explosive",
+  maximal_strength:      "maximal_strength",
+  hypertrophy:           "hypertrophy",
+  resilience:            "resilience",
+  aerobic_density:       "aerobic_density",
+  mobility_corrective:   "mobility_corrective",
+  conditioning_metabolic:"conditioning_metabolic",
+};
+
+/** Classify an exercise name into a fine-grained MovementClassification. */
+export function classifyMovementClassification(name: string): MovementClassification {
+  for (const { classification, patterns } of MOVEMENT_CLASSIFICATION_PATTERNS) {
+    if (patterns.some((p) => p.test(name))) return classification;
+  }
+
+  // Fallback via ExerciseRole (classified later in this file)
+  const role = classifyExerciseRole(name);
+  switch (role) {
+    case "power_plyometric": return "plyometric";
+    case "primary_strength":
+    case "secondary_strength": return "maximal_strength";
+    case "hypertrophy_accessory":
+    case "isolation": return "hypertrophy";
+    case "mobility_prehab": return "mobility_corrective";
+    case "conditioning": return "conditioning_metabolic";
+    default: return "hypertrophy";
+  }
+}
+
+/** Returns the PrimaryIntent for an exercise by name. */
+export function getPrimaryIntent(name: string): PrimaryIntent {
+  return INTENT_BY_CLASSIFICATION[classifyMovementClassification(name)];
+}
+
+/** Returns true when the exercise has explosive primary intent that must be protected. */
+export function isExplosiveExercise(name: string): boolean {
+  return EXPLOSIVE_CLASSIFICATIONS.has(classifyMovementClassification(name));
+}
+
+// ─── Explosive Prescription Protection ─────────────────────────────────────────
+//
+// Enforces hard rep ceilings and rest floors for explosive exercises.
+// Called during any adaptation remapping that could increase reps or shorten rest.
+
+export interface ExplosiveProtectionResult {
+  sets: number;
+  reps: string;
+  rest: string;
+  intentPreserved: boolean;
+  violations: string[];
+}
+
+/** Parses a rest string ("30–60 sec", "2 min", "90 sec") to total seconds. Returns null if unparseable. */
+export function parseRestToSeconds(rest: string): number | null {
+  const minMatch = rest.match(/(\d+)\s*min/i);
+  const secMatch = rest.match(/(\d+)\s*sec/i);
+  if (minMatch) return parseInt(minMatch[1], 10) * 60;
+  if (secMatch) return parseInt(secMatch[1], 10);
+  return null;
+}
+
+/**
+ * Enforces explosive prescription protection rules.
+ * Hard ceilings:
+ *   - max reps per set: 5
+ *   - min rest: 60 sec
+ * Does NOT change sets (volume can be lowered separately via fatigue signal).
+ */
+export function enforceExplosivePrescriptionProtection(
+  exerciseName: string,
+  sets: number,
+  reps: string,
+  rest: string,
+): ExplosiveProtectionResult {
+  const violations: string[] = [];
+  let protectedReps = reps;
+  let protectedRest = rest;
+  let intentPreserved = true;
+
+  // Skip time-based reps (e.g. "30 sec")
+  const isTimeBased = /sec|min/i.test(reps);
+
+  if (!isTimeBased) {
+    const rangeMatch = reps.match(/^(\d+)\s*[–\-]\s*(\d+)/);
+    const singleMatch = reps.match(/^(\d+)$/);
+
+    if (rangeMatch) {
+      const lo = parseInt(rangeMatch[1], 10);
+      const hi = parseInt(rangeMatch[2], 10);
+      if (lo > EXPLOSIVE_REP_CEILING || hi > EXPLOSIVE_REP_CEILING) {
+        const clampedLo = Math.min(lo, EXPLOSIVE_REP_CEILING);
+        const clampedHi = Math.min(hi, EXPLOSIVE_REP_CEILING);
+        protectedReps = clampedLo === clampedHi
+          ? String(clampedLo)
+          : `${clampedLo}–${clampedHi}`;
+        violations.push(
+          `reps capped: "${reps}" → "${protectedReps}" (explosive ceiling: ${EXPLOSIVE_REP_CEILING})`,
+        );
+        intentPreserved = false;
+      }
+    } else if (singleMatch) {
+      const val = parseInt(singleMatch[1], 10);
+      if (val > EXPLOSIVE_REP_CEILING) {
+        protectedReps = String(EXPLOSIVE_REP_CEILING);
+        violations.push(
+          `reps capped: "${reps}" → "${protectedReps}" (explosive ceiling: ${EXPLOSIVE_REP_CEILING})`,
+        );
+        intentPreserved = false;
+      }
+    }
+  }
+
+  // Enforce rest floor
+  const restSec = parseRestToSeconds(rest);
+  if (restSec !== null && restSec < EXPLOSIVE_REST_FLOOR_SECONDS) {
+    protectedRest = "60–90 sec";
+    violations.push(
+      `rest raised: "${rest}" → "${protectedRest}" (explosive rest floor: ${EXPLOSIVE_REST_FLOOR_SECONDS}s)`,
+    );
+    intentPreserved = false;
+  }
+
+  return { sets, reps: protectedReps, rest: protectedRest, intentPreserved, violations };
+}
+
+// ─── Prescription Validation ────────────────────────────────────────────────────
+//
+// Validates that a prescription does not violate movement-classification rules.
+// Called as a post-remapping check; violations are logged as warnings.
+
+export interface PrescriptionValidationViolation {
+  exercise: string;
+  classification: MovementClassification;
+  field: "reps" | "rest";
+  rule: string;
+  value: string;
+}
+
+export interface PrescriptionValidationResult {
+  valid: boolean;
+  violations: PrescriptionValidationViolation[];
+}
+
+/**
+ * Validates a single exercise prescription against its movement classification rules.
+ *
+ * Rejects:
+ *   - power/plyometric/elastic/reactive/sprint/medball_power exercises with > 5 reps
+ *   - explosive exercises with rest below 60 sec
+ *   - sprint exercises with hypertrophy rep ranges (> 6 reps)
+ */
+export function validateExercisePrescription(
+  name: string,
+  reps: string,
+  rest: string,
+): PrescriptionValidationResult {
+  const violations: PrescriptionValidationViolation[] = [];
+  const classification = classifyMovementClassification(name);
+
+  if (!EXPLOSIVE_CLASSIFICATIONS.has(classification)) {
+    return { valid: true, violations: [] };
+  }
+
+  const isTimeBased = /sec|min/i.test(reps);
+  if (!isTimeBased) {
+    const repMatch = reps.match(/(\d+)/);
+    if (repMatch) {
+      const minRep = parseInt(repMatch[1], 10);
+      if (minRep > EXPLOSIVE_REP_CEILING) {
+        violations.push({
+          exercise: name,
+          classification,
+          field: "reps",
+          rule: `explosive exercises must not exceed ${EXPLOSIVE_REP_CEILING} reps/set`,
+          value: reps,
+        });
+      }
+    }
+  }
+
+  const restSec = parseRestToSeconds(rest);
+  if (restSec !== null && restSec < EXPLOSIVE_REST_FLOOR_SECONDS) {
+    violations.push({
+      exercise: name,
+      classification,
+      field: "rest",
+      rule: `explosive exercises require at least ${EXPLOSIVE_REST_FLOOR_SECONDS}s rest`,
+      value: rest,
+    });
+  }
+
+  return { valid: violations.length === 0, violations };
+}
+
 // ─── Exercise Role ─────────────────────────────────────────────────────────────
 
 export type ExerciseRole =

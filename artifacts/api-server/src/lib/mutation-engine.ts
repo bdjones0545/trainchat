@@ -28,6 +28,13 @@ import {
   getRegression,
   type AdditionCategory,
 } from "./exercise-intelligence";
+import {
+  isExplosiveExercise,
+  classifyMovementClassification,
+  getPrimaryIntent,
+  enforceExplosivePrescriptionProtection,
+  validateExercisePrescription,
+} from "./prescription-remap";
 import { logger } from "./logger";
 
 // ─── Mutation Scope Classification ───────────────────────────────────────────
@@ -350,20 +357,89 @@ function handleTransformation(
 }
 
 function applyTransformationToExercise(ex: Exercise, type: string): void {
+  const originalReps = ex.reps;
+  const originalRest = ex.rest;
+  const classification = classifyMovementClassification(ex.name);
+  const primaryIntent = getPrimaryIntent(ex.name);
+  const explosive = isExplosiveExercise(ex.name);
+
   switch (type) {
     case "endurance":
     case "endurance_focus":
-    case "conditioning_focus":
-      ex.reps = increaseReps(ex.reps);
-      ex.rest = "30-60 sec";
+    case "conditioning_focus": {
+      if (explosive) {
+        // Explosive exercises MUST NOT be converted to endurance/fatigue prescriptions.
+        // Shift order: density/accessory → tempo/isometrics → NOT explosive movements.
+        // Enforce protection in case existing prescription is already non-compliant.
+        const protection = enforceExplosivePrescriptionProtection(
+          ex.name,
+          ex.sets ?? 3,
+          ex.reps ?? "3–5",
+          ex.rest ?? "2–3 min",
+        );
+        ex.reps = protection.reps;
+        ex.rest = protection.rest;
+
+        logger.info(
+          {
+            exercise: ex.name,
+            classification,
+            primaryIntent,
+            originalPrescription: { reps: originalReps, rest: originalRest },
+            remappedPrescription: { reps: ex.reps, rest: ex.rest },
+            intentPreserved: protection.intentPreserved,
+            violations: protection.violations,
+            reason: "endurance_transformation_skipped — explosive exercises preserve velocity/quality intent",
+          },
+          "[PrescriptionAdaptation:ExplosiveProtection]",
+        );
+      } else {
+        ex.reps = increaseReps(ex.reps);
+        ex.rest = "30–60 sec";
+
+        logger.info(
+          {
+            exercise: ex.name,
+            classification,
+            primaryIntent,
+            originalPrescription: { reps: originalReps, rest: originalRest },
+            remappedPrescription: { reps: ex.reps, rest: ex.rest },
+            intentPreserved: true,
+          },
+          "[PrescriptionAdaptation:EnduranceShift]",
+        );
+      }
+
+      // Validation pass — catch any violation that slipped through
+      const validation = validateExercisePrescription(ex.name, ex.reps ?? "", ex.rest ?? "");
+      if (!validation.valid) {
+        logger.warn(
+          { exercise: ex.name, classification, violations: validation.violations },
+          "[PrescriptionAdaptation:ValidationFailed] Prescription violates movement-classification rules",
+        );
+      }
       break;
+    }
 
     case "power":
     case "power_explosive_focus":
-    case "speed_focus":
-      ex.reps = "3-5";
-      ex.rest = "2-3 min";
+    case "speed_focus": {
+      ex.reps = "3–5";
+      ex.rest = "2–3 min";
+
+      logger.info(
+        {
+          exercise: ex.name,
+          classification,
+          primaryIntent,
+          originalPrescription: { reps: originalReps, rest: originalRest },
+          remappedPrescription: { reps: ex.reps, rest: ex.rest },
+          intentPreserved: true,
+        },
+        "[PrescriptionAdaptation:PowerShift]",
+      );
       break;
+    }
 
     case "strength":
     case "strength_focus":
@@ -374,10 +450,37 @@ function applyTransformationToExercise(ex: Exercise, type: string): void {
 
     case "hypertrophy":
     case "hypertrophy_focus":
-    case "increase_volume":
-      ex.reps = "8-12";
-      ex.rest = "60-90 sec";
+    case "increase_volume": {
+      if (explosive) {
+        // Do not push hypertrophy rep ranges onto explosive exercises either
+        const protection = enforceExplosivePrescriptionProtection(
+          ex.name,
+          ex.sets ?? 3,
+          ex.reps ?? "3–5",
+          ex.rest ?? "2–3 min",
+        );
+        ex.reps = protection.reps;
+        ex.rest = protection.rest;
+
+        logger.info(
+          {
+            exercise: ex.name,
+            classification,
+            primaryIntent,
+            originalPrescription: { reps: originalReps, rest: originalRest },
+            remappedPrescription: { reps: ex.reps, rest: ex.rest },
+            intentPreserved: protection.intentPreserved,
+            violations: protection.violations,
+            reason: "hypertrophy_transformation_skipped — explosive exercises preserve velocity/quality intent",
+          },
+          "[PrescriptionAdaptation:ExplosiveProtection]",
+        );
+      } else {
+        ex.reps = "8-12";
+        ex.rest = "60-90 sec";
+      }
       break;
+    }
 
     case "recovery":
     case "recovery_focus":
@@ -388,13 +491,27 @@ function applyTransformationToExercise(ex: Exercise, type: string): void {
       ex.rest = "2-3 min";
       break;
 
-    case "reduce_time":
-      ex.rest = "30-45 sec";
+    case "reduce_time": {
+      if (explosive) {
+        // Never shorten rest below floor for explosive exercises
+        const protection = enforceExplosivePrescriptionProtection(
+          ex.name,
+          ex.sets ?? 3,
+          ex.reps ?? "3–5",
+          ex.rest ?? "2–3 min",
+        );
+        ex.rest = protection.rest;
+      } else {
+        ex.rest = "30-45 sec";
+      }
       break;
+    }
 
     default:
       // Generic: apply moderate rep range increase as a safe default change
-      ex.reps = increaseReps(ex.reps);
+      if (!explosive) {
+        ex.reps = increaseReps(ex.reps);
+      }
       break;
   }
 }
