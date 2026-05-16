@@ -323,16 +323,40 @@ export default function AnonymousConversionFloor({ onCreateAccount }: AnonymousC
       </section>
 
       {/* Footer bar */}
-      <div className="border-t border-border/40 px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 max-w-3xl mx-auto">
-        <p className="text-[11px] text-muted-foreground/40">
-          TrainChat® · Your training system, always evolving
-        </p>
-        <button
-          onClick={handleCTA}
-          className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
-        >
-          Create free account →
-        </button>
+      <div className="border-t border-border/40 px-6 pt-6 pb-8 max-w-3xl mx-auto space-y-5">
+        {/* AEO nav links */}
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {[
+            { label: "Methodology", path: "/methodology" },
+            { label: "Frameworks", path: "/frameworks" },
+            { label: "Doctrine", path: "/doctrine" },
+            { label: "Whitepapers", path: "/whitepapers" },
+            { label: "Diagrams", path: "/diagrams" },
+            { label: "Curriculum", path: "/curriculum" },
+            { label: "For Coaches", path: "/for-coaches" },
+            { label: "Research", path: "/research" },
+          ].map((item) => (
+            <button
+              key={item.path}
+              onClick={() => setLocation(item.path)}
+              className="text-[11px] text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors"
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground/40">
+            TrainChat® · Your training system, always evolving
+          </p>
+          <button
+            onClick={handleCTA}
+            className="text-[11px] font-semibold text-primary hover:text-primary/80 transition-colors"
+          >
+            Create free account →
+          </button>
+        </div>
       </div>
     </div>
   );
