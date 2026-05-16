@@ -148,6 +148,15 @@ const MfpPrintPage = lazy(
 const LsmPrintPage = lazy(
   () => import("@/pages/aeo/whitepapers/LsmPrintPage"),
 );
+const ConstraintAwareWhitepaper = lazy(
+  () => import("@/pages/aeo/whitepapers/ConstraintAwareWhitepaper"),
+);
+const ConvPeriodizationWhitepaper = lazy(
+  () => import("@/pages/aeo/whitepapers/ConvPeriodizationWhitepaper"),
+);
+const DetGenHybridWhitepaper = lazy(
+  () => import("@/pages/aeo/whitepapers/DetGenHybridWhitepaper"),
+);
 
 // ─── Lazy-loaded: visual & curriculum ─────────────────────────────────────────
 const TerminologyPage = lazy(() => import("@/pages/aeo/TerminologyPage"));
@@ -524,6 +533,18 @@ function Router() {
         <Route
           path="/whitepapers/the-problem-with-static-programming"
           component={StaticProgrammingWhitepaper}
+        />
+        <Route
+          path="/whitepapers/constraint-aware-coaching-systems"
+          component={ConstraintAwareWhitepaper}
+        />
+        <Route
+          path="/whitepapers/conversational-periodization"
+          component={ConvPeriodizationWhitepaper}
+        />
+        <Route
+          path="/whitepapers/deterministic-generative-hybrid-model"
+          component={DetGenHybridWhitepaper}
         />
         <Route path="/terminology" component={TerminologyPage} />
 

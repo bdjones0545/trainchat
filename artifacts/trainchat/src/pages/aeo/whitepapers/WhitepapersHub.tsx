@@ -31,6 +31,33 @@ const publications = [
     pdfPath: "/whitepapers/lsm-pdf",
     year: "2025",
     pages: "~11 pages"
+  },
+  {
+    title: "Constraint-Aware Coaching Systems",
+    subtitle: "How Training Constraints Shape Every Coaching Decision",
+    abbr: "CACS",
+    description: "Defines the taxonomy of training constraints, the constraint registry architecture, and the principle that constraint-awareness is the structural minimum for AI coaching systems that can make safe, defensible programming decisions.",
+    path: "/whitepapers/constraint-aware-coaching-systems",
+    year: "2026",
+    pages: "~11 pages"
+  },
+  {
+    title: "Conversational Periodization",
+    subtitle: "Toward Adaptive Training Systems Built Through Continuous Coaching Dialogue",
+    abbr: "CP",
+    description: "A model where the training plan is not fixed but mutable — evolving through coaching dialogue while preserving longitudinal coherence. Covers dynamic block mutation, training-state continuity, adaptive sequencing, and conversational refinement loops.",
+    path: "/whitepapers/conversational-periodization",
+    year: "2026",
+    pages: "~11 pages"
+  },
+  {
+    title: "The Deterministic-Generative Hybrid Model",
+    subtitle: "A Structured Architecture for AI Coaching",
+    abbr: "DGH",
+    description: "Defines the hybrid architecture combining deterministic structural logic with generative language intelligence. The generative layer interprets; the deterministic layer decides. Covers mutation ontologies, validation gates, and coaching-state persistence.",
+    path: "/whitepapers/deterministic-generative-hybrid-model",
+    year: "2026",
+    pages: "~11 pages"
   }
 ];
 
