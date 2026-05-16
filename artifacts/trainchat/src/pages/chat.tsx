@@ -26,6 +26,7 @@ import { customFetch } from "@workspace/api-client-react";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import MessageBubble from "@/components/chat/MessageBubble";
+import { VirtualMessageList, VIRTUALIZE_THRESHOLD } from "@/components/chat/VirtualMessageList";
 import AgentThinking from "@/components/chat/AgentThinking";
 import AgentStatusBar from "@/components/chat/AgentStatusBar";
 import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
@@ -3650,32 +3651,78 @@ export default function Chat() {
               </div>
             ) : (
               <div className="max-w-2xl mx-auto">
-                {messages.map((msg) => (
-                  <MessageBubble
-                    key={msg.id}
-                    message={msg}
-                    onViewProgram={() => setMobilePanel("right")}
-                    onShowChange={() => {
-                      setRightPanelOpen(true);
-                      setMobilePanel("right");
-                      if (changeTargets.length > 0) setNewChangeSignal((n) => n + 1);
+                {messages.length < VIRTUALIZE_THRESHOLD ? (
+                  /* ── Normal rendering — conversations under threshold ────────── */
+                  messages.map((msg) => (
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
+                      onViewProgram={() => setMobilePanel("right")}
+                      onShowChange={() => {
+                        setRightPanelOpen(true);
+                        setMobilePanel("right");
+                        if (changeTargets.length > 0) setNewChangeSignal((n) => n + 1);
+                      }}
+                      onShareMoment={(moment) => {
+                        setPendingShareMoment(moment);
+                        setShowShareModal(true);
+                      }}
+                      turnReport={
+                        lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                          ? lastTurnReport
+                          : null
+                      }
+                      panelReceipt={
+                        lastPanelReceipt && lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                          ? lastPanelReceipt
+                          : null
+                      }
+                    />
+                  ))
+                ) : (
+                  /* ── Virtualized rendering — 40+ message conversations ─────── *
+                   * Only completed messages are virtualised. The in-progress
+                   * streaming state is handled by <AgentThinking> below, so the
+                   * virtualizer never sees a growing item. The messagesEndRef
+                   * sentinel stays below the virtual list wrapper; scrollIntoView
+                   * and userScrolledUpRef detection are completely unaffected.   */
+                  <VirtualMessageList
+                    items={messages}
+                    scrollRef={messagesContainerRef}
+                    getKey={(msg) => msg.id}
+                    estimateSize={(i) => {
+                      const m = messages[i];
+                      // User bubbles are short; assistant responses average ~200px.
+                      // The virtualizer corrects these on first paint via measureElement.
+                      return !m || m.role === "user" ? 80 : 200;
                     }}
-                    onShareMoment={(moment) => {
-                      setPendingShareMoment(moment);
-                      setShowShareModal(true);
-                    }}
-                    turnReport={
-                      lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
-                        ? lastTurnReport
-                        : null
-                    }
-                    panelReceipt={
-                      lastPanelReceipt && lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
-                        ? lastPanelReceipt
-                        : null
-                    }
+                    renderItem={(msg) => (
+                      <MessageBubble
+                        message={msg}
+                        onViewProgram={() => setMobilePanel("right")}
+                        onShowChange={() => {
+                          setRightPanelOpen(true);
+                          setMobilePanel("right");
+                          if (changeTargets.length > 0) setNewChangeSignal((n) => n + 1);
+                        }}
+                        onShareMoment={(moment) => {
+                          setPendingShareMoment(moment);
+                          setShowShareModal(true);
+                        }}
+                        turnReport={
+                          lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                            ? lastTurnReport
+                            : null
+                        }
+                        panelReceipt={
+                          lastPanelReceipt && lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                            ? lastPanelReceipt
+                            : null
+                        }
+                      />
+                    )}
                   />
-                ))}
+                )}
 
                 {/* ── Optimistic user bubble ──────────────────────────────────
                     Rendered immediately after submit so the user always sees

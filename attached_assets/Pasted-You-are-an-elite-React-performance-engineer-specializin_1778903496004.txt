@@ -1,0 +1,125 @@
+You are an elite React performance engineer specializing in conversational AI interfaces.
+
+TrainChat now has:
+- route-level code splitting
+- vendor chunk splitting
+- React.memo optimization for MessageBubble
+- production console logs removed
+- improved streaming render isolation
+- advanced SEO and Core Web Vitals architecture
+
+The next objective is:
+
+IMPLEMENT SAFE MESSAGE LIST VIRTUALIZATION FOR LONG TRAINCHAT CONVERSATIONS.
+
+GOAL:
+Improve:
+- long conversation performance
+- mobile scroll smoothness
+- memory usage
+- layout calculation cost
+- INP
+- chat responsiveness
+- perceived AI speed
+
+IMPORTANT CONTEXT:
+TrainChat is a streaming AI chat interface with:
+- long message histories
+- assistant messages containing rich content
+- program JSON suppression logic
+- structured data
+- training system cards
+- program receipts
+- change reports
+- mobile-first UX
+- auto-scroll behavior
+- active SSE streaming responses
+
+TASKS:
+
+1. Audit current message rendering in chat.tsx
+Identify:
+- message list container
+- scroll anchoring logic
+- auto-scroll behavior
+- streaming assistant message handling
+- mobile scroll behavior
+- any code that assumes all messages are mounted
+
+2. Implement virtualization only when safe
+Do NOT virtualize tiny conversations.
+Use a threshold:
+- under 40 messages: normal rendering
+- 40+ messages: virtualized rendering
+
+3. Choose the safest virtualization strategy
+Evaluate:
+- @tanstack/react-virtual
+- react-window
+- custom windowing
+
+Prefer the option that best supports:
+- dynamic message heights
+- streaming content
+- scroll-to-bottom
+- variable-height rich messages
+- mobile smoothness
+
+4. Preserve chat UX perfectly
+Must preserve:
+- auto-scroll to newest message
+- user scroll position when reading older messages
+- “new message” behavior
+- streaming assistant message visibility
+- keyboard behavior on mobile
+- anchor-to-bottom behavior
+- program panel behavior
+- message actions
+
+5. Handle dynamic heights safely
+Assistant responses can change height during streaming.
+Implement:
+- measurement caching
+- re-measure on content growth
+- stable estimated sizes
+- bottom anchoring correction
+- no layout jump during token streaming
+
+6. Keep the actively streaming message mounted
+The active assistant message must never be recycled during streaming.
+If needed:
+- render the last 2–3 messages outside the virtualized window
+- or force overscan near the bottom
+
+7. Add performance safeguards
+Include:
+- overscan tuning
+- mobile-specific overscan
+- scroll event throttling
+- passive listeners
+- memoized row renderers
+- stable keys
+
+8. Add regression checks
+Verify:
+- long conversations scroll smoothly
+- new messages appear correctly
+- streaming remains smooth
+- no blank gaps
+- no jump-to-top bugs
+- no broken message actions
+- no broken program receipts
+- no mobile keyboard layout issues
+
+9. Provide final implementation summary
+Include:
+- files changed
+- why this improves INP
+- before/after render behavior
+- known tradeoffs
+- follow-up performance tests
+
+IMPORTANT:
+Do not break existing chat behavior.
+Do not rewrite chat.tsx unnecessarily.
+Make the smallest safe change that isolates long-message DOM/render cost while preserving the premium TrainChat experience.

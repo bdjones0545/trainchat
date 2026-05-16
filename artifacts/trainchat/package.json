@@ -80,6 +80,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.24",
     "html-to-image": "^1.11.13",
     "posthog-js": "^1.372.8"
   }
