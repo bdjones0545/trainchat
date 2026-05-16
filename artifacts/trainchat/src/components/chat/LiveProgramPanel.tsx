@@ -1282,7 +1282,10 @@ function ProgramTab({
         const dayIdx = program.days.findIndex((d) =>
           (d.exercises ?? []).some((e) => e.name === exerciseName)
         );
-        if (dayIdx !== -1) setExpandedDay(dayIdx);
+        if (dayIdx !== -1) {
+          hasUserInteractedWithProgramRef.current = true;
+          setExpandedDay(dayIdx);
+        }
       }
 
       toast({
@@ -1428,6 +1431,7 @@ function ProgramTab({
       contentRevealTimerRef.current = setTimeout(() => setShowContentReveal(false), 350);
 
       // Expand the mutated day so the new exercise is visible
+      hasUserInteractedWithProgramRef.current = true;
       setExpandedDay(dayIndex);
 
       // Phase 2: Use DB-verified name from receipt (source of truth), not planned name
@@ -1705,6 +1709,13 @@ function ProgramTab({
   const pendingScrollName = useRef<string | null>(null);
   const exerciseRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  /**
+   * Set to true only after an explicit user interaction (tap a day card,
+   * change week, press View, expand a session, or a panel mutation that targets
+   * a specific day). Guards the day-card scrollIntoView effect so it never
+   * fires on initial mount / hydration.
+   */
+  const hasUserInteractedWithProgramRef = useRef(false);
   const prevChangeSignalRef2 = useRef(0);
 
   // When a new change signal fires, set up highlights and find the day to expand
@@ -1743,7 +1754,10 @@ function ProgramTab({
         const dayIdx = program.days.findIndex((d) =>
           (d.exercises ?? []).some((e) => e.name === firstTarget.newExercise)
         );
-        if (dayIdx !== -1) setExpandedDay(dayIdx);
+        if (dayIdx !== -1) {
+          hasUserInteractedWithProgramRef.current = true;
+          setExpandedDay(dayIdx);
+        }
       }
     } else {
       // ── Day/session-level highlight (no specific exercise target) ─────────
@@ -1798,8 +1812,10 @@ function ProgramTab({
   }, [expandedDay]);
 
   // Scroll the newly opened day card into view after layout settles.
+  // Only fires after an explicit user interaction — never on initial mount/hydration.
   useEffect(() => {
     if (expandedDay === null) return;
+    if (!hasUserInteractedWithProgramRef.current) return;
     const el = dayCardRefs.current.get(expandedDay);
     if (!el) return;
     // Two rAFs: first lets React flush the expand, second lets the browser
@@ -1810,6 +1826,21 @@ function ProgramTab({
       });
     });
   }, [expandedDay]);
+
+  // On initial mount, force the scroll container to the very top so that the
+  // panel header (Live Program / Training Focus / Current System / tabs) is
+  // visible and the view does NOT jump to whichever day card the pinning effect
+  // selected. Double rAF ensures React has flushed and the browser has laid out.
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (scrollAreaRef.current) {
+          scrollAreaRef.current.scrollTo({ top: 0, behavior: "auto" });
+        }
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Detect "draft → live" transition for new builds.
   // When a new program is saved, the panel initially shows `latestProgram` (AI stream order)
@@ -2727,7 +2758,7 @@ function ProgramTab({
                   style={dayDiff === "newday" ? { animation: "day-new 1.8s ease forwards" } : undefined}
                 >
                   <button
-                    onClick={() => setExpandedDay(isExpanded ? null : idx)}
+                    onClick={() => { hasUserInteractedWithProgramRef.current = true; setExpandedDay(isExpanded ? null : idx); }}
                     className="w-full flex items-center justify-between p-3 text-left hover:bg-accent/30 transition-colors"
                   >
                     <div className="min-w-0 flex-1">
