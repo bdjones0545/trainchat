@@ -1,0 +1,88 @@
+Audit and integrate session logging with TrainChat adaptive program logic.
+
+Current behavior:
+Users can log a session from:
+1. Live Program right sidebar
+2. Active Programs page
+
+The log popup captures:
+- completed / partial / skipped
+- duration
+- difficulty
+- pain/discomfort
+- energy after
+- notes
+
+Goal:
+Session logs should update the agent’s understanding of the athlete and influence future sessions/weeks without creating random or excessive program changes.
+
+Audit:
+1. Confirm both entry points use the same logging component, same API route, and same payload shape.
+2. Confirm session logs are tied to:
+   - userId
+   - trainingSystemId
+   - phase/week/sessionId
+   - conversationId if available
+3. Confirm duplicate logging is prevented.
+4. Confirm logged sessions become visible to the agent context.
+
+Implement adaptive logic:
+1. Convert each log into readiness/adaptation signals:
+   - high difficulty + low energy = fatigue accumulation
+   - pain >= 3 = movement caution flag
+   - skipped = adherence risk
+   - partial = volume tolerance issue
+   - completed + low difficulty + good energy = progression opportunity
+
+2. Add a SessionLogAdaptationAnalyzer:
+   - input: latest session log + recent 7–14 day log history
+   - output:
+     readinessScore
+     fatigueTrend
+     painFlag
+     adherenceFlag
+     progressionFlag
+     recommendedAdjustmentScope
+
+3. Adjustment scope rules:
+   - One bad session: do not rewrite the whole program.
+   - Pain flag: adjust next similar movement/session immediately.
+   - Repeated fatigue: reduce next 1–2 sessions volume/intensity.
+   - Repeated easy sessions: progress next comparable lift/session.
+   - Skipped/partial: preserve plan but offer shorter replacement or recovery option.
+
+4. Agent integration:
+   - Inject recent session log summary into Coach Agent context.
+   - Agent should reference the log naturally:
+     “Since your last session had moderate pain and low energy, I adjusted the next lower-body day slightly.”
+   - Agent should not claim changes unless mutations were saved.
+
+5. Program mutation integration:
+   - After logging, optionally run a deterministic adaptation pass.
+   - Changes should target future sessions only unless user explicitly requests otherwise.
+   - Never edit completed sessions.
+   - Emit a change receipt:
+     - why adjustment happened
+     - sessions affected
+     - exercises changed
+     - volume/intensity changes
+     - safety flags
+
+6. UI behavior:
+   - After Log Session Complete:
+     - mark session as completed/partial/skipped
+     - disable editing completed sessions unless user intentionally reopens log
+     - show “Adapted” badge if future sessions changed
+     - add entry to Changes tab
+     - refresh Live Program and Active Programs caches
+
+7. Regression tests:
+   - Logging from right sidebar and Active Programs produces identical DB records.
+   - Completed session cannot be accidentally edited/deleted.
+   - Pain >= 3 adjusts next similar movement pattern, not unrelated upper-body work.
+   - One low-energy session does not rewrite the full block.
+   - Repeated fatigue across 2–3 sessions reduces future volume.
+   - Agent summary matches actual saved mutations.
+
+Goal:
+Session logging should become the feedback loop that turns TrainChat from a program generator into an adaptive coaching system.
