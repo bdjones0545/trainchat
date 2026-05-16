@@ -463,60 +463,11 @@
   animation: ii-thinking-pulse 1.8s ease-in-out infinite;
 }
 
-/* ── Neural energy sweeps ───────────────────────────────────────────────────
-   Three slow diagonal bands simulate neural activity flowing through the mesh.
-   All three share one keyframe; stagger comes from animation-delay.
-   Contained in overflow:hidden on their parent so no bleed occurs.         */
-
-@keyframes ii-sweep-band {
-  0%   { transform: rotate(-8deg) translateX(-120%); }
-  100% { transform: rotate(-8deg) translateX(120%);  }
-}
-
-.ii-energy-sweep-a,
-.ii-energy-sweep-b,
-.ii-energy-sweep-c {
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 52px;
-  background: linear-gradient(
-    90deg,
-    transparent       0%,
-    transparent      16%,
-    rgba(96,165,250,0.042) 38%,
-    rgba(96,165,250,0.060) 50%,
-    rgba(96,165,250,0.042) 62%,
-    transparent      84%,
-    transparent     100%
-  );
-  filter: blur(15px);
-  pointer-events: none;
-}
-
-.ii-energy-sweep-a {
-  top: 47%;
-  animation: ii-sweep-band 15s ease-in-out 1.5s infinite;
-}
-.ii-energy-sweep-b {
-  top: 60%;
-  animation: ii-sweep-band 19s ease-in-out 7s infinite;
-  opacity: 0.58;
-}
-.ii-energy-sweep-c {
-  top: 36%;
-  animation: ii-sweep-band 17s ease-in-out 13s infinite;
-  opacity: 0.38;
-}
-
 /* Honor prefers-reduced-motion for idle intelligence */
 @media (prefers-reduced-motion: reduce) {
   .ii-field * { animation: none !important; }
   .ii-idle-input { animation: none !important; }
   .neural-floor-grid { animation: none !important; }
-  .ii-energy-sweep-a,
-  .ii-energy-sweep-b,
-  .ii-energy-sweep-c { animation: none !important; }
 }
 
 /* ─── Glass morphism utilities ────────────────────────────────────────────── */
