@@ -720,6 +720,58 @@ export async function getAllExercises() {
   return db.select().from(exerciseLibrary).where(eq(exerciseLibrary.isActive, true));
 }
 
+// ─── Coach-order sorting ──────────────────────────────────────────────────────
+
+/**
+ * Role priority map for sorting exercises into coaching order within a session.
+ *
+ * Canonical sequence:
+ *   power / plyometric / speed → primary strength → secondary compound →
+ *   unilateral → hypertrophy accessory → trunk / core → conditioning → mobility / finisher
+ *
+ * Lower number = earlier in session. Unrecognized roles default to 99 (end of session).
+ */
+const COACH_ROLE_ORDER: Record<string, number> = {
+  power_explosive:       0,
+  plyometric:            0,
+  speed_work:            0,
+  olympic_lift:          0,
+  primary_strength:      1,
+  main_lift:             1,
+  secondary_compound:    2,
+  compound_accessory:    2,
+  unilateral_strength:   3,
+  hypertrophy_accessory: 4,
+  isolation:             4,
+  trunk_core:            5,
+  core_stability:        5,
+  anti_rotation:         5,
+  conditioning:          6,
+  metabolic:             6,
+  mobility_prep:         7,
+  flexibility:           7,
+  finisher:              8,
+};
+
+/**
+ * Sorts an array of exercises into coaching order within a session.
+ *
+ * Preserves original array — returns a new sorted array.
+ * Exercises with unrecognized roles are placed at the end (order: 99).
+ *
+ * Usage: call after any mutation that adds or reorganizes exercises within a session
+ * to ensure the AI-generated order reflects best-practice session structure.
+ *
+ * @param exercises Array of exercise objects with a string `role` field.
+ */
+export function sortExercisesCoachOrder<T extends { role?: string | null }>(exercises: T[]): T[] {
+  return [...exercises].sort((a, b) => {
+    const aOrder = COACH_ROLE_ORDER[a.role ?? ""] ?? 99;
+    const bOrder = COACH_ROLE_ORDER[b.role ?? ""] ?? 99;
+    return aOrder - bOrder;
+  });
+}
+
 /**
  * Get library stats for the decision system.
  */

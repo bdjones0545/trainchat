@@ -1,0 +1,218 @@
+Implement Phase 3 coaching intelligence cleanup for TrainChat.
+
+Do NOT add major new features.
+Do NOT rewrite the agent architecture.
+Do NOT replace custom systems with outside frameworks.
+Do NOT change UI/UX unless needed to support correctness.
+Do NOT flatten the deterministic Architect + Coach Agent structure.
+
+Goal:
+Improve TrainChat’s coaching intelligence, deterministic reliability, exercise classification, constraint enforcement, and intent accuracy while preserving current behavior.
+
+========================
+PHASE 3 PRIORITIES
+========================
+
+1. Reduce unnecessary LLM intent calls
+Audit the LLM intent interpreter fallthrough paths.
+
+Tasks:
+- Identify common user commands currently falling through to the LLM intent interpreter.
+- Add deterministic pattern coverage for high-frequency commands.
+- Prioritize:
+  - “make day 2 better”
+  - “fix this week”
+  - “make this more athletic”
+  - “make this more explosive”
+  - “lower fatigue”
+  - “more beginner friendly”
+  - “less volume”
+  - “more strength”
+  - “more hypertrophy”
+  - “make it 3 days”
+  - “remove squats”
+  - “swap this”
+- Keep LLM intent interpreter as fallback.
+- Do not remove it.
+- Add logging for LLM intent interpreter usage so future fallthroughs can be reviewed.
+
+2. Improve session/week/block scope resolution
+Audit scope resolution for:
+- day/session edits
+- week edits
+- block edits
+- full-program edits
+- ambiguous commands with prior context
+
+Tasks:
+- Ensure “day 2,” “session 2,” “week 3,” “this block,” and “whole program” resolve consistently.
+- Avoid unnecessary clarification when the scope is clear and the requested improvement is directionally obvious.
+- Still ask clarification when both scope and action are unclear.
+- Add test cases if practical.
+
+3. Structural pain/injury constraint validation
+Current prompt-level pain constraints are not enough.
+
+Tasks:
+- Add deterministic post-generation and post-mutation checks for pain regions where practical.
+- Map common pain regions to risky exercise categories.
+Examples:
+  - shoulder pain → avoid upright rows, behind-neck press, aggressive overhead volume, high-risk dips
+  - knee pain → monitor high-impact jumps, excessive knee-dominant volume, deep loaded flexion
+  - low back pain → monitor heavy spinal loading, high-fatigue hinging, loaded flexion
+  - hip pain → monitor deep flexion, high-volume unilateral loading
+  - wrist pain → monitor front rack, push-up volume, loaded wrist extension
+- Do not over-block all training.
+- Flag risky selections and repair/substitute when obvious.
+- Critical safety risks should block or repair before save.
+- Warnings can pass with coaching explanation.
+
+4. Equipment constraint structural enforcement
+Audit whether equipment bans are enforced by category, not only exercise name.
+
+Tasks:
+- Confirm “no barbell” removes barbell back squat, front squat, deadlift, bench press, Olympic lifts, etc.
+- Confirm “dumbbells only” prevents cable/machine/barbell selections.
+- Confirm “hotel gym” and “home gym” constraints meaningfully influence exercise choices.
+- Add or improve category-level equipment filtering if missing.
+- Validate both generation and mutation paths.
+
+5. Exercise ordering after mutations
+After adding or swapping exercises, session order should remain coach-like.
+
+Tasks:
+- Ensure power/plyometric movements stay before heavy strength.
+- Ensure primary lifts stay before accessories.
+- Ensure accessories stay before finishers.
+- Ensure mobility/prep does not appear randomly in the middle unless intended.
+- Reuse existing CATEGORY_ORDER or create a small shared ordering helper.
+- Apply to mutation outputs before save.
+
+6. Exercise library/classification cleanup
+Audit overlapping exercise sources.
+
+Tasks:
+- Identify exercise-library-data.ts, exercise-intelligence.ts, exercise-service.ts overlap.
+- Do not fully unify into a new repository yet unless low-risk.
+- Add missing cluster/classification metadata for important exercises where gaps hurt substitutions.
+- Prioritize:
+  - Olympic lift variations
+  - med ball throws
+  - sprint/jump work
+  - trap bar patterns
+  - unilateral lower-body work
+  - core/trunk anti-extension/anti-rotation
+  - common machine/cable substitutions
+- Improve swap quality for exercises that currently fall back too broadly.
+
+7. Beginner/intermediate/advanced logic
+Audit how user training level is inferred and used.
+
+Tasks:
+- Confirm beginner users get more technique-first structure.
+- Confirm advanced users can receive more complex loading methods.
+- Avoid Olympic lifts/high-impact plyos for unprepared beginners.
+- Ensure beginner-friendly commands trigger:
+  - lower technical complexity
+  - clearer exercise choices
+  - simpler progression
+  - slightly more conservative volume/intensity
+- If profile fields are missing, use safe defaults.
+
+8. Deload and fatigue-management improvements
+Audit fatigue-related edit paths.
+
+Tasks:
+- Ensure “lower fatigue,” “make it easier,” “deload this week,” and readiness-low commands route correctly.
+- Reduce volume/intensity intelligently instead of randomly removing exercises.
+- Preserve movement balance.
+- Avoid making sessions too empty.
+- Add fatigue-specific explanations where already supported.
+
+9. Research agent retrieval quality
+Do not add Firecrawl or external frameworks.
+
+Tasks:
+- Add or improve research retrieval scoring if practical:
+  - relevance to current request
+  - recency if publication date exists
+  - source trust level
+  - programming applicability
+- Prevent irrelevant research chunks from being injected.
+- Add comments/TODOs if deeper source scoring belongs in a later phase.
+- Preserve admin-curated research pipeline.
+
+10. Coaching quality tests
+Add focused tests or test fixtures where practical.
+
+Test:
+- “make day 2 more explosive”
+- “remove squats”
+- “make it 3 days”
+- “lower fatigue this week”
+- “make this beginner friendly”
+- shoulder pain constraint
+- no barbell constraint
+- post-mutation exercise ordering
+- Olympic lift substitution quality
+- med ball/power exercise classification
+
+========================
+IMPORTANT CONSTRAINTS
+========================
+
+- Prefer surgical improvements.
+- Preserve current successful behavior.
+- Do not overfit to one phrase.
+- Do not create a second intent system.
+- Extend existing intent-family and mutation ontology systems.
+- Reuse existing constraint/filter/order helpers where possible.
+- Do not make the agent overly cautious or boring.
+- Do not block valid training because of minor pain/equipment ambiguity.
+- Critical safety problems should repair or block.
+- Warnings should be logged or explained, not destroy the program.
+
+========================
+OUTPUT REPORT
+========================
+
+After implementation, provide:
+
+A. Files changed
+
+B. Intent detection improvements
+- new deterministic patterns
+- reduced LLM fallthrough areas
+- remaining ambiguous cases
+
+C. Scope resolution improvements
+- what now resolves better
+- what still requires clarification
+
+D. Constraint validation improvements
+- pain/injury checks
+- equipment checks
+- generation vs mutation coverage
+
+E. Exercise classification improvements
+- metadata added
+- substitution quality changes
+- ordering improvements
+
+F. Training quality improvements
+- fatigue management
+- beginner/advanced handling
+- deload logic
+
+G. Research agent improvements
+- retrieval scoring changes
+- recency/relevance handling
+- remaining limits
+
+H. Tests/typecheck
+- commands run
+- results
+- pre-existing errors if any
+
+I. Remaining Phase 4 recommendations
+Only recommend after Phase 3 is complete.

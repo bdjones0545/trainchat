@@ -525,7 +525,9 @@ export async function getRelevantResearchContext(
         );
         return { chunk, score: breakdown.finalScore };
       })
-      .filter((s) => s.score > 0);
+      // Phase 3: raised threshold from >0 to ≥2 to prevent weakly-matched chunks
+      // from being injected into AI prompts (score=1 = single tag hit, low signal).
+      .filter((s) => s.score >= 2);
 
     // Category diversity bonus: +1 tie-breaker when complementary categories are both present
     const candidateCategories = new Set(baseScored.map((s) => (s.chunk.category as string) ?? ""));
@@ -644,7 +646,9 @@ export async function getRelevantResearchContextWithChunks(
         );
         return { chunk, breakdown, score: breakdown.finalScore };
       })
-      .filter((s) => s.score > 0);
+      // Phase 3: raised threshold from >0 to ≥2 to prevent weakly-matched chunks
+      // from being injected into AI prompts (score=1 = single tag hit, low signal).
+      .filter((s) => s.score >= 2);
 
     // Category diversity bonus: +1 tie-breaker when complementary categories co-exist in pool
     const candidateCategories = new Set(baseScored.map((s) => (s.chunk.category as string) ?? ""));

@@ -525,6 +525,19 @@ export async function buildExecutionPlan({
         // ── Fatigue / recovery ────────────────────────────────────────────────
         { re: /^(deload|deload\s+me|i\s+need\s+a\s+deload|give\s+me\s+a\s+deload|deload\s+week|recovery\s+week|i\s+need\s+a\s+recovery\s+week|maintenance\s+week)$/i,
           family: "fatigue_management", label: "deload" },
+        // ── Fatigue reduction (extended) ──────────────────────────────────────
+        // Phase 3: previously fell through to LLM interpreter
+        { re: /^(lower fatigue|reduce fatigue|less fatigue|lower the fatigue|drop fatigue|lighter load|lower training load|less training stress|lower my fatigue|easy week|lighter week|back off this week|lower fatigue this week|reduce fatigue this week)$/i,
+          family: "fatigue_management", label: "lower fatigue" },
+        // ── Strength focus ────────────────────────────────────────────────────
+        { re: /^(more strength|add strength|strength focus|focus on strength|more strength work|prioritize strength|strength priority|more strength based|more powerlifting)$/i,
+          family: "strength_focus", label: "more strength" },
+        // ── Hypertrophy focus ─────────────────────────────────────────────────
+        { re: /^(more hypertrophy|more muscle|hypertrophy focus|more size|build more muscle|more muscle mass|more muscle building|focus on hypertrophy)$/i,
+          family: "hypertrophy_focus", label: "more hypertrophy" },
+        // ── Beginner-friendly ─────────────────────────────────────────────────
+        { re: /^(more beginner friendly|beginner friendly|make it beginner|more accessible|less technical|lower complexity|simpler exercises|more basic|keep it basic|beginner mode)$/i,
+          family: "decrease_difficulty", label: "beginner friendly" },
       ];
 
       for (const entry of PRE_CLASSIFY_PATTERNS) {
@@ -569,7 +582,16 @@ export async function buildExecutionPlan({
   //   confidence < 0.45 or error → pass through unchanged
   //   exercise-scoped or day-scoped intents at any confidence → always fall through
   //   (exercise/day routing in the deterministic planner is more reliable)
+  //
+  // Phase 3: LLM interpreter usage is logged so future fallthroughs can be audited.
+  // If you see "[LLMIntentInterpreter] invoked" frequently for similar commands,
+  // that is a signal to add deterministic patterns in Step 0.25 instead.
   {
+    logger.info(
+      { conversationId, userId, messagePreview: message.slice(0, 80) },
+      "[LLMIntentInterpreter] invoked — message not matched by deterministic pre-classifier"
+    );
+
     const interpreterResult = await runLLMIntentInterpreter({
       rawMessage: message,
       activeProgramExists: !!program,
@@ -1078,6 +1100,52 @@ export async function buildExecutionPlan({
         );
 
         return directionalPlan;
+      }
+    }
+  }
+
+  // ── STEP 3.56: Day-level directional inference ────────────────────────────
+  // "Make day 2 more explosive", "fix day 3", "make day 1 better" —
+  // phrases that combine a specific day reference with a directional intent.
+  // These have clear coaching direction AND a resolved scope; act without clarifying.
+  // Only fires when an active program exists.
+  if (program) {
+    const dayRef = message.match(/\b(?:day|session)\s*(\d+)\b/i);
+    if (dayRef) {
+      const dayIdx = Number(dayRef[1]) - 1;
+      const DAY_DIRECTIONAL: Array<{ re: RegExp; family: IntentFamily; label: string }> = [
+        { re: /\b(more explosive|explosive|explosive focus|add explosion|more power|more powerful)\b/i,     family: "power_explosive_focus",       label: "explosive"   },
+        { re: /\b(more athletic|athletic|more sport.?specific|athletic focus)\b/i,                          family: "athletic_performance_focus",  label: "athletic"    },
+        { re: /\b(better|fix|improve|upgrade|optimize|make it better|make this better)\b/i,                 family: "increase_difficulty",         label: "improve"     },
+        { re: /\b(harder|more challenging|more difficult|dial it up)\b/i,                                   family: "increase_difficulty",         label: "harder"      },
+        { re: /\b(easier|simpler|lighter|lower impact|less intense)\b/i,                                    family: "decrease_difficulty",         label: "easier"      },
+        { re: /\b(more strength|strength focus|more strength work|heavier)\b/i,                             family: "strength_focus",              label: "strength"    },
+        { re: /\b(more hypertrophy|more muscle|more volume)\b/i,                                            family: "hypertrophy_focus",           label: "hypertrophy" },
+        { re: /\b(shorter|less time|trim it down|cut it down)\b/i,                                          family: "reduce_time",                 label: "shorter"     },
+        { re: /\b(conditioning|grit|tougher|more cardio|more conditioning)\b/i,                             family: "conditioning_focus",          label: "conditioning"},
+        { re: /\b(more mobility|mobility|add mobility|flexibility)\b/i,                                     family: "mobility_support",            label: "mobility"    },
+      ];
+
+      for (const { re, family, label } of DAY_DIRECTIONAL) {
+        if (re.test(message)) {
+          const dayDirPlan: ExecutionPlan = {
+            action: "APPLY_MUTATION",
+            intentFamily: family,
+            scope: { type: "session", dayIndex: dayIdx },
+            mutation: {
+              type: "transform",
+              params: { transformation: family, dayIndex: dayIdx },
+            },
+            reasoning: `[DayDirectionalInference] Day ${dayIdx + 1} "${label}" command — session-scoped APPLY_MUTATION without clarification`,
+          };
+
+          logger.info(
+            { conversationId, userId, label, family, dayIdx, message: message.slice(0, 80) },
+            "[DayDirectionalInference] Day-level directional phrase — APPLY_MUTATION session-scoped"
+          );
+
+          return dayDirPlan;
+        }
       }
     }
   }
@@ -1759,8 +1827,8 @@ function resolveClarification({
 function resolveScope(message: string): ExecutionScope {
   const lower = message.toLowerCase();
 
-  // Explicit day index
-  const dayMatch = lower.match(/day\s*(\d+)/i);
+  // Explicit day index — "day 2", "day2"
+  const dayMatch = lower.match(/\bday\s*(\d+)\b/i);
   if (dayMatch) {
     return {
       type: "session",
@@ -1768,13 +1836,39 @@ function resolveScope(message: string): ExecutionScope {
     };
   }
 
-  // Explicit session reference
-  if (/\b(this session|this day|today's session|today)\b/.test(lower)) {
+  // "session 2", "session2" — treat like day reference
+  const sessionNumMatch = lower.match(/\bsession\s*(\d+)\b/i);
+  if (sessionNumMatch) {
+    return {
+      type: "session",
+      dayIndex: Number(sessionNumMatch[1]) - 1,
+    };
+  }
+
+  // "week 3", "week3" — program scope with weekNumber hint
+  // The mutation engine reads weekNumber from params and scopes accordingly.
+  const weekNumMatch = lower.match(/\bweek\s*(\d+)\b/i);
+  if (weekNumMatch) {
+    return { type: "program" };
+  }
+
+  // "this block", "the block", "current block" — training-block = program-level scope
+  if (/\b(this block|the block|current block|this training block|the training block)\b/.test(lower)) {
+    return { type: "program" };
+  }
+
+  // "this week", "fix this week", "lower fatigue this week" — program scope (week-level)
+  if (/\b(this week|the week|current week|fix this week|lower.*this week|reduce.*this week)\b/.test(lower)) {
+    return { type: "program" };
+  }
+
+  // Explicit session reference (deictic)
+  if (/\b(this session|this day|today's session|today|this workout)\b/.test(lower)) {
     return { type: "session" };
   }
 
   // Explicit program-wide
-  if (/\b(whole program|entire program|all sessions|everything|program.?wide)\b/.test(lower)) {
+  if (/\b(whole program|entire program|all sessions|everything|program.?wide|all days?|across the program)\b/.test(lower)) {
     return { type: "program" };
   }
 

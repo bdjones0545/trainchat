@@ -320,7 +320,7 @@ export function buildConstraintEnforcementDirective(
       "NEVER include the following — they are permanently unavailable or user-excluded:"
     );
     for (const item of constraints.bannedItems) {
-      lines.push(`  - ${capitalize(item)}`);
+      lines.push(`  - ${capitalize(item)}${buildEquipmentBanExample(item)}`);
     }
     lines.push(
       "  If the user explicitly asks to include one of these in this turn, acknowledge the exclusion rule and ask them to confirm before overriding it."
@@ -375,6 +375,30 @@ export function buildConstraintEnforcementDirective(
   ].join("\n");
 }
 
+// ─── 3b. Equipment constraint directive improvements ──────────────────────────
+// (Equipment category ban examples injected into AI prompts — see buildConstraintEnforcementDirective)
+
+/**
+ * Expands a banned equipment token into category examples for AI prompt injection.
+ * Makes the constraint concrete so the AI understands what "barbell unavailable" blocks.
+ */
+function buildEquipmentBanExample(item: string): string {
+  const lower = item.toLowerCase().trim();
+  const examples: Record<string, string> = {
+    barbell: "back squat, front squat, deadlift, bench press, barbell row, overhead press, Olympic lifts",
+    cable: "cable fly, cable row, lat pulldown (cable), cable curl, cable pushdown",
+    machine: "leg press, leg curl, leg extension, chest press machine, smith machine",
+    "smith machine": "smith machine squat, smith machine bench",
+    "trap bar": "trap bar deadlift, trap bar carry",
+    sled: "sled push, sled pull, prowler",
+    rings: "ring dip, ring pull-up, ring muscle-up",
+    trx: "TRX row, TRX chest press, TRX fallout",
+    "med ball": "med ball slam, med ball throw, rotational med ball press",
+  };
+  const example = examples[lower];
+  return example ? ` (includes: ${example})` : "";
+}
+
 // ─── 4. Validate a program against hard constraints ───────────────────────────
 
 /**
@@ -384,9 +408,8 @@ export function buildConstraintEnforcementDirective(
  * Matching uses substring inclusion (case-insensitive) to catch variants.
  * For example, "belt squat" will match "Belt Squat Machine", "Safety Bar Squat (Belt)", etc.
  *
- * Note: pain-region validation is intentionally omitted here — the exercise-to-
- * body-region mapping is too imprecise for reliable programmatic checking.
- * Pain constraints are enforced via prompt injection instead.
+ * Note: pain-region validation is handled separately by validatePainConstraints().
+ * Equipment and exercise bans are checked deterministically here.
  */
 export function validateAgainstHardConstraints(
   structuredData: ProgramStructure,
@@ -432,6 +455,151 @@ export function validateAgainstHardConstraints(
   }
 
   return violations;
+}
+
+// ─── 4b. Pain constraint deterministic checker ────────────────────────────────
+
+/**
+ * Maps reported pain regions to exercise/movement patterns that pose elevated risk.
+ * Used by validatePainConstraints() to generate coach warnings (not hard blocks).
+ *
+ * Keys must be lowercase and match how pain regions are stored in HardConstraints.
+ * Each entry has:
+ *  - critical: regex strings matching exercises that directly stress the region (should flag prominently)
+ *  - monitor: regex strings for elevated-risk patterns (worth a coaching note)
+ *  - coachNote: human-readable explanation for why these are flagged
+ */
+const PAIN_RISK_MAP: Record<
+  string,
+  { critical: string[]; monitor: string[]; coachNote: string }
+> = {
+  shoulder: {
+    critical: ["upright row", "behind.neck", "behind neck"],
+    monitor: ["overhead press", "shoulder press", "lateral raise", "front raise", "dip", "pike push.?up"],
+    coachNote:
+      "Shoulder pain: upright rows and behind-neck patterns carry elevated impingement risk. Monitor overhead volume and degree of internal rotation under load.",
+  },
+  knee: {
+    critical: [],
+    monitor: ["box jump", "depth jump", "jump squat", "jump lunge", "plyometric", "pistol", "full squat"],
+    coachNote:
+      "Knee pain: high-impact plyometrics and deep loaded knee flexion require careful monitoring. Prioritize eccentric control and avoid valgus loading.",
+  },
+  "lower back": {
+    critical: ["good morning", "stiff.?leg", "stiff leg deadlift"],
+    monitor: ["deadlift", "romanian deadlift", "back extension", "jefferson curl", "bent.?over row"],
+    coachNote:
+      "Lower back pain: heavy spinal loading and unsupported flexion under load require careful monitoring. Prioritize bracing cues and neutral spine positions.",
+  },
+  back: {
+    critical: ["good morning"],
+    monitor: ["deadlift", "row", "hinge", "back extension"],
+    coachNote:
+      "Back pain: monitor spinal loading patterns and unsupported forward flexion under load.",
+  },
+  hip: {
+    critical: [],
+    monitor: ["split squat", "single.?leg squat", "hip flexor", "deep squat", "full squat"],
+    coachNote:
+      "Hip pain: monitor deep hip flexion, high-volume unilateral loading, and end-range positions under load.",
+  },
+  wrist: {
+    critical: ["front rack", "front squat"],
+    monitor: ["push.?up", "plank on hands", "barbell curl", "wrist curl", "reverse curl"],
+    coachNote:
+      "Wrist pain: front rack positions and loaded wrist extension require caution. Consider dumbbell/neutral-grip alternatives.",
+  },
+  elbow: {
+    critical: [],
+    monitor: ["tricep", "skull crusher", "close.?grip bench", "dip", "pull.?up", "chin.?up"],
+    coachNote:
+      "Elbow pain: monitor end-range elbow loading and supination/pronation under load. Reduce volume before reducing load.",
+  },
+  ankle: {
+    critical: [],
+    monitor: ["calf raise", "single.?leg calf", "box jump", "depth jump", "pogo", "jump"],
+    coachNote:
+      "Ankle pain: monitor high-impact landing drills and extreme dorsiflexion under load. Prioritize landing mechanics before intensity.",
+  },
+  neck: {
+    critical: ["behind.?neck press", "behind.?neck pull.?down", "neck bridge"],
+    monitor: ["overhead press", "shrug", "trap raise", "face pull"],
+    coachNote:
+      "Neck pain: behind-neck loading patterns carry elevated cervical risk. Monitor overhead press alignment and trap loading.",
+  },
+};
+
+export interface PainConstraintWarning {
+  exerciseName: string;
+  painRegion: string;
+  severity: "critical" | "warning";
+  coachNote: string;
+}
+
+/**
+ * Checks exercises in a program against active pain and monitor regions.
+ * Returns warnings (severity: critical | warning) for coach review.
+ *
+ * - critical: exercise directly stresses the injured region — should be flagged in coaching response.
+ * - warning: elevated risk worth noting, but does not hard-block the exercise.
+ *
+ * This is a best-effort deterministic safety net. AI prompt injection (via
+ * buildConstraintEnforcementDirective) remains the primary enforcement mechanism.
+ * This catches obvious pattern matches that may slip through LLM generation.
+ *
+ * Returns an empty array when no active pain regions are present.
+ */
+export function validatePainConstraints(
+  structuredData: ProgramStructure,
+  constraints: HardConstraints,
+): PainConstraintWarning[] {
+  const warnings: PainConstraintWarning[] = [];
+  const activeRegions = [...constraints.painRegions, ...constraints.monitorRegions];
+  if (activeRegions.length === 0) return warnings;
+
+  for (const day of structuredData.days) {
+    for (const exercise of day.exercises) {
+      const nameLower = exercise.name.toLowerCase();
+
+      for (const region of activeRegions) {
+        const regionLower = region.toLowerCase();
+        const riskEntry = PAIN_RISK_MAP[regionLower];
+        if (!riskEntry) continue;
+
+        // Check critical patterns first
+        let criticalFlagged = false;
+        for (const pattern of riskEntry.critical) {
+          if (new RegExp(pattern, "i").test(nameLower)) {
+            warnings.push({
+              exerciseName: exercise.name,
+              painRegion: region,
+              severity: "critical",
+              coachNote: riskEntry.coachNote,
+            });
+            criticalFlagged = true;
+            break;
+          }
+        }
+
+        // Check monitor patterns (only if no critical flag already added for this combo)
+        if (!criticalFlagged) {
+          for (const pattern of riskEntry.monitor) {
+            if (new RegExp(pattern, "i").test(nameLower)) {
+              warnings.push({
+                exerciseName: exercise.name,
+                painRegion: region,
+                severity: "warning",
+                coachNote: riskEntry.coachNote,
+              });
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return warnings;
 }
 
 // ─── 5. Constraint Satisfaction Check ────────────────────────────────────────
