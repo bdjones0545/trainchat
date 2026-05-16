@@ -1,0 +1,178 @@
+Upgrade TrainChat social share cards across all share features with subtle adaptive laser/neural visuals.
+
+Goal:
+Make TrainChat share cards feel like a premium live AI coaching system:
+- adaptive
+- intelligent
+- performance-focused
+- cinematic
+WITHOUT becoming overly sci-fi, cluttered, or gamer-looking.
+
+Apply consistently to:
+- Live Program sidebar share
+- Active Programs share
+- Session share
+- Adaptation share
+- Achievement share
+- Any future share modal/card renderer
+
+Core share architecture:
+1. Use one unified share payload contract everywhere.
+2. Share cards must always reflect the currently selected:
+   - week
+   - session
+   - adaptation state
+   - exercises
+3. Remove all hardcoded Week 1 fallback rendering.
+
+Payload must include:
+- trainingSystemId
+- selectedWeekNumber
+- selectedTrainingWeekId
+- selectedWeekData
+- selectedSessionId
+- shareType
+- adaptationSummary
+- currentFocusTags
+- activeBlockLabel
+- sportOrGoalLabel
+
+Visual direction:
+Premium dark adaptive intelligence aesthetic.
+Think:
+- elite performance lab
+- neural coaching system
+- cinematic sports tech
+NOT:
+- gamer HUD
+- crypto dashboard
+- excessive cyberpunk
+
+Laser / neural visual implementation:
+1. Add extremely subtle adaptive laser accents:
+   - faint diagonal energy streaks
+   - low-opacity neural scan lines
+   - soft beam glows behind active week
+   - subtle connection lines between focus chips
+   - adaptive pulse behind “AI ADAPTED”
+
+2. Lasers should:
+   - remain background-level
+   - never overpower typography
+   - never obstruct readability
+   - stay low-opacity
+   - feel ambient and alive
+
+3. Add layered depth:
+   - gradient bloom
+   - neural dot grid
+   - soft radial glow
+   - adaptive light sweep
+   - subtle edge lighting
+
+4. Add active week visualization:
+   W1 ── W2 ● ── W3 ── W4
+            BUILD
+   Use subtle laser emphasis/glow on active week only.
+
+5. Add current focus chips:
+   - POWER
+   - ACCELERATION
+   - RESILIENCE
+   - WORK CAPACITY
+   etc
+
+   Chips should:
+   - softly glow
+   - optionally connect with faint neural lines
+   - derive from real adaptation data
+
+6. Add AI adaptation strip when applicable:
+   “AI ADAPTED THIS WEEK”
+   - Endurance emphasis increased
+   - Sprint output preserved
+   - Fatigue managed
+
+   Add a subtle animated/pulsed neural glow behind this strip.
+
+7. Add coaching intelligence receipts:
+   “Based on”
+   ✓ session logs
+   ✓ recovery trends
+   ✓ athlete feedback
+
+   Only show if real data exists.
+
+8. Add live adaptive wording:
+   Replace generic:
+   “My current training system”
+
+   With:
+   - “My live adaptive training system”
+   - “AI-adjusted performance system”
+   - “Current adaptive performance block”
+
+9. Add share-type-specific rendering:
+   Program share:
+   - block structure
+   - active week
+   - sport identity
+   - sample session
+
+   Week share:
+   - exact selected week
+   - build/intensify/peak emphasis
+   - adaptation state
+
+   Session share:
+   - exact selected session
+   - top exercises
+   - coaching cues
+
+   Adaptation share:
+   - what changed
+   - why
+   - performance rationale
+
+   Achievement share:
+   - progression
+   - streak
+   - completed phase
+
+10. Add subtle animated export readiness:
+Future-safe architecture for:
+- story exports
+- reel exports
+- animated glow passes
+- adaptive pulse effects
+
+But current implementation should remain static-image-first.
+
+11. Important restraint rules:
+- If lasers are the first thing noticed → too strong.
+- Typography and coaching structure remain primary.
+- Effects should make the card feel alive, not flashy.
+- Preserve premium readability and professionalism.
+
+12. Development logging:
+- shareEntryPoint
+- shareType
+- renderedWeek
+- renderedSession
+- adaptationSummaryPresent
+- focusTags
+- activeVisualMode
+
+Regression tests:
+- Week 2 share renders Week 2 content.
+- Session share renders selected session.
+- Adaptation strip only appears with real adaptation data.
+- Laser overlays never reduce text readability.
+- Mobile modal remains scrollable and interactive.
+- Exported images render consistently across iOS and desktop.
+
+Goal:
+The card should make people think:
+“This looks like an elite AI coaching system.”
+Not:
+“This is another workout app screenshot.”

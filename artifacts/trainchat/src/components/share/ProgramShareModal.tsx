@@ -235,6 +235,9 @@ export default function ProgramShareModal({ program, selectedWeekNumber, weekPha
                   ref={cardRef}
                   card={card}
                   focusMode={program.focusMode ?? "strength"}
+                  selectedWeekNumber={selectedWeekNumber}
+                  weekPhase={weekPhase}
+                  isAdapted={isAdapted}
                 />
               </div>
             ) : null}

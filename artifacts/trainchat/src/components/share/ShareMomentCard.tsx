@@ -14,10 +14,11 @@ const TYPE_THEME: Record<ShareMomentType, {
   badge: string;
   badgeBg: string;
   badgeBorder: string;
+  isAdaptation?: boolean;
 }> = {
   PROGRAM_GENERATED: {
     accent: "#818cf8",
-    gradientA: "#191730",
+    gradientA: "#19173000",
     gradientB: "#0c0b1a",
     badge: "PROGRAM CREATED",
     badgeBg: "#818cf815",
@@ -25,15 +26,16 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   AGENT_ADJUSTMENT: {
     accent: "#34d399",
-    gradientA: "#0d2118",
+    gradientA: "#0d211800",
     gradientB: "#07100d",
     badge: "PROGRAM UPDATED",
     badgeBg: "#34d39915",
     badgeBorder: "#34d39938",
+    isAdaptation: true,
   },
   BLOCK_COMPLETE: {
     accent: "#fbbf24",
-    gradientA: "#231a06",
+    gradientA: "#231a0600",
     gradientB: "#120e03",
     badge: "BLOCK COMPLETE",
     badgeBg: "#fbbf2415",
@@ -41,7 +43,7 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   NEXT_BLOCK_READY: {
     accent: "#60a5fa",
-    gradientA: "#0f1e30",
+    gradientA: "#0f1e3000",
     gradientB: "#070e18",
     badge: "NEXT PHASE READY",
     badgeBg: "#60a5fa15",
@@ -49,15 +51,16 @@ const TYPE_THEME: Record<ShareMomentType, {
   },
   SESSION_LOG_ADAPTATION: {
     accent: "#a78bfa",
-    gradientA: "#1a1429",
+    gradientA: "#1a142900",
     gradientB: "#0d0a14",
     badge: "PLAN ADAPTED",
     badgeBg: "#a78bfa15",
     badgeBorder: "#a78bfa38",
+    isAdaptation: true,
   },
   PROGRESS_MILESTONE: {
     accent: "#fb923c",
-    gradientA: "#231408",
+    gradientA: "#23140800",
     gradientB: "#110a04",
     badge: "MILESTONE",
     badgeBg: "#fb923c15",
@@ -68,9 +71,9 @@ const TYPE_THEME: Record<ShareMomentType, {
 // ─── Headline copy ────────────────────────────────────────────────────────────
 
 const HEADLINE: Record<ShareMomentType, string> = {
-  PROGRAM_GENERATED: "Look what I created with the TrainChat® Agent",
-  AGENT_ADJUSTMENT: "TrainChat® Agent updated my program",
-  BLOCK_COMPLETE: "Block complete — next phase is loading",
+  PROGRAM_GENERATED: "My live adaptive training system",
+  AGENT_ADJUSTMENT: "AI-adjusted my performance plan",
+  BLOCK_COMPLETE: "Block complete — next phase loading",
   NEXT_BLOCK_READY: "My next training phase is ready",
   SESSION_LOG_ADAPTATION: "TrainChat® Agent adapted my plan",
   PROGRESS_MILESTONE: "Milestone reached",
@@ -78,12 +81,12 @@ const HEADLINE: Record<ShareMomentType, string> = {
 
 // ─── Stat tile ────────────────────────────────────────────────────────────────
 
-function StatTile({ value, label }: { value: string; label: string }) {
+function StatTile({ value, label, accent }: { value: string; label: string; accent: string }) {
   return (
     <div
       style={{
-        background: "#ffffff07",
-        border: "1px solid #ffffff10",
+        background: `${accent}08`,
+        border: `1px solid ${accent}18`,
         borderRadius: 8,
         padding: "8px 10px",
         flex: "1 1 0",
@@ -107,7 +110,7 @@ function StatTile({ value, label }: { value: string; label: string }) {
       <div
         style={{
           fontSize: 8,
-          color: "#ffffff35",
+          color: `${accent}70`,
           fontWeight: 600,
           marginTop: 3,
           letterSpacing: "0.07em",
@@ -120,7 +123,7 @@ function StatTile({ value, label }: { value: string; label: string }) {
   );
 }
 
-// ─── Day 1 exercise row ───────────────────────────────────────────────────────
+// ─── Exercise row ─────────────────────────────────────────────────────────────
 
 function ExerciseRow({
   ex,
@@ -212,13 +215,31 @@ function Day1Panel({
   return (
     <div
       style={{
-        background: "#ffffff06",
-        border: `1px solid ${accent}28`,
-        borderRadius: 12,
+        background: `${accent}06`,
+        border: `1px solid ${accent}22`,
+        borderLeft: `2px solid ${accent}cc`,
+        borderRadius: "0 12px 12px 0",
         padding: "13px 14px",
         marginBottom: 14,
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      {/* Inner glow */}
+      <div
+        style={{
+          position: "absolute",
+          top: "50%",
+          left: -15,
+          transform: "translateY(-50%)",
+          width: 70,
+          height: 70,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${accent}10 0%, transparent 70%)`,
+          pointerEvents: "none",
+        }}
+      />
+
       {/* Panel header */}
       <div
         style={{
@@ -226,6 +247,7 @@ function Day1Panel({
           alignItems: "center",
           gap: 7,
           marginBottom: 11,
+          position: "relative",
         }}
       >
         <div
@@ -234,7 +256,7 @@ function Day1Panel({
             height: 14,
             borderRadius: 2,
             background: accent,
-            boxShadow: `0 0 6px ${accent}80`,
+            boxShadow: `0 0 7px ${accent}80`,
             flexShrink: 0,
           }}
         />
@@ -261,6 +283,7 @@ function Day1Panel({
             letterSpacing: "-0.01em",
             marginBottom: 10,
             lineHeight: 1.2,
+            position: "relative",
           }}
         >
           {day1.name}
@@ -268,56 +291,52 @@ function Day1Panel({
       )}
 
       {/* Exercise list */}
-      {visible.length > 0 ? (
-        <div>
-          {visible.map((ex, i) => (
-            <ExerciseRow
-              key={i}
-              ex={ex}
-              accent={accent}
-              isLast={i === visible.length - 1 && overflow <= 0}
-            />
-          ))}
-          {overflow > 0 && (
-            <div
-              style={{
-                marginTop: 8,
-                paddingTop: 8,
-                borderTop: "1px solid #ffffff09",
-                fontSize: 10,
-                fontWeight: 600,
-                color: "#ffffff35",
-                letterSpacing: "0.04em",
-              }}
-            >
-              + {overflow} more exercise{overflow !== 1 ? "s" : ""}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ fontSize: 11, color: "#ffffff30", fontStyle: "italic" }}>
-          Exercise details loading…
-        </div>
-      )}
+      <div style={{ position: "relative" }}>
+        {visible.length > 0 ? (
+          <div>
+            {visible.map((ex, i) => (
+              <ExerciseRow
+                key={i}
+                ex={ex}
+                accent={accent}
+                isLast={i === visible.length - 1 && overflow <= 0}
+              />
+            ))}
+            {overflow > 0 && (
+              <div
+                style={{
+                  marginTop: 8,
+                  paddingTop: 8,
+                  borderTop: "1px solid #ffffff09",
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: "#ffffff35",
+                  letterSpacing: "0.04em",
+                }}
+              >
+                + {overflow} more exercise{overflow !== 1 ? "s" : ""}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: "#ffffff30", fontStyle: "italic" }}>
+            Exercise details loading…
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// ─── Fallback day panel (no exercise data) ────────────────────────────────────
+// ─── Fallback day panel ───────────────────────────────────────────────────────
 
-function Day1Fallback({
-  dayName,
-  accent,
-}: {
-  dayName?: string;
-  accent: string;
-}) {
+function Day1Fallback({ dayName, accent }: { dayName?: string; accent: string }) {
   return (
     <div
       style={{
-        background: "#ffffff06",
-        border: `1px solid ${accent}28`,
-        borderLeft: `3px solid ${accent}`,
+        background: `${accent}06`,
+        border: `1px solid ${accent}22`,
+        borderLeft: `2px solid ${accent}cc`,
         borderRadius: "0 12px 12px 0",
         padding: "12px 14px",
         marginBottom: 14,
@@ -352,13 +371,70 @@ function Day1Fallback({
   );
 }
 
+// ─── AI adaptation intelligence strip ────────────────────────────────────────
+
+function AdaptationStrip({ accent }: { accent: string }) {
+  return (
+    <div
+      style={{
+        marginBottom: 12,
+        borderRadius: 8,
+        padding: "7px 11px",
+        background: `linear-gradient(90deg, ${accent}14, ${accent}08 80%, transparent)`,
+        border: `1px solid ${accent}28`,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        position: "relative",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          position: "absolute",
+          left: -8,
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: 50,
+          height: 50,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${accent}22 0%, transparent 70%)`,
+          pointerEvents: "none",
+        }}
+      />
+      <div
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: accent,
+          boxShadow: `0 0 7px ${accent}`,
+          flexShrink: 0,
+          position: "relative",
+        }}
+      />
+      <span
+        style={{
+          fontSize: 7.5,
+          fontWeight: 700,
+          color: `${accent}dd`,
+          letterSpacing: "0.13em",
+          textTransform: "uppercase",
+          position: "relative",
+        }}
+      >
+        AI ADAPTED
+      </span>
+    </div>
+  );
+}
+
 // ─── Main card ────────────────────────────────────────────────────────────────
 
 const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
   const theme = TYPE_THEME[moment.type];
-  const { accent, gradientA, gradientB, badge, badgeBg, badgeBorder } = theme;
+  const { accent, gradientA, gradientB, badge, badgeBg, badgeBorder, isAdaptation } = theme;
 
-  // Stat tiles
   const stats: { value: string; label: string }[] = [];
   if (moment.daysPerWeek) stats.push({ value: `${moment.daysPerWeek}×`, label: "Days / wk" });
   if (moment.splitType) stats.push({ value: moment.splitType, label: "Split" });
@@ -369,7 +445,6 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
 
   const headline = HEADLINE[moment.type];
 
-  // Subtitle — program name or derived
   const subtitle = (() => {
     if (moment.subtitle && moment.subtitle !== headline) return moment.subtitle;
     const parts = [
@@ -382,31 +457,102 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
   const hasDay1Data = !!(moment.day1?.exercises?.length);
   const day1Name = moment.day1?.name ?? moment.currentDayName;
 
+  // Derive base gradient top color from per-type gradientA (was opaque, now transparent top)
+  const gradientTop = gradientA.replace("00", "") || gradientB;
+
   return (
     <div
       ref={ref}
       style={{
         width: 320,
-        background: `linear-gradient(155deg, ${gradientA} 0%, ${gradientB} 100%)`,
+        background: `linear-gradient(158deg, ${gradientTop} 0%, ${gradientB} 100%)`,
         borderRadius: 22,
         padding: "22px 20px 18px",
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif",
         position: "relative",
         overflow: "hidden",
-        border: `1px solid ${accent}28`,
+        border: `1px solid ${accent}22`,
         boxSizing: "border-box",
       }}
     >
-      {/* Ambient glow — top right */}
+      {/* ── Ambient background layers ─────────────────────────────────── */}
+
+      {/* Neural dot grid */}
       <div
         style={{
           position: "absolute",
-          top: -80,
-          right: -80,
-          width: 240,
-          height: 240,
+          inset: 0,
+          backgroundImage: `radial-gradient(circle, ${accent}10 1px, transparent 1px)`,
+          backgroundSize: "20px 20px",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Primary top-right bloom */}
+      <div
+        style={{
+          position: "absolute",
+          top: -90,
+          right: -70,
+          width: 250,
+          height: 250,
           borderRadius: "50%",
-          background: `radial-gradient(circle, ${accent}14 0%, transparent 70%)`,
+          background: `radial-gradient(circle, ${accent}18 0%, transparent 65%)`,
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Bottom-left ambient */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: -60,
+          left: -50,
+          width: 180,
+          height: 180,
+          borderRadius: "50%",
+          background: `radial-gradient(circle, ${accent}09 0%, transparent 70%)`,
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Diagonal energy streak — primary */}
+      <div
+        style={{
+          position: "absolute",
+          top: -15,
+          right: 50,
+          width: 1,
+          height: 190,
+          background: `linear-gradient(to bottom, transparent 0%, ${accent}20 45%, ${accent}0a 80%, transparent 100%)`,
+          transform: "rotate(-26deg)",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Diagonal energy streak — secondary */}
+      <div
+        style={{
+          position: "absolute",
+          top: 30,
+          right: 85,
+          width: 1,
+          height: 130,
+          background: `linear-gradient(to bottom, transparent 0%, ${accent}0e 55%, transparent 100%)`,
+          transform: "rotate(-26deg)",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Top edge highlight */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 1,
+          background: `linear-gradient(90deg, transparent 0%, ${accent}35 40%, ${accent}18 70%, transparent 100%)`,
           pointerEvents: "none",
         }}
       />
@@ -418,19 +564,32 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
           alignItems: "center",
           justifyContent: "space-between",
           marginBottom: 18,
+          position: "relative",
         }}
       >
-        <span
-          style={{
-            fontSize: 9.5,
-            fontWeight: 800,
-            color: "#ffffff",
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-          }}
-        >
-          TRAINCHAT AGENT
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background: accent,
+              boxShadow: `0 0 8px ${accent}90, 0 0 18px ${accent}28`,
+              flexShrink: 0,
+            }}
+          />
+          <span
+            style={{
+              fontSize: 9.5,
+              fontWeight: 800,
+              color: "#ffffff",
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+            }}
+          >
+            TRAINCHAT AGENT
+          </span>
+        </div>
         <span
           style={{
             background: badgeBg,
@@ -448,7 +607,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
         </span>
       </div>
 
-      {/* ── Headline ────────────────────────────────────────────────────── */}
+      {/* ── Headline ─────────────────────────────────────────────────────── */}
       <div
         style={{
           fontSize: 17,
@@ -457,6 +616,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
           lineHeight: 1.25,
           letterSpacing: "-0.025em",
           marginBottom: 5,
+          position: "relative",
         }}
       >
         {headline}
@@ -468,13 +628,17 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
           fontSize: 11.5,
           fontWeight: 500,
           color: `${accent}bb`,
-          marginBottom: 18,
+          marginBottom: isAdaptation ? 12 : 18,
           letterSpacing: "0.01em",
           lineHeight: 1.4,
+          position: "relative",
         }}
       >
         {subtitle.charAt(0).toUpperCase() + subtitle.slice(1)}
       </div>
+
+      {/* ── AI adaptation strip (adaptation types only) ──────────────────── */}
+      {isAdaptation && <AdaptationStrip accent={accent} />}
 
       {/* ── Day 1 hero section ───────────────────────────────────────────── */}
       {hasDay1Data ? (
@@ -490,10 +654,11 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
             display: "flex",
             gap: 6,
             marginBottom: 16,
+            position: "relative",
           }}
         >
           {stats.slice(0, 3).map((s, i) => (
-            <StatTile key={i} value={s.value} label={s.label} />
+            <StatTile key={i} value={s.value} label={s.label} accent={accent} />
           ))}
         </div>
       )}
@@ -502,10 +667,11 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
       <div
         style={{
           paddingTop: 12,
-          borderTop: "1px solid #ffffff0c",
+          borderTop: "1px solid #ffffff0a",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          position: "relative",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -515,7 +681,7 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
               height: 5,
               borderRadius: "50%",
               background: accent,
-              boxShadow: `0 0 5px ${accent}`,
+              boxShadow: `0 0 5px ${accent}80`,
             }}
           />
           <span
@@ -527,10 +693,10 @@ const ShareMomentCard = forwardRef<HTMLDivElement, Props>(({ moment }, ref) => {
               textTransform: "uppercase",
             }}
           >
-            Custom AI Coaching
+            AI Coaching
           </span>
         </div>
-        <span style={{ fontSize: 8.5, color: "#ffffff20", fontWeight: 500 }}>
+        <span style={{ fontSize: 8.5, color: "#ffffff1c", fontWeight: 500 }}>
           trainchat.app
         </span>
       </div>
