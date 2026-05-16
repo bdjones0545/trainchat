@@ -1,0 +1,119 @@
+Implement Phase 1 stability fixes from the TrainChat production audit.
+
+Do NOT add new features.
+Do NOT perform a large refactor.
+Do NOT rewrite the agent architecture.
+Do NOT replace custom systems with frameworks.
+Make surgical production-hardening fixes only.
+
+Primary goal:
+Improve reliability, safety, and user trust without changing TrainChat’s core behavior.
+
+Fix these items in order:
+
+1. ConversationContextResolver TTL + memory cleanup
+- Locate conversation-context-resolver.ts.
+- The in-memory Map store must not grow forever.
+- Add a periodic TTL sweep using existing pruneExpired logic if available.
+- Remove empty/expired conversation context entries.
+- Keep behavior unchanged for active conversations.
+- Add lightweight logging only if useful.
+- Do not move this to Redis yet.
+
+2. OpenAI timeout + retry wrapper
+- Create a reusable OpenAI call helper.
+- Wrap OpenAI calls with:
+  - default timeout: 25 seconds
+  - max retries: 2
+  - retry only on 429, 500, 502, 503, 504, network errors, or timeout
+  - exponential backoff
+  - structured error output
+- Apply this wrapper to the main Coach Agent OpenAI calls.
+- Apply it to LLM intent interpreter calls.
+- Apply it to fallback OpenAI calls if present.
+- Do not change prompts or model choices unless required.
+
+3. SSE failure handling
+- If an OpenAI call fails after retries, do not let the stream hang.
+- Emit a structured SSE error event.
+- Frontend should show a graceful recoverable error state.
+- Include a retry-friendly message like: “TrainChat hit a temporary AI connection issue. Try again.”
+- Do not falsely claim the program was saved.
+
+4. safeBackground utility
+- Create a safeBackground(promise, label, context?) helper.
+- Use it for all fire-and-forget async operations related to:
+  - memory extraction
+  - insight generation
+  - retention emails
+  - non-blocking background saves
+  - any async operation currently called without await
+- It should catch and log errors with label/context.
+- Preserve non-blocking behavior.
+
+5. Critical validation gates must block saves
+- Locate CEO Heartbeat and Architecture Gate validation.
+- If critical issues are detected, do not save the broken program.
+- Critical issues include:
+  - empty_program
+  - empty_days
+  - missing_exercises
+  - day_count_mismatch
+  - safety_violation
+- For critical issues:
+  - trigger one repair/regeneration attempt if an existing repair path exists
+  - otherwise stop save and emit a clear SSE error event
+- Warnings/non-critical issues can still pass.
+- Do not block valid programs because of minor warnings.
+
+6. SSE complete event should carry program state
+- Locate where the backend emits the SSE complete event after build/edit.
+- Include the saved DB-backed program/training system payload if already available.
+- The frontend Live Program Panel should update immediately from the SSE complete payload.
+- React Query refetch should remain as background reconciliation.
+- Avoid stale sidebar flashes after saves/edits.
+- Do not create a second competing source of truth long-term; DB-backed SSE payload is the immediate truth, refetch verifies it.
+
+7. Context resolution must be system-scoped
+- Make activeSystemId required where practical for resolveContextualMessage().
+- If changing the signature everywhere is too risky, add a guarded path:
+  - when activeSystemId is missing, log a warning
+  - never apply mutation references from a different system
+- When a new program/system is built in a conversation, clear prior conversation context if needed.
+- Prevent “undo that” or “do the same” from applying to an old training system.
+
+8. Rate limiting on conversation messages endpoint
+- Add user-level rate limiting to POST /api/conversations/:id/messages.
+- Suggested limit: 30 messages per minute per authenticated user.
+- Return a clean 429 response if exceeded.
+- Do not rate limit internal/system calls.
+- Keep it simple and production-safe.
+
+9. Verify canonical active program source
+- Do not fully refactor resolveCurrentProgram yet.
+- But audit edit/mutation paths and ensure DB active training system is preferred when available.
+- Message-history JSON parsing should only be fallback behavior.
+- Add a comment/TODO if full cleanup belongs in Phase 2.
+
+10. Tests / verification
+After fixes, run relevant tests or type checks.
+Add minimal tests only where practical:
+- TTL cleanup does not delete active context.
+- OpenAI wrapper retries eligible failures and stops after max retries.
+- SSE error event is emitted on failed AI call.
+- Critical validation issue blocks save.
+- Sidebar can receive program payload from SSE complete event.
+
+Output a final implementation report with:
+A. Files changed
+B. Exact fixes made
+C. Behavior preserved
+D. Any risks or follow-up needed
+E. Tests run and results
+
+Important:
+- Prioritize surgical changes.
+- Avoid broad restructuring of conversations.ts or ai.ts in this pass.
+- Do not add Firecrawl, LangChain, CrewAI, Claude Code, or other outside frameworks.
+- Preserve TrainChat’s custom coaching-agent architecture.
+- If a fix requires a larger refactor, stop and explain before changing it.

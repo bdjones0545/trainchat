@@ -33,6 +33,7 @@ import { interpretNeuralGraph, buildNeuralAdjustmentSummary, type NeuralBias, ty
 import { getActiveTrainingSystem, getFullTrainingSystem, createTrainingSystemFromProgram, upsertTrainingSystemFromProgram, dbSystemToProgramStructure } from "../lib/training-system-service";
 import { buildDecisionMemory } from "../lib/decision-memory-service";
 import { logger } from "../lib/logger";
+import { safeBackground } from "../lib/safe-background";
 import { buildStageEvent, type BuildStage } from "../lib/build-pipeline";
 import type { NarrationContext } from "../lib/stage-narration";
 import { verifyResponseAlignment } from "../lib/response-alignment-verifier";
@@ -104,12 +105,37 @@ import { buildSessionLogContext } from "../lib/session-log-adaptation-analyzer";
 
 const router: IRouter = Router();
 
+// ─── In-Memory Rate Limiter (SSE message endpoint) ────────────────────────────
+// Max 30 messages per authenticated user per 60-second window.
+// Uses a simple sliding window: timestamps are stored per userId, old ones pruned
+// on each check. No external dependency required.
+const _sseRateMap = new Map<string, number[]>();
+const SSE_RATE_LIMIT = 30;
+const SSE_RATE_WINDOW_MS = 60_000;
+
+function checkSseRateLimit(userId: number | string): boolean {
+  const key = String(userId);
+  const now = Date.now();
+  const cutoff = now - SSE_RATE_WINDOW_MS;
+  const timestamps = (_sseRateMap.get(key) ?? []).filter((t) => t > cutoff);
+  if (timestamps.length >= SSE_RATE_LIMIT) return false;
+  timestamps.push(now);
+  _sseRateMap.set(key, timestamps);
+  return true;
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Extracts the most recent valid structured program from a conversation's message history.
  * Searches backwards through assistant messages for the latest program JSON.
  * Skips system_edit markers (they are not draft programs).
+ *
+ * TODO (Fix 9 — canonical active program source): This function is a fallback
+ * for when no DB-backed active system exists. All callers should prefer
+ * getActiveTrainingSystem() / getFullTrainingSystem() from training-system-service
+ * over this message-history JSON parse. resolveCurrentProgram should only be
+ * used as a last resort when no DB system is available for the current user.
  */
 function resolveCurrentProgram(
   history: Array<{ role: string; structuredData?: string | null }>
@@ -705,8 +731,8 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     }
 
     if (allowMemory) {
-      syncMemoriesFromData(userId).catch(() => {});
-      extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
+      safeBackground(syncMemoriesFromData(userId), "sync-memories", { userId });
+      safeBackground(extractMemoriesFromMessage(userId, userMessage.content), "extract-memories", { userId });
     }
 
     // Extract hard constraints from the already-loaded memories (no extra DB call)
@@ -3391,6 +3417,17 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   const userId = req.session.userId!;
 
+  // ── Rate limiting — 30 messages / 60 s per authenticated user ────────────
+  if (!checkSseRateLimit(userId)) {
+    done({
+      type: "error",
+      status: 429,
+      code: "RATE_LIMITED",
+      message: "You're sending messages too quickly. Please wait a moment before trying again.",
+    });
+    return;
+  }
+
   // ── Plan gating ───────────────────────────────────────────────────────────
   let planInfo = await getUserPlanInfo(userId).catch(() => null);
   if (planInfo && !planInfo.canSendMessage) {
@@ -3511,8 +3548,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       insightHint = buildInsightPromptHint(insights);
     }
     if (allowMemory) {
-      syncMemoriesFromData(userId).catch(() => {});
-      extractMemoriesFromMessage(userId, userMessage.content).catch(() => {});
+      safeBackground(syncMemoriesFromData(userId), "sync-memories", { userId });
+      safeBackground(extractMemoriesFromMessage(userId, userMessage.content), "extract-memories", { userId });
     }
 
     // Extract hard constraints from the already-loaded memories (no extra DB call)
@@ -3987,6 +4024,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     auditReceiptVal?: unknown;
     /** Global mutation outcome from finalizeMutationOutcome() — present on shouldMutate=true paths. */
     mutationOutcomeVal?: MutationOutcomeResult | null;
+    /**
+     * The saved program payload from the DB-write path.
+     * Present when systemSavedVal=true so the panel can update immediately
+     * without a separate refetch round-trip.
+     */
+    savedProgramVal?: unknown | null;
   }) {
     const outcomeType: "mutation_applied" | "clarification_needed" | "conversation_only" | "true_failure" =
       opts.outcomeTypeVal ?? "conversation_only";
@@ -4023,6 +4066,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       changeLogId: opts.changeLogIdVal,
       auditReceipt: opts.auditReceiptVal ?? null,
       mutationOutcome: opts.mutationOutcomeVal ?? null,
+      savedProgram: opts.savedProgramVal ?? null,
     };
   }
 
@@ -5374,6 +5418,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       { aiErr: aiErrSSE?.message, is429 },
       "[SSE/AIFallback] generateAIResponse threw — returning graceful error to client"
     );
+    // Emit structured error event so the frontend can set stream phase to "error"
+    // before the complete event closes the stream.
+    emit({ type: "error", message: sseErrContent, code: is429 ? "RATE_LIMITED_UPSTREAM" : "AI_ERROR" });
     const [sseErrMsg] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: sseErrContent, structuredData: null,
     }).returning();
@@ -5570,7 +5617,26 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   let autoSavedSystemId: number | undefined;
   let changeLogId: number | undefined;
 
-  if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0) {
+  // ── Critical Save Guard ───────────────────────────────────────────────────
+  // Block any program save where structural integrity is critically broken.
+  // Prevents corrupt or empty-exercise programs from reaching the DB.
+  // Critical criteria: every day must have at least 1 exercise.
+  const _hasCriticalStructuralIssue = (() => {
+    if (!structuredData || !Array.isArray(structuredData.days)) return false;
+    const emptyDay = structuredData.days.find(
+      (d: any) => !d.exercises || !Array.isArray(d.exercises) || d.exercises.length === 0
+    );
+    if (emptyDay) {
+      logger.error(
+        { programName: structuredData.programName, emptyDayName: (emptyDay as any).dayName ?? "(unknown)" },
+        "[CriticalSaveGuard] Day has no exercises — blocking DB save to prevent corrupt program",
+      );
+      return true;
+    }
+    return false;
+  })();
+
+  if (structuredData && Array.isArray(structuredData.days) && structuredData.days.length > 0 && !_hasCriticalStructuralIssue) {
     try {
       // Attach block metadata from the most recent architecture brief build (side-effect)
       const lastPlanSSE = getLastMonthlyPlan();
@@ -5787,6 +5853,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     changeLogIdVal: changeLogId,
     outcomeTypeVal: systemSaved ? "mutation_applied" : "conversation_only",
     auditReceiptVal: auditReceiptSSE,
+    // Include the in-memory program that was just persisted so the panel can
+    // update immediately without a separate DB refetch round-trip.
+    savedProgramVal: systemSaved ? structuredData : null,
   }));
 });
 

@@ -174,6 +174,12 @@ export interface CompleteEvent {
       warning?: string;
     };
   } | null;
+  /**
+   * The saved program structure returned directly from the complete event.
+   * Present on CREATE_PROGRAM / START_NEW_PROGRAM / EDIT_PROGRAM paths when
+   * systemSaved=true. Lets the panel update immediately without a refetch round-trip.
+   */
+  savedProgram?: unknown | null;
 }
 
 export interface MicroReasonsEvent {

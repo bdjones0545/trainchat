@@ -91,6 +91,31 @@ function getOrCreate(conversationId: string): ConversationContextState {
   return store.get(conversationId)!;
 }
 
+// ─── Periodic TTL Sweep ───────────────────────────────────────────────────────
+// Runs every 5 minutes to prune expired references and delete entries that have
+// become fully empty, preventing unbounded store growth in long-running processes.
+// .unref() prevents the timer from blocking Node.js process exit.
+setInterval(() => {
+  let swept = 0;
+  for (const [id, state] of store) {
+    pruneExpired(state);
+    if (
+      !state.lastExerciseReference &&
+      !state.lastSessionReference &&
+      !state.lastMutationReference
+    ) {
+      store.delete(id);
+      swept++;
+    }
+  }
+  if (swept > 0) {
+    logger.info(
+      { swept, remaining: store.size },
+      "[ConversationContext] TTL sweep — removed empty entries",
+    );
+  }
+}, 5 * 60 * 1000).unref();
+
 function isExpired(ref: { turnsRemaining: number; createdAt: Date }, maxAgeMs = MAX_AGE_MS): boolean {
   if (ref.turnsRemaining <= 0) return true;
   const ageMs = Date.now() - ref.createdAt.getTime();
@@ -322,6 +347,21 @@ export function resolveContextualMessage(
   const hasMutation = hasMutationDeictic(lower);
   const hasExercise = hasExerciseDeictic(lower);
   const hasSession = hasSessionDeictic(lower);
+
+  // Guard: warn when deictic references exist but no active system ID is known.
+  // Without a system ID we cannot validate that stored context belongs to the
+  // same system the user is currently editing — cross-system leakage is possible.
+  if (
+    !activeSystemId &&
+    state &&
+    (hasMutation || hasExercise || hasSession) &&
+    (state.lastMutationReference || state.lastExerciseReference || state.lastSessionReference)
+  ) {
+    logger.warn(
+      { conversationId },
+      "[ConversationContext] resolving deictic reference without activeSystemId — stored context may belong to a different system",
+    );
+  }
 
   // If no deictic phrases at all, pass through unchanged
   if (!hasMutation && !hasExercise && !hasSession) {

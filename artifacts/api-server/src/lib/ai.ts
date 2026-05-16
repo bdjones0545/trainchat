@@ -3327,12 +3327,17 @@ DENSITY RULE — NON-NEGOTIABLE:
     // chain to 5+ AI calls. Only retry on true 429/5xx — not on parse failures.
     const maxRetries = 1;
     const t0 = Date.now();
+    // 25-second hard timeout per attempt — prevents infinite hangs on slow/stuck OpenAI responses.
+    const _ctrl = new AbortController();
+    const _timeoutId = setTimeout(() => _ctrl.abort(), 25_000);
     try {
       const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ model: OPENAI_MODELS.CORE, messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
+        signal: _ctrl.signal,
       });
+      clearTimeout(_timeoutId);
       if (!resp.ok) {
         const errText = await resp.text();
         const is429 = resp.status === 429;
@@ -3351,10 +3356,15 @@ DENSITY RULE — NON-NEGOTIABLE:
       const result = extractStructuredData(rawContent);
       return { ...result, openAIMs };
     } catch (fetchErr) {
+      clearTimeout(_timeoutId);
+      const isTimeout = fetchErr instanceof Error && fetchErr.name === "AbortError";
       const isNetworkError = fetchErr instanceof TypeError;
-      if (attempt < maxRetries && isNetworkError) {
+      if (attempt < maxRetries && (isNetworkError || isTimeout)) {
         const delayMs = 1500 * (attempt + 1);
-        logger.warn({ attempt, errMessage: fetchErr instanceof Error ? fetchErr.message : String(fetchErr), delayMs }, "[callOpenAI] Retrying after network error");
+        logger.warn(
+          { attempt, isTimeout, errMessage: fetchErr instanceof Error ? fetchErr.message : String(fetchErr), delayMs },
+          isTimeout ? "[callOpenAI] Retrying after 25s timeout" : "[callOpenAI] Retrying after network error",
+        );
         await new Promise((res) => setTimeout(res, delayMs));
         return callOpenAI(msgs, maxTok, attempt + 1);
       }

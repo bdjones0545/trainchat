@@ -95,6 +95,10 @@ async function callOpenAIForHarderEasier(ctx: HarderEasierContext): Promise<Hard
 
   const systemPrompt = buildFallbackSystemPrompt(ctx);
 
+  // 20-second hard timeout — this is a non-critical path; failing fast is better than hanging.
+  const _ctrl = new AbortController();
+  const _timeoutId = setTimeout(() => _ctrl.abort(), 20_000);
+
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -115,7 +119,9 @@ async function callOpenAIForHarderEasier(ctx: HarderEasierContext): Promise<Hard
         temperature: 0.2,
         response_format: { type: "json_object" },
       }),
+      signal: _ctrl.signal,
     });
+    clearTimeout(_timeoutId);
 
     if (!response.ok) {
       const errText = await response.text();
@@ -129,7 +135,14 @@ async function callOpenAIForHarderEasier(ctx: HarderEasierContext): Promise<Hard
 
     return parsed;
   } catch (err) {
-    logger.error({ err }, "[HarderEasierFallback] Failed to call OpenAI structured fallback");
+    clearTimeout(_timeoutId);
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    logger.error(
+      { err, isTimeout },
+      isTimeout
+        ? "[HarderEasierFallback] OpenAI call timed out after 20s — returning null"
+        : "[HarderEasierFallback] Failed to call OpenAI structured fallback",
+    );
     return null;
   }
 }
