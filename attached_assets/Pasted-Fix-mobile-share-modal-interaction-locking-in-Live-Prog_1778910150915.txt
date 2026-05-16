@@ -1,0 +1,67 @@
+Fix mobile share modal interaction locking in Live Program sidebar.
+
+Current bug:
+When tapping Share from the Live Program right sidebar:
+- a share modal/sheet opens
+- the modal is not scrollable
+- the right sidebar becomes non-interactive
+- taps are blocked behind an overlay
+- modal content can exceed viewport height with no scrolling
+- app feels frozen until dismissed
+
+Expected behavior:
+1. Share modal should scroll independently if content exceeds viewport height.
+2. Background sidebar should be intentionally disabled ONLY while modal is open.
+3. Modal should not trap the entire app in a non-scrollable state.
+4. User should always be able to:
+   - scroll modal content
+   - tap close/dismiss
+   - interact with modal buttons
+5. Closing modal restores sidebar interactivity immediately.
+
+Implementation audit:
+1. Inspect modal overlay/backdrop:
+   - verify pointer-events behavior
+   - verify z-index stack
+   - verify overflow handling
+2. Ensure modal content container uses:
+   - overflow-y: auto
+   - max-height: 100dvh (or calc with safe area)
+   - -webkit-overflow-scrolling: touch
+3. Ensure only the background layer is inert:
+   - do not disable pointer events on the modal subtree
+4. Verify no global:
+   - overflow: hidden
+   - touch-action: none
+   - pointer-events: none
+is accidentally applied to the root app container after modal mount.
+5. Ensure modal close restores:
+   - body scroll state
+   - sidebar interaction state
+   - focus lock state if used
+6. Mobile Safari specific:
+   - support touch scrolling inside modal
+   - avoid fixed-position scroll lock bugs
+   - respect safe-area inset bottom
+
+Recommended structure:
+<App>
+  <Sidebar inert={shareOpen} />
+  {shareOpen && (
+    <Overlay>
+      <ScrollableModalContent />
+    </Overlay>
+  )}
+</App>
+
+Regression tests:
+- Open share modal from right sidebar.
+- Scroll modal successfully.
+- Tap Save Image / Copy Text / Share.
+- Close modal.
+- Sidebar immediately interactive again.
+- No frozen state.
+- No hidden offscreen content inaccessible.
+
+Goal:
+Share modal should behave like a proper mobile bottom sheet/modal, not a fullscreen interaction lock.
