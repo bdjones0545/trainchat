@@ -1,130 +1,146 @@
 /**
- * IdleIntelligenceField — ultra-minimal ambient background.
+ * IdleIntelligenceField — cinematic neural grid atmosphere.
  *
- * Acts as pure atmosphere, never competing with content.
- * Very faint radial gradient + near-invisible SVG neural paths.
- * All animations are GPU-accelerated (transform/opacity only).
+ * Renders the perspective wireframe grid from the reference image:
+ * a 3D floor of glowing interconnected nodes that fills the lower half
+ * of the empty state, creating an AI-native spatial depth effect.
+ *
+ * The grid is purely atmospheric — it sits behind all content and fades
+ * toward the horizon so it never competes with text or chips.
  */
-
-import { useCallback, useEffect, useRef } from "react";
-import { motion, useMotionValue, useSpring } from "framer-motion";
 
 interface IdleIntelligenceFieldProps {
   isTyping?: boolean;
 }
 
-const NODES = [
-  { x: 50,  y: 38,  r: 1.2, delay: 0   },
-  { x: 30,  y: 24,  r: 0.7, delay: 1.2 },
-  { x: 71,  y: 22,  r: 0.7, delay: 2.0 },
-  { x: 26,  y: 48,  r: 0.6, delay: 0.6 },
-  { x: 74,  y: 45,  r: 0.6, delay: 1.8 },
-  { x: 42,  y: 60,  r: 0.5, delay: 2.8 },
-  { x: 60,  y: 58,  r: 0.5, delay: 0.4 },
-];
+// Grid geometry — viewBox 0 0 140 80
+// 11 columns × 7 rows = 77 intersection nodes
+const COLS = [0, 14, 28, 42, 56, 70, 84, 98, 112, 126, 140];
+const ROWS = [0, 13, 26, 39, 52, 65, 80];
 
-const PATHS = [
-  { points: [[30, 24], [50, 38]] as [number,number][], delay: 0 },
-  { points: [[71, 22], [50, 38]] as [number,number][], delay: 1.8 },
-  { points: [[26, 48], [50, 38]] as [number,number][], delay: 0.9 },
-  { points: [[74, 45], [50, 38]] as [number,number][], delay: 2.4 },
-  { points: [[42, 60], [50, 38]] as [number,number][], delay: 3.5 },
-  { points: [[60, 58], [50, 38]] as [number,number][], delay: 1.1 },
-];
+// Precompute node list with staggered animation params
+const NODES = ROWS.flatMap((y, ri) =>
+  COLS.map((x, ci) => ({
+    x,
+    y,
+    // Nodes deeper in the "floor" (higher row index = closer to viewer = bottom of screen)
+    // are brighter and larger
+    baseOpacity: 0.15 + ri * 0.07,
+    maxOpacity:  0.30 + ri * 0.12,
+    r:           0.55 + ri * 0.12,
+    outerR:      1.6  + ri * 0.3,
+    delay:       ((ci * 0.18 + ri * 0.27) % 2.8).toFixed(2),
+    dur:         (2.6 + ((ci + ri) * 0.11) % 1.6).toFixed(1),
+  })),
+);
 
 export function IdleIntelligenceField({ isTyping = false }: IdleIntelligenceFieldProps) {
-  const mouseX = useMotionValue(0);
-  const mouseY = useMotionValue(0);
-  const springX = useSpring(mouseX, { stiffness: 18, damping: 50 });
-  const springY = useSpring(mouseY, { stiffness: 18, damping: 50 });
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    const el = containerRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    mouseX.set((e.clientX - (rect.left + rect.width / 2)) * 0.010);
-    mouseY.set((e.clientY - (rect.top  + rect.height / 2)) * 0.007);
-  }, [mouseX, mouseY]);
-
-  useEffect(() => {
-    window.addEventListener("mousemove", handleMouseMove, { passive: true });
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, [handleMouseMove]);
-
   return (
     <div
-      ref={containerRef}
       className="ii-field absolute inset-0 pointer-events-none overflow-hidden"
       style={{
-        opacity: isTyping ? 0.15 : 1,
-        transition: "opacity 1.4s ease",
+        opacity: isTyping ? 0.20 : 1,
+        transition: "opacity 1.2s ease",
       }}
       aria-hidden="true"
     >
-      {/* Single very faint radial ambient — just enough to feel alive */}
+      {/* Deep ambient radial — faint cyan haze centered behind the heading */}
       <div
         className="absolute pointer-events-none"
         style={{
           left: "50%",
-          top: "40%",
+          top: "30%",
           transform: "translate(-50%, -50%)",
-          width: 500,
-          height: 500,
+          width: 520,
+          height: 320,
           borderRadius: "50%",
-          background: "radial-gradient(circle at center, hsl(var(--primary) / 0.055) 0%, hsl(var(--primary) / 0.02) 45%, transparent 70%)",
-          animation: "ii-ambient-breathe 8s ease-in-out infinite",
+          background:
+            "radial-gradient(ellipse at center, hsl(var(--primary) / 0.06) 0%, hsl(var(--primary) / 0.02) 50%, transparent 70%)",
+          animation: "ii-ambient-breathe 9s ease-in-out infinite",
         }}
       />
 
-      {/* Neural paths — parallax layer, barely visible */}
-      <motion.div
-        className="absolute inset-0"
-        style={{ x: springX, y: springY }}
+      {/* ── Perspective neural floor ───────────────────────────────────────────
+          The container sits in the lower 58% of the screen and masks the SVG
+          so the grid fades toward the horizon. The SVG carries both the grid
+          lines and the glow nodes in the same coordinate space, then the whole
+          element is rotated on its X-axis via CSS perspective to fake 3D depth.
+      ─────────────────────────────────────────────────────────────────────── */}
+      <div
+        className="absolute bottom-0 left-0 right-0 pointer-events-none"
+        style={{
+          height: "58%",
+          maskImage:
+            "linear-gradient(to top, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.35) 52%, transparent 100%)",
+          WebkitMaskImage:
+            "linear-gradient(to top, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.35) 52%, transparent 100%)",
+          overflow: "hidden",
+        }}
       >
-        <svg
-          className="w-full h-full"
-          viewBox="0 0 100 100"
-          preserveAspectRatio="xMidYMid slice"
-          fill="none"
+        {/* Perspective wrapper — applied to SVG parent so nodes + lines transform together */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            transform: "perspective(300px) rotateX(52deg)",
+            transformOrigin: "50% 100%",
+          }}
         >
-          {PATHS.map((path, i) => {
-            const d = path.points.reduce<string>(
-              (acc, [x, y], j) => acc + (j === 0 ? `M ${x},${y}` : ` L ${x},${y}`),
-              "",
-            );
-            return (
-              <path
-                key={i}
-                d={d}
-                stroke="hsl(var(--primary))"
-                strokeWidth="0.12"
-                strokeLinecap="round"
-                opacity="0"
-                style={{
-                  animation: `ii-path-breathe ${9 + (i * 2.1) % 6}s ease-in-out ${path.delay}s infinite`,
-                }}
+          <svg
+            viewBox="0 0 140 80"
+            preserveAspectRatio="xMidYMid slice"
+            style={{ width: "100%", height: "100%", overflow: "visible" }}
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            {/* Grid lines — horizontal */}
+            {ROWS.map((y) => (
+              <line
+                key={`h-${y}`}
+                x1="0" y1={y} x2="140" y2={y}
+                stroke="rgba(96,165,250,0.12)"
+                strokeWidth="0.28"
               />
-            );
-          })}
+            ))}
 
-          {NODES.map((node, i) => (
-            <circle
-              key={i}
-              cx={node.x}
-              cy={node.y}
-              r={node.r}
-              fill="hsl(var(--primary))"
-              opacity="0"
-              style={{
-                transformBox: "fill-box",
-                transformOrigin: "center",
-                animation: `ii-node-pulse ${6 + (i * 0.8) % 4}s ease-in-out ${node.delay}s infinite`,
-              }}
-            />
-          ))}
-        </svg>
-      </motion.div>
+            {/* Grid lines — vertical */}
+            {COLS.map((x) => (
+              <line
+                key={`v-${x}`}
+                x1={x} y1="0" x2={x} y2="80"
+                stroke="rgba(96,165,250,0.12)"
+                strokeWidth="0.28"
+              />
+            ))}
+
+            {/* Glow nodes at every intersection */}
+            {NODES.map((n, i) => (
+              <g key={i}>
+                {/* Outer soft halo */}
+                <circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={n.outerR}
+                  fill="rgba(96,165,250,0.10)"
+                  style={{
+                    animation: `grid-node-pulse ${n.dur}s ease-in-out ${n.delay}s infinite`,
+                  }}
+                />
+                {/* Inner bright core */}
+                <circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={n.r}
+                  fill="rgba(147,197,253,0.75)"
+                  style={{
+                    animation: `grid-node-pulse ${n.dur}s ease-in-out ${n.delay}s infinite`,
+                  }}
+                />
+              </g>
+            ))}
+          </svg>
+        </div>
+      </div>
     </div>
   );
 }

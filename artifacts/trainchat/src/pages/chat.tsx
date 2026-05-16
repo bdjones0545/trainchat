@@ -255,7 +255,7 @@ export default function Chat() {
   const [activeConvoId, setActiveConvoId] = useState<number | null>(null);
   const [inputText, setInputText] = useState("");
   const [latestProgram, setLatestProgram] = useState<ProgramStructure | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -3362,40 +3362,53 @@ export default function Chat() {
         </div>
       )}
 
-      {/* ─── Mobile header ─── */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-background flex-shrink-0 z-10" style={{ paddingTop: "max(12px, env(safe-area-inset-top))" }}>
+      {/* ─── Mobile header — matches reference: TrainChat text + system pill ─── */}
+      <div className="md:hidden relative flex items-center justify-between px-5 bg-background flex-shrink-0 z-10" style={{ paddingTop: "max(14px, env(safe-area-inset-top))", paddingBottom: "12px" }}>
+        {/* Left: menu tap-target + TrainChat wordmark */}
         <button
           onClick={() => setMobilePanel("left")}
-          className="w-10 h-10 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted/60 active:bg-muted/80 transition-all"
           aria-label="Open menu"
+          className="flex items-center gap-2 active:opacity-70 transition-opacity"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
+          <span
+            className="text-[20px] font-bold tracking-tight leading-none select-none"
+            style={{ color: "hsl(var(--primary))" }}
+          >
+            TrainChat
+          </span>
         </button>
-        <button
-          onClick={() => setMobilePanel(null)}
-          aria-label="Return to TrainChat agent"
-          className="flex items-center gap-1.5 rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70"
-          style={stream.isActive ? { filter: "drop-shadow(0 0 6px hsl(199 89% 48% / 0.55))" } : undefined}
-        >
-          <img src={trainChatLogo} alt="" aria-hidden="true" style={{ width: 22, height: 22, objectFit: "contain", flexShrink: 0 }} />
-          <span className="text-[15px] font-bold tracking-tight text-foreground leading-none select-none">TrainChat</span>
-        </button>
-        <button
-          onClick={() => { setMobilePanel("right"); analytics.track("panel_opened", { source: "mobile_header_button" }); }}
-          className={`relative w-10 h-10 flex items-center justify-center rounded-xl transition-all ${
-            latestProgram || hasActiveSystem
-              ? "text-primary bg-primary/10 hover:bg-primary/20"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          } active:bg-muted/80 ${mobilePanelSpotlight ? "ring-2 ring-primary/60 ring-offset-1 ring-offset-background animate-pulse" : ""}`}
-          aria-label="View live program"
-        >
-          <Dumbbell className="w-5 h-5" />
-          {(latestProgram || hasActiveSystem) && mobilePanel !== "right" && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-green-400 border-2 border-background" />
-          )}
-        </button>
+
+        {/* Right: system status pill when active, program access when draft, empty when none */}
+        {hasActiveSystem ? (
+          <button
+            onClick={() => { setMobilePanel("right"); analytics.track("panel_opened", { source: "mobile_header_system_pill" }); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-green-500/30 bg-green-500/8 active:opacity-80 transition-opacity"
+            aria-label="View live program"
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"
+              style={{ animation: "system-core-pulse 2.5s ease-in-out infinite" }}
+            />
+            <span className="text-[11px] font-semibold leading-none" style={{ color: "hsl(142 76% 73%)" }}>
+              System: <span className="opacity-90">Optimal</span>
+            </span>
+          </button>
+        ) : latestProgram ? (
+          <button
+            onClick={() => { setMobilePanel("right"); analytics.track("panel_opened", { source: "mobile_header_program_pill" }); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary/25 bg-primary/8 active:opacity-80 transition-opacity ${mobilePanelSpotlight ? "ring-1 ring-primary/50" : ""}`}
+            aria-label="View program"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+            <span className="text-[11px] font-semibold text-primary/80 leading-none">Program</span>
+          </button>
+        ) : (
+          <div className="w-8" />
+        )}
+
         {mobilePanelSpotlight && (
-          <div className="absolute right-2 top-full mt-1 z-20 pointer-events-none">
+          <div className="absolute right-4 top-full mt-1 z-20 pointer-events-none">
             <div className="bg-primary text-primary-foreground text-[10px] font-semibold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap animate-in fade-in slide-in-from-top-1 duration-300">
               Your training system is ready →
             </div>
@@ -3625,86 +3638,101 @@ export default function Chat() {
                 <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
               </div>
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
-              /* ─── Empty state — only shown when no messages AND no active submission ─── */
-              <div className="relative flex flex-col items-center justify-center px-6 text-center animate-in fade-in duration-700 min-h-[78dvh] pb-8" style={{ paddingTop: "clamp(48px, 10dvh, 96px)" }}>
+              /* ─── Empty state — three-zone cinematic layout ─── */
+              <div
+                className="relative flex flex-col animate-in fade-in duration-700 min-h-[78dvh]"
+                style={{ paddingTop: "clamp(28px, 5dvh, 52px)" }}
+              >
                 <IdleIntelligenceField isTyping={inputText.trim().length > 0} />
 
-                {/* Logo — sole focal anchor */}
-                <div className="relative mb-10 flex items-center justify-center flex-shrink-0">
-                  <div
-                    className={corePulseActive ? "system-core-react" : "system-core-idle"}
-                    style={{ display: "flex", alignItems: "center", justifyContent: "center" }}
+                {/* ── Zone 1: Upper — Neural Hub label + dominant heading ── */}
+                <div className="flex-none px-6 md:px-10 max-w-2xl mx-auto w-full">
+                  {/* Neural Hub section label — centered, muted */}
+                  <p
+                    className="text-center mb-5 select-none"
+                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.45)" }}
                   >
-                    <div style={getFocusModeConfig(focusMode).theme.heroGlowInner}>
-                      <img
-                        src={trainChatLogo}
-                        alt="TrainChat"
-                        style={{ width: 54, height: 54, objectFit: "contain" }}
+                    Neural Hub
+                  </p>
+
+                  {/* AI heading — left-aligned, very large, dominant focal point */}
+                  <h2
+                    className="font-bold text-foreground tracking-tight leading-[1.06]"
+                    style={{ fontSize: "clamp(2.2rem, 5.5vw, 3.6rem)" }}
+                    onPointerEnter={triggerCorePulse}
+                  >
+                    {displayProgramSource === "live"
+                      ? (getFocusModeConfig(focusMode).emptyStateSubline ?? "Vibe Code Your Training")
+                      : "Vibe Code Your Training"}
+                  </h2>
+
+                  {/* Status — dot + name, only when a system is active */}
+                  {displayProgramSource !== "none" && (
+                    <div className="flex items-center gap-2 mt-3">
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${displayProgramSource === "live" ? "bg-green-400" : "bg-primary/60"}`}
+                        style={{ animation: "system-core-pulse 3s ease-in-out infinite" }}
+                      />
+                      <span className="text-[11px] text-muted-foreground/45 font-medium">
+                        {displayProgramSource === "live"
+                          ? (displayProgram?.programName ?? "System active")
+                          : "Draft · continue or save"}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Return session hook */}
+                  {convShowReturnHook && (
+                    <div className="mt-6 w-full" style={{ overflowAnchor: "none" }}>
+                      <ReturnSessionHook
+                        programName={displayProgram?.programName}
+                        onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
+                        onIntensify={() => {
+                          setConvShowReturnHook(false);
+                          handleSend("Make this more intense", {
+                            buttonPayload: makeCtaRefinePayload(
+                              "Make it more intense",
+                              "Make this more intense",
+                              activeSystem?.id ?? null,
+                            ),
+                          });
+                        }}
+                        onDismiss={() => setConvShowReturnHook(false)}
                       />
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Heading — dominant type, no competing labels */}
-                <h2 className="text-[2.6rem] md:text-5xl lg:text-6xl font-bold text-foreground tracking-tight leading-[1.05] mb-4 max-w-[600px]">
-                  {displayProgramSource === "live"
-                    ? getFocusModeConfig(focusMode).emptyStateSubline ?? "Vibe Code Your Training"
-                    : "Vibe Code Your Training"}
-                </h2>
+                {/* ── Zone 2: Middle — breathing space, neural grid shows through ── */}
+                <div className="flex-1" style={{ minHeight: "clamp(56px, 10dvh, 140px)" }} />
 
-                {/* System state — single dot + name, only when something is active */}
-                {displayProgramSource !== "none" && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${displayProgramSource === "live" ? "bg-green-400" : "bg-primary/60"}`} style={{ animation: "system-core-pulse 3s ease-in-out infinite" }} />
-                    <span className="text-[11px] text-muted-foreground/50 font-medium">
-                      {displayProgramSource === "live"
-                        ? (displayProgram?.programName ?? "System active")
-                        : "Draft · continue or save"}
-                    </span>
+                {/* ── Zone 3: Lower — Adaptive Command + vertical chips ── */}
+                <div className="flex-none px-6 md:px-10 pb-6 max-w-2xl mx-auto w-full flex flex-col items-center">
+                  {/* Section label */}
+                  <p
+                    className="text-center mb-4 select-none"
+                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
+                  >
+                    Adaptive Command
+                  </p>
+
+                  {/* Chips — vertical stack, full-width pill buttons like reference */}
+                  <div className="flex flex-col gap-3 w-full max-w-sm">
+                    {getFocusModeConfig(focusMode).suggestionChips.slice(0, 3).map((chip) => (
+                      <button
+                        key={chip.label}
+                        onClick={() => {
+                          triggerCorePulse();
+                          handleSend(chip.prompt, {
+                            buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
+                          });
+                        }}
+                        className="w-full px-6 py-4 text-[14px] font-medium rounded-[20px] text-center transition-all duration-150 select-none active:scale-[0.97] adaptive-chip text-foreground/80"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
                   </div>
-                )}
-
-                {/* Return session hook */}
-                {convShowReturnHook && (
-                  <div className="mt-8 w-full max-w-sm" style={{ overflowAnchor: "none" }}>
-                    <ReturnSessionHook
-                      programName={displayProgram?.programName}
-                      onResume={() => { setConvShowReturnHook(false); setTimeout(() => inputRef.current?.focus(), 100); }}
-                      onIntensify={() => {
-                        setConvShowReturnHook(false);
-                        handleSend("Make this more intense", {
-                          buttonPayload: makeCtaRefinePayload(
-                            "Make it more intense",
-                            "Make this more intense",
-                            activeSystem?.id ?? null,
-                          ),
-                        });
-                      }}
-                      onDismiss={() => setConvShowReturnHook(false)}
-                    />
-                  </div>
-                )}
-
-                {/* 3 chips — no section label, generous top spacing */}
-                <div className="flex flex-wrap justify-center gap-2.5 mt-12">
-                  {getFocusModeConfig(focusMode).suggestionChips.slice(0, 3).map((chip) => (
-                    <button
-                      key={chip.label}
-                      onClick={() => {
-                        triggerCorePulse();
-                        handleSend(chip.prompt, {
-                          buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
-                        });
-                      }}
-                      className={`px-5 py-2.5 text-[13px] font-medium rounded-full transition-all duration-150 select-none active:scale-95 ${
-                        chip.highlight
-                          ? getFocusModeConfig(focusMode).theme.chipHighlightClass
-                          : "adaptive-chip text-foreground/70"
-                      }`}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
                 </div>
               </div>
             ) : (

@@ -343,22 +343,28 @@
   66%       { background-position: 4px 11px; }
 }
 
-/* Neural path breathing — near-invisible, only atmospheric hint */
+/* Neural path breathing — kept for legacy usage */
 @keyframes ii-path-breathe {
   0%, 100% { opacity: 0.02; }
   50%       { opacity: 0.07; }
 }
 
-/* Performance node pulse — subtle anchor points only */
+/* Performance node pulse */
 @keyframes ii-node-pulse {
   0%, 100% { opacity: 0.04; transform: scale(0.92); }
   50%       { opacity: 0.14; transform: scale(1.06); }
 }
 
-/* Center ambient glow breathe — slow, barely visible */
+/* Grid intersection node glow — perspective floor nodes */
+@keyframes grid-node-pulse {
+  0%, 100% { opacity: 0.15; }
+  50%       { opacity: 0.80; }
+}
+
+/* Center ambient glow breathe */
 @keyframes ii-ambient-breathe {
-  0%, 100% { opacity: 0.60; transform: translate(-50%, -50%) scale(1);    }
-  50%       { opacity: 0.85; transform: translate(-50%, -50%) scale(1.06); }
+  0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1);    }
+  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
 }
 
 /* Occasional horizontal precision sweep — fires in first 7% of cycle, then waits */
