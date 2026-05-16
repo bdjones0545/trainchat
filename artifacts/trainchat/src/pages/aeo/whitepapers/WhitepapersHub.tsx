@@ -18,6 +18,7 @@ const publications = [
     abbr: "MFP",
     description: "Establishes the principle that the correct response to new athlete information is the most surgical available intervention — not a program rebuild — and defines the five-level decision hierarchy through which coaching precision is operationalized.",
     path: "/whitepapers/mutation-first-programming",
+    pdfPath: "/whitepapers/mfp-pdf",
     year: "2025",
     pages: "~10 pages"
   },
@@ -27,6 +28,7 @@ const publications = [
     abbr: "LSM",
     description: "The case against fixed training plans — not as a preference argument, but as a structural one. Establishes the three properties that distinguish a living training system from a static program, and explains why the architectural requirements are non-negotiable for coaching quality.",
     path: "/whitepapers/the-problem-with-static-programming",
+    pdfPath: "/whitepapers/lsm-pdf",
     year: "2025",
     pages: "~11 pages"
   }

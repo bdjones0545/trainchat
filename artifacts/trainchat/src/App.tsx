@@ -142,6 +142,12 @@ const StaticProgrammingWhitepaper = lazy(
 const AcaPrintPage = lazy(
   () => import("@/pages/aeo/whitepapers/AcaPrintPage"),
 );
+const MfpPrintPage = lazy(
+  () => import("@/pages/aeo/whitepapers/MfpPrintPage"),
+);
+const LsmPrintPage = lazy(
+  () => import("@/pages/aeo/whitepapers/LsmPrintPage"),
+);
 
 // ─── Lazy-loaded: visual & curriculum ─────────────────────────────────────────
 const TerminologyPage = lazy(() => import("@/pages/aeo/TerminologyPage"));
@@ -524,8 +530,10 @@ function Router() {
         <Route path="/diagrams" component={DiagramsPage} />
         <Route path="/curriculum" component={CurriculumPage} />
 
-        {/* Publication PDF */}
+        {/* Publication PDFs */}
         <Route path="/whitepapers/aca-pdf" component={AcaPrintPage} />
+        <Route path="/whitepapers/mfp-pdf" component={MfpPrintPage} />
+        <Route path="/whitepapers/lsm-pdf" component={LsmPrintPage} />
 
         <Route component={NotFound} />
       </Switch>
