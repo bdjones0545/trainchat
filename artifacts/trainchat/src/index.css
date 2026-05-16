@@ -345,20 +345,20 @@
 
 /* Neural path breathing — opacity oscillation */
 @keyframes ii-path-breathe {
-  0%, 100% { opacity: 0.04; }
-  50%       { opacity: 0.13; }
+  0%, 100% { opacity: 0.05; }
+  50%       { opacity: 0.18; }
 }
 
 /* Performance node pulse — opacity + scale */
 @keyframes ii-node-pulse {
-  0%, 100% { opacity: 0.10; transform: scale(0.88); }
-  50%       { opacity: 0.38; transform: scale(1.14); }
+  0%, 100% { opacity: 0.12; transform: scale(0.88); }
+  50%       { opacity: 0.42; transform: scale(1.14); }
 }
 
 /* Center ambient glow breathe */
 @keyframes ii-ambient-breathe {
-  0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(1);    }
-  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.08); }
+  0%, 100% { opacity: 0.70; transform: translate(-50%, -50%) scale(1);    }
+  50%       { opacity: 1;    transform: translate(-50%, -50%) scale(1.10); }
 }
 
 /* Occasional horizontal precision sweep — fires in first 7% of cycle, then waits */
@@ -369,17 +369,29 @@
   100% { opacity: 0; }
 }
 
+/* Neural floor grid slow scroll — creates subtle movement on the perspective plane */
+@keyframes neural-floor-scroll {
+  0%   { background-position: 0px 0px; }
+  100% { background-position: 0px 52px; }
+}
+
+.neural-floor-grid {
+  animation: neural-floor-scroll 4s linear infinite;
+}
+
 /* Input idle glow — breathes on the chat input when no messages exist */
 @keyframes ii-input-breathe {
   0%, 100% {
     box-shadow:
       0 0 0 0px hsl(var(--primary) / 0.08),
-      0 0 20px 4px hsl(var(--primary) / 0.04);
+      0 0 24px 4px hsl(var(--primary) / 0.05),
+      0 8px 32px rgba(0,0,0,0.35);
   }
   50% {
     box-shadow:
-      0 0 0 1px hsl(var(--primary) / 0.12),
-      0 0 32px 8px hsl(var(--primary) / 0.08);
+      0 0 0 1px hsl(var(--primary) / 0.14),
+      0 0 36px 8px hsl(var(--primary) / 0.09),
+      0 8px 32px rgba(0,0,0,0.35);
   }
 }
 
@@ -396,6 +408,57 @@
 @media (prefers-reduced-motion: reduce) {
   .ii-field * { animation: none !important; }
   .ii-idle-input { animation: none !important; }
+  .neural-floor-grid { animation: none !important; }
+}
+
+/* ─── Glass morphism utilities ────────────────────────────────────────────── */
+
+/* Glass input bar — premium frosted glass look */
+.chat-input-glass {
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 4px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chat-input-glass:focus-within {
+  border-color: hsl(var(--primary) / 0.35);
+  box-shadow:
+    0 4px 32px rgba(0, 0, 0, 0.45),
+    0 0 0 1px hsl(var(--primary) / 0.15),
+    0 0 24px hsl(var(--primary) / 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Adaptive command chip — glass pill */
+.adaptive-chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.15s ease;
+}
+
+.adaptive-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: hsl(var(--primary) / 0.35);
+  color: hsl(var(--primary));
+}
+
+.adaptive-chip:active {
+  transform: scale(0.97);
+}
+
+/* Neural Hub section label */
+.neural-hub-label {
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 9px;
+  font-weight: 700;
+  color: hsl(var(--muted-foreground) / 0.5);
 }
 
 /* ─── System Core animations ──────────────────────────────────────────────── */

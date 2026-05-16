@@ -2,6 +2,7 @@
  * IdleIntelligenceField — Premium empty-state ambient animation system.
  *
  * Creates a living "precision intelligence" feeling behind the idle chat screen.
+ * Features a cinematic neural grid floor (perspective plane) plus SVG neural net.
  * All animations are GPU-accelerated (transform + opacity only). Respects
  * prefers-reduced-motion via CSS class. Mouse parallax via Framer Motion springs.
  *
@@ -104,13 +105,56 @@ export function IdleIntelligenceField({
       }}
       aria-hidden="true"
     >
+      {/* ── Deep space background radial — darkens edges */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background: "radial-gradient(ellipse 80% 60% at 50% 40%, transparent 30%, hsl(222 47% 4% / 0.6) 100%)",
+        }}
+      />
+
+      {/* ── Perspective neural grid floor — the sci-fi ground plane */}
+      <div
+        className="absolute bottom-0 left-0 right-0 pointer-events-none"
+        style={{
+          height: "58%",
+          maskImage: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)",
+          WebkitMaskImage: "linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 55%, transparent 100%)",
+        }}
+      >
+        <div
+          className="neural-floor-grid absolute inset-0"
+          style={{
+            transform: "perspective(480px) rotateX(62deg) translateY(10%)",
+            transformOrigin: "50% 100%",
+            backgroundImage: `
+              linear-gradient(hsl(var(--primary) / 0.10) 1px, transparent 1px),
+              linear-gradient(90deg, hsl(var(--primary) / 0.10) 1px, transparent 1px)
+            `,
+            backgroundSize: "52px 52px",
+          }}
+        />
+      </div>
+
+      {/* ── Horizon glow — where floor meets background */}
+      <div
+        className="absolute left-0 right-0 pointer-events-none"
+        style={{
+          bottom: "38%",
+          height: "60px",
+          background: "linear-gradient(to top, transparent, hsl(var(--primary) / 0.05) 40%, hsl(var(--primary) / 0.03) 70%, transparent)",
+          filter: "blur(8px)",
+          animation: "ii-ambient-breathe 7s ease-in-out infinite",
+        }}
+      />
+
       {/* Dot grid — very faint, drifts slowly */}
       <div
         className="ii-grid absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(circle, hsl(var(--primary) / 0.06) 1px, transparent 1px)",
-          backgroundSize: "30px 30px",
+            "radial-gradient(circle, hsl(var(--primary) / 0.05) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
         }}
       />
 
@@ -119,13 +163,28 @@ export function IdleIntelligenceField({
         className="ii-ambient absolute pointer-events-none"
         style={{
           left: "50%",
-          top: "36%",
+          top: "34%",
           transform: "translate(-50%, -50%)",
-          width: 360,
-          height: 360,
+          width: 420,
+          height: 420,
           borderRadius: "50%",
           background:
-            "radial-gradient(circle at center, hsl(var(--primary) / 0.08) 0%, hsl(var(--primary) / 0.035) 45%, transparent 72%)",
+            "radial-gradient(circle at center, hsl(var(--primary) / 0.10) 0%, hsl(var(--primary) / 0.045) 40%, transparent 68%)",
+        }}
+      />
+
+      {/* Secondary deep cyan glow — slightly lower, creates depth */}
+      <div
+        className="absolute pointer-events-none"
+        style={{
+          left: "50%",
+          top: "55%",
+          transform: "translate(-50%, -50%)",
+          width: 600,
+          height: 200,
+          borderRadius: "50%",
+          background: "radial-gradient(ellipse at center, hsl(var(--primary) / 0.06) 0%, transparent 70%)",
+          animation: "ii-ambient-breathe 9s ease-in-out 1.5s infinite",
         }}
       />
 
@@ -153,7 +212,7 @@ export function IdleIntelligenceField({
                 key={i}
                 d={d}
                 stroke="hsl(var(--primary))"
-                strokeWidth="0.14"
+                strokeWidth="0.16"
                 strokeLinecap="round"
                 opacity="0"
                 style={{

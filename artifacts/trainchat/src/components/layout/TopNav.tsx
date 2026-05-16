@@ -10,32 +10,24 @@ interface Props {
   userName: string;
   isAnonymous?: boolean;
   extraContent?: React.ReactNode;
+  hasActiveSystem?: boolean;
 }
 
-export default function TopNav({ userName, isAnonymous = false, extraContent }: Props) {
+export default function TopNav({ userName, isAnonymous = false, extraContent, hasActiveSystem = false }: Props) {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const logout = useLogout();
 
   function performClientLogout() {
-    // Clear auth-derived localStorage/sessionStorage flags (onboarding, guest cache, etc.)
     clearAuthState();
-    // Wipe all React Query caches — program data, conversations, user queries — so
-    // nothing stale can rehydrate an authenticated state after redirect.
     queryClient.clear();
-    // Replace the current history entry so the back-button cannot return to an
-    // authenticated route after signing out.
     setLocation("/login");
-    // Hard-navigate to flush any in-memory state that SPA routing cannot reach.
-    // Use replace so the back-button lands on /login, not the protected page.
     window.location.replace("/login");
   }
 
   function handleLogout() {
     logout.mutate(undefined, {
       onSuccess: performClientLogout,
-      // Even if the API call fails, clear all client-side auth state so the user
-      // is not left in a broken half-authenticated limbo.
       onError: performClientLogout,
     });
   }
@@ -58,14 +50,15 @@ export default function TopNav({ userName, isAnonymous = false, extraContent }: 
       <button
         onClick={() => setLocation("/chat")}
         aria-label="Return to TrainChat agent"
-        className="flex items-center justify-center rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70 hover:opacity-80"
+        className="flex items-center gap-2 rounded-xl px-2 py-1 transition-all duration-150 active:scale-95 active:opacity-70 hover:opacity-80"
       >
         <img
           src={trainChatLogo}
           alt="TrainChat"
-          className="h-7 object-contain"
+          className="h-6 object-contain"
           data-testid="img-logo"
         />
+        <span className="text-[14px] font-bold tracking-tight text-foreground hidden sm:block">TrainChat</span>
       </button>
 
       {/* Center — primary nav (always visible) */}
@@ -105,6 +98,19 @@ export default function TopNav({ userName, isAnonymous = false, extraContent }: 
 
       {/* Right side */}
       <div className="flex items-center gap-2">
+        {/* System status pill — shown when a training system is active */}
+        {hasActiveSystem && (
+          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-green-500/25 bg-green-500/8 select-none">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0"
+              style={{ animation: "system-core-pulse 2.5s ease-in-out infinite" }}
+            />
+            <span className="text-[10px] font-semibold text-green-400/90 tracking-wide">
+              System: <span className="text-green-300">Optimal</span>
+            </span>
+          </div>
+        )}
+
         {!isAnonymous && (
           <button
             onClick={() => setLocation("/settings")}

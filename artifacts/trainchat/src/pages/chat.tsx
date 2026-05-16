@@ -3408,6 +3408,7 @@ export default function Chat() {
         <TopNav
           userName={displayName}
           isAnonymous={isAnonymousUser}
+          hasActiveSystem={hasActiveSystem}
           extraContent={
             <div className="flex items-center gap-2">
               <StreakBadge streak={currentStreak} />
@@ -3657,38 +3658,41 @@ export default function Chat() {
 
                 {/* ── All users: focus-mode state (handles no-system, draft, and live) ── */}
                 <>
-                    <h2 className="text-xl font-bold text-foreground mb-2 tracking-tight">
+                    {/* Neural Hub section label */}
+                    <p className="neural-hub-label mb-3 select-none">Neural Hub</p>
+
+                    <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-3 tracking-tight leading-tight max-w-[320px] md:max-w-[400px]">
                       Vibe Code Your Training
                     </h2>
-                    <p className="text-xs text-muted-foreground/70 max-w-[270px] leading-relaxed mb-4">
+                    <p className="text-[12px] text-muted-foreground/65 max-w-[280px] leading-relaxed mb-5">
                       {displayProgramSource === "none"
-                        ? "TrainChat builds intelligent training systems around your goals, movement, sport, fatigue, and performance needs."
+                        ? "Tell me what you want to train, and I'll build it with you."
                         : getFocusModeConfig(focusMode).emptyStateSubline}
                     </p>
 
-                    {/* System status strip — derives exclusively from resolveProgramState output */}
-                    <div className="flex items-center gap-2 mb-6 px-3.5 py-2 rounded-full bg-card border border-border/60">
+                    {/* System status strip — glass pill */}
+                    <div className="flex items-center gap-2 mb-6 px-4 py-2 rounded-full adaptive-chip">
                       {displayProgramSource === "live" ? (
                         <>
-                          <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0 animate-pulse" style={{ animationDuration: "2.5s" }} />
                           <span className="text-[11px] text-muted-foreground">
-                            <span className="text-foreground font-medium">Active system: {displayProgram?.programName ?? "Your Program"}</span>
-                            {" · "}Ready to refine or rebuild
+                            <span className="text-foreground font-semibold">System: {displayProgram?.programName ?? "Active"}</span>
+                            {" · "}Ready to refine
                           </span>
                         </>
                       ) : displayProgramSource === "draft" ? (
                         <>
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary/70 flex-shrink-0 animate-pulse" style={{ animationDuration: "2s" }} />
                           <span className="text-[11px] text-muted-foreground">
-                            <span className="text-foreground font-medium">Draft system ready</span>
-                            {" · "}Continue building or save it to your system
+                            <span className="text-foreground font-semibold">Draft ready</span>
+                            {" · "}Continue or save
                           </span>
                         </>
                       ) : (
                         <>
                           <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30 flex-shrink-0" />
                           <span className="text-[11px] text-muted-foreground">
-                            No active system yet · Start building to generate your next program
+                            No system yet · Build your first program
                           </span>
                         </>
                       )}
@@ -3717,25 +3721,28 @@ export default function Chat() {
                     )}
 
                     {/* Quick action chips — mode-specific */}
-                    <div className="flex flex-wrap justify-center gap-2 w-full max-w-sm">
-                      {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
-                        <button
-                          key={chip.label}
-                          onClick={() => {
-                            triggerCorePulse();
-                            handleSend(chip.prompt, {
-                              buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
-                            });
-                          }}
-                          className={`px-3.5 py-2 text-xs font-medium rounded-full active:scale-95 transition-all duration-150 ${
-                            chip.highlight
-                              ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " hover:shadow-sm"
-                              : "text-foreground bg-card border border-border hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm"
-                          }`}
-                        >
-                          {chip.label}
-                        </button>
-                      ))}
+                    <div className="w-full max-w-sm">
+                      <p className="neural-hub-label mb-3 text-center">Adaptive Command</p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {getFocusModeConfig(focusMode).suggestionChips.map((chip) => (
+                          <button
+                            key={chip.label}
+                            onClick={() => {
+                              triggerCorePulse();
+                              handleSend(chip.prompt, {
+                                buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
+                              });
+                            }}
+                            className={`px-4 py-2.5 text-[12px] font-medium rounded-2xl transition-all duration-150 select-none ${
+                              chip.highlight
+                                ? getFocusModeConfig(focusMode).theme.chipHighlightClass + " active:scale-95"
+                                : "adaptive-chip text-foreground/80 active:scale-95"
+                            }`}
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                 </>
               </div>
@@ -4207,9 +4214,9 @@ export default function Chat() {
                   </button>
                 </div>
                 {hasActiveSystem && (
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                    <span className="text-[10px] text-muted-foreground hidden sm:block">System active — edits go live instantly</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-green-500/20 bg-green-500/6">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" style={{ animation: "system-core-pulse 2.5s ease-in-out infinite" }} />
+                    <span className="text-[10px] font-semibold text-green-400/80 hidden sm:block">System active</span>
                   </div>
                 )}
               </div>
@@ -4262,40 +4269,16 @@ export default function Chat() {
                 )}
               </AnimatePresence>
 
-              <div className={`relative flex items-end gap-2 bg-card border rounded-2xl focus-within:ring-2 focus-within:shadow-sm transition-all duration-200 ${
+              <div className={`relative flex items-end gap-2 rounded-2xl transition-all duration-200 ${
                 isPushToTalk
-                  ? "border-blue-400/80 ring-2 ring-blue-400/25 shadow-[0_0_14px_rgba(96,165,250,0.15)]"
+                  ? "border border-blue-400/60 shadow-[0_0_14px_rgba(96,165,250,0.18),0_4px_32px_rgba(0,0,0,0.45)] bg-card/50 backdrop-blur-xl"
                   : voice.isListening
-                    ? "border-blue-500/60 ring-2 ring-blue-500/15"
-                    : "border-border focus-within:border-primary/60 focus-within:ring-primary/15"
-              } ${messages.length === 0 && !stream.isActive ? "ii-idle-input" : ""}`}>
-                <textarea
-                  ref={inputRef}
-                  data-testid="input-message"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  rows={1}
-                  placeholder={
-                    isPushToTalk
-                      ? "Release to send…"
-                      : voice.isListening
-                        ? "Speak now…"
-                        : hasActiveSystem
-                          ? "Ask me to adjust your program…"
-                          : "Build or edit your training system…"
-                  }
-                  disabled={stream.isActive}
-                  onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
-                  className="flex-1 resize-none bg-transparent px-4 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/40 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
-                  style={{ minHeight: "52px" }}
-                  onInput={(e) => {
-                    const t = e.target as HTMLTextAreaElement;
-                    t.style.height = "auto";
-                    t.style.height = Math.min(t.scrollHeight, 160) + "px";
-                  }}
-                />
-                {/* Mic button — pointer events drive both tap and push-to-talk */}
+                    ? "border border-blue-500/50 shadow-[0_4px_32px_rgba(0,0,0,0.45)] bg-card/50 backdrop-blur-xl"
+                    : messages.length === 0 && !stream.isActive
+                      ? "chat-input-glass ii-idle-input"
+                      : "chat-input-glass"
+              }`}>
+                {/* Mic button — left side, circular, glass treatment */}
                 <motion.button
                   type="button"
                   disabled={stream.isActive}
@@ -4307,12 +4290,12 @@ export default function Chat() {
                   animate={isPushToTalk ? { scale: [1, 1.08, 1] } : {}}
                   transition={isPushToTalk ? { repeat: Infinity, duration: 0.9, ease: "easeInOut" } : {}}
                   title={isPushToTalk ? "Release to send" : voice.isListening ? "Stop listening" : "Tap or hold for voice"}
-                  className={`mb-2 p-2.5 rounded-xl flex-shrink-0 transition-all duration-150 select-none touch-none disabled:opacity-30 disabled:cursor-not-allowed ${
+                  className={`ml-2 mb-2 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-150 select-none touch-none disabled:opacity-30 disabled:cursor-not-allowed ${
                     isPushToTalk
-                      ? "text-blue-200 bg-blue-500/30 shadow-[0_0_10px_rgba(96,165,250,0.3)]"
+                      ? "text-blue-200 bg-blue-500/25 shadow-[0_0_12px_rgba(96,165,250,0.35)] border border-blue-400/40"
                       : voice.isListening
-                        ? "text-blue-400 bg-blue-500/15 hover:bg-blue-500/25"
-                        : "text-muted-foreground/50 hover:text-foreground hover:bg-accent"
+                        ? "text-blue-400 bg-blue-500/15 border border-blue-500/30"
+                        : "text-muted-foreground/45 hover:text-muted-foreground/80 hover:bg-white/6 border border-transparent"
                   }`}
                 >
                   <AnimatePresence mode="wait" initial={false}>
@@ -4347,27 +4330,57 @@ export default function Chat() {
                     )}
                   </AnimatePresence>
                 </motion.button>
-                {/* Send button */}
+
+                <textarea
+                  ref={inputRef}
+                  data-testid="input-message"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                  placeholder={
+                    isPushToTalk
+                      ? "Release to send…"
+                      : voice.isListening
+                        ? "Speak now…"
+                        : hasActiveSystem
+                          ? "Ask me to adjust your program…"
+                          : "Type or speak your command…"
+                  }
+                  disabled={stream.isActive}
+                  onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
+                  className="flex-1 resize-none bg-transparent px-2 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/35 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
+                  style={{ minHeight: "52px" }}
+                  onInput={(e) => {
+                    const t = e.target as HTMLTextAreaElement;
+                    t.style.height = "auto";
+                    t.style.height = Math.min(t.scrollHeight, 160) + "px";
+                  }}
+                />
+                {/* Send button — cyan pill */}
                 <button
                   data-testid="button-send"
                   aria-label="Send message"
                   onClick={() => submitUserMessage({ message: inputText.trim(), source: "typed" })}
                   disabled={!inputText.trim() || stream.isActive}
-                  className="m-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm touch-manipulation"
+                  className="m-2 flex items-center gap-1.5 px-4 py-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-20 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm touch-manipulation font-semibold text-[13px]"
                 >
                   {stream.isActive ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
-                    <SendHorizontal className="w-4 h-4" />
+                    <>
+                      <span className="hidden sm:inline leading-none">send</span>
+                      <SendHorizontal className="w-3.5 h-3.5 sm:hidden" />
+                    </>
                   )}
                 </button>
               </div>
               {/* "Try saying" guidance strip */}
               {hasActiveSystem && !stream.isActive && (
-                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 flex items-center gap-1">
+                <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[9px] text-muted-foreground/35 flex-shrink-0 flex items-center gap-1 uppercase tracking-widest font-semibold">
                     <Sparkles className="w-2.5 h-2.5" />
-                    Try:
+                    Try
                   </span>
                   {(TRY_SAYING_PROMPTS[focusMode] ?? TRY_SAYING_PROMPTS.strength)
                     .slice(trySayingIndex, trySayingIndex + 4)
@@ -4377,7 +4390,7 @@ export default function Chat() {
                         onClick={() => handleSend(prompt, {
                           buttonPayload: makeTrySayingPayload(prompt, activeSystem?.id ?? null),
                         })}
-                        className="text-[10px] text-muted-foreground/60 hover:text-primary border border-border/40 hover:border-primary/30 rounded-full px-2 py-0.5 transition-all duration-150 active:scale-95"
+                        className="text-[10px] text-muted-foreground/50 hover:text-primary/80 adaptive-chip px-2.5 py-1 rounded-full transition-all duration-150 active:scale-95"
                       >
                         {prompt}
                       </button>
@@ -4393,20 +4406,23 @@ export default function Chat() {
 
         {/* Desktop right panel — smooth width slide via CSS transition */}
         <div
-          className={`hidden md:flex flex-col flex-shrink-0 border-l border-border bg-background overflow-hidden transition-[width] duration-250 ease-out ${rightPanelOpen ? "w-80" : "w-8"}`}
+          className={`hidden md:flex flex-col flex-shrink-0 border-l border-border/60 bg-background/98 overflow-hidden transition-[width] duration-250 ease-out ${rightPanelOpen ? "w-80" : "w-8"}`}
         >
           {rightPanelOpen ? (
             <div className="w-80 flex flex-col h-full animate-in fade-in duration-200">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
-                <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${hasActiveSystem || latestProgram ? "bg-primary animate-pulse" : "bg-muted-foreground/30"}`} style={{ animationDuration: "3s" }} />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 flex-shrink-0 bg-card/30 backdrop-blur-sm">
+                <div className="flex items-center gap-2.5">
+                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasActiveSystem || latestProgram ? "bg-green-400" : "bg-muted-foreground/25"}`} style={hasActiveSystem || latestProgram ? { animation: "system-core-pulse 2.5s ease-in-out infinite" } : undefined} />
+                  <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-[0.15em]">
                     Live Program
                   </span>
+                  {(hasActiveSystem || latestProgram) && (
+                    <span className="text-[9px] text-green-400/80 font-medium">Active</span>
+                  )}
                 </div>
                 <button
                   onClick={() => setRightPanelOpen(false)}
-                  className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-[10px] text-muted-foreground/50 hover:text-muted-foreground transition-colors px-2 py-1 rounded-lg hover:bg-muted/20"
                 >
                   Hide
                 </button>
