@@ -1,0 +1,92 @@
+Implement Session Theme Coherence Validation for TrainChat.
+
+Current problem:
+The AI generates highly specific session themes like:
+"Hamstring + Adductor Resilience + Hip Strength"
+
+But the actual exercise list drifts into generic lower-body strength exercises that do not strongly reinforce the declared adaptation target.
+
+Example mismatch:
+Theme:
+- Hamstring resilience
+- Adductor resilience
+- Hip strength
+- Injury prevention emphasis
+
+Exercises generated:
+- Jump Squat
+- Rack Pull
+- Farmers Carry
+- Trap Bar Deadlift
+
+These are not wrong exercises, but they do not strongly express the session identity.
+
+Goal:
+Create a deterministic "theme coherence" layer between:
+1. session naming
+2. exercise selection
+3. prescription generation
+
+Implement:
+1. Session Adaptation Fingerprint
+Every session gets weighted targets:
+Example:
+{
+  hamstring_resilience: 0.35,
+  adductor_resilience: 0.25,
+  hip_strength: 0.25,
+  injury_prevention: 0.15
+}
+
+2. Exercise Contribution Profiles
+Each exercise in the library should expose contribution scores:
+Example:
+Nordic Curl:
+{
+  hamstring_resilience: 0.9,
+  posterior_chain_strength: 0.7,
+  injury_prevention: 0.8
+}
+
+Trap Bar Deadlift:
+{
+  bilateral_strength: 0.9,
+  posterior_chain_strength: 0.6,
+  hamstring_resilience: 0.2
+}
+
+3. Coherence Scoring
+Before finalizing a session:
+- calculate how strongly exercises match the adaptation fingerprint
+- produce a total coherence score
+- reject/remap sessions below threshold
+
+4. Theme Enforcement Rules
+If session theme includes:
+- "resilience"
+- "injury prevention"
+- "adductor"
+- "hamstring"
+
+Then:
+- minimum % of exercises must directly target those themes
+- at least one primary exercise must strongly match (>0.7)
+- generic compound lifts cannot dominate the session
+
+5. Session Composition Constraints
+For resilience-focused sessions:
+- power work limited to primers only
+- carries/core limited to support
+- generic bilateral strength capped
+- eccentrics/isometrics/frontal plane work boosted
+
+6. Validation Pass
+Add a final audit:
+- session title
+- declared adaptation targets
+- top exercise contributors
+- coherence score
+- rejected/remapped exercises
+
+Goal:
+The generated exercises should feel like a direct physical embodiment of the session title and adaptation goal.
