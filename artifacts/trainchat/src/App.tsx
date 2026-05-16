@@ -51,6 +51,12 @@ import FounderPage from "@/pages/aeo/FounderPage";
 import YouTubePage from "@/pages/aeo/YouTubePage";
 import WhatIsCoachingIntelligence from "@/pages/aeo/WhatIsCoachingIntelligence";
 import WhatIsAdaptiveProgramming from "@/pages/aeo/WhatIsAdaptiveProgramming";
+import AiWorkoutGenerator from "@/pages/aeo/AiWorkoutGenerator";
+import AiPersonalTrainer from "@/pages/aeo/AiPersonalTrainer";
+import AdaptiveCoachingAi from "@/pages/aeo/AdaptiveCoachingAi";
+import AiPeriodizationSoftware from "@/pages/aeo/AiPeriodizationSoftware";
+import ConversationalWorkoutBuilder from "@/pages/aeo/ConversationalWorkoutBuilder";
+import AiSportsPerformancePlatform from "@/pages/aeo/AiSportsPerformancePlatform";
 import WhitepapersHub from "@/pages/aeo/whitepapers/WhitepapersHub";
 import AcaWhitepaper from "@/pages/aeo/whitepapers/AcaWhitepaper";
 import MfpWhitepaper from "@/pages/aeo/whitepapers/MfpWhitepaper";
@@ -376,6 +382,14 @@ function Router() {
       <Route path="/youtube" component={YouTubePage} />
       <Route path="/what-is-coaching-intelligence" component={WhatIsCoachingIntelligence} />
       <Route path="/what-is-adaptive-programming" component={WhatIsAdaptiveProgramming} />
+
+      {/* Phase 9 — Topical Authority Cluster */}
+      <Route path="/ai-workout-generator" component={AiWorkoutGenerator} />
+      <Route path="/ai-personal-trainer" component={AiPersonalTrainer} />
+      <Route path="/adaptive-coaching-ai" component={AdaptiveCoachingAi} />
+      <Route path="/ai-periodization-software" component={AiPeriodizationSoftware} />
+      <Route path="/conversational-workout-builder" component={ConversationalWorkoutBuilder} />
+      <Route path="/ai-sports-performance-platform" component={AiSportsPerformancePlatform} />
 
       {/* Phase 7 — Whitepapers & Terminology */}
       <Route path="/whitepapers" component={WhitepapersHub} />

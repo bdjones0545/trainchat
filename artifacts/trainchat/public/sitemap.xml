@@ -58,6 +58,44 @@
     <priority>0.9</priority>
   </url>
 
+  <!-- Topical Authority Cluster — Phase 9 -->
+  <url>
+    <loc>https://www.trainchat.ai/ai-workout-generator</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.92</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/ai-personal-trainer</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.92</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/adaptive-coaching-ai</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.92</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/ai-periodization-software</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/conversational-workout-builder</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://www.trainchat.ai/ai-sports-performance-platform</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
   <!-- Answer / AEO Pages — Phase 6 -->
   <url>
     <loc>https://www.trainchat.ai/what-is-coaching-intelligence</loc>

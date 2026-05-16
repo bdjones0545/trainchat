@@ -1,0 +1,169 @@
+You are an elite semantic SEO architect and topical authority strategist.
+
+TrainChat already has:
+- strong metadata architecture
+- canonical handling
+- OG/Twitter dynamic metadata
+- robots.txt governance
+- sitemap.xml with lastmod
+- structured data support
+- whitepapers
+- AEO-focused semantic foundation
+
+The next objective is:
+
+BUILD A FULL TOPICAL AUTHORITY CLUSTER SYSTEM FOR TRAINCHAT.
+
+GOAL:
+Turn TrainChat into a dominant semantic entity in AI fitness, adaptive coaching, and AI performance training search ecosystems.
+
+IMPORTANT:
+This is NOT a generic blog strategy.
+This is a semantic topic-cluster architecture designed for:
+- Google SEO
+- AI search retrieval
+- entity indexing
+- semantic relevance
+- internal PageRank flow
+- topical authority
+- branded keyword ownership
+
+PRIMARY TARGET:
+TrainChat should become strongly associated with:
+- AI workout generator
+- AI strength coach
+- AI personal trainer
+- adaptive coaching AI
+- AI periodization software
+- conversational workout builder
+- vibe coding workouts
+- AI sports performance platform
+
+TASKS:
+
+1. CREATE A FULL TOPICAL CLUSTER ARCHITECTURE
+
+Design:
+- pillar pages
+- supporting pages
+- internal link hierarchy
+- semantic parent/child relationships
+- URL structure
+
+Output:
+- complete sitemap hierarchy
+- page relationships
+- crawl flow strategy
+
+2. BUILD 8–12 HIGH-VALUE SEO LANDING PAGES
+
+Priority pages:
+- /ai-workout-generator
+- /ai-strength-coach
+- /ai-personal-trainer
+- /adaptive-coaching-ai
+- /ai-periodization-software
+- /conversational-workout-builder
+- /vibe-coding-workouts
+- /ai-sports-performance-platform
+
+Each page must include:
+- optimized H1
+- semantic subheaders
+- long-form educational copy
+- FAQs
+- internal links
+- CTA architecture
+- schema recommendations
+- semantic keyword targeting
+- NLP/entity-rich phrasing
+
+3. IMPLEMENT INTERNAL LINKING STRATEGY
+
+Create:
+- contextual links
+- related concepts sections
+- “continue learning” blocks
+- whitepaper references
+- cross-cluster authority flow
+
+Ensure:
+- no orphan pages
+- shallow crawl depth
+- semantic reinforcement
+- distributed authority
+
+4. CREATE FAQ SEO SYSTEM
+
+Generate:
+- FAQ schema
+- reusable FAQ components
+- AI-search optimized question phrasing
+
+Target:
+- conversational AI retrieval
+- voice search
+- ChatGPT/Perplexity/Gemini citation patterns
+
+5. BUILD CONTENT ENTITY MAP
+
+Map relationships between:
+- TrainChat
+- Adaptive Coaching Architecture
+- AI coaching
+- performance architecture
+- strength training
+- neuromuscular efficiency
+- adaptive periodization
+- conversational programming
+
+Create:
+- entity relationship diagram
+- semantic reinforcement strategy
+- terminology consistency system
+
+6. CREATE REACT/VITE IMPLEMENTATION PLAN
+
+Provide:
+- component structure
+- routing strategy
+- reusable SEO page templates
+- content rendering architecture
+- structured data injection system
+- internal linking utilities
+
+7. PRIORITIZE BY SEO IMPACT
+
+Label every recommendation with:
+- SEO impact
+- implementation difficulty
+- estimated ranking effect
+- estimated authority gain
+
+8. OPTIMIZE FOR AI SEARCH RETRIEVAL
+
+Ensure pages are optimized for:
+- AI overviews
+- ChatGPT retrieval
+- Perplexity citations
+- Gemini indexing
+- Claude semantic extraction
+
+Focus heavily on:
+- concise explanatory sections
+- entity clarity
+- semantic consistency
+- retrieval-friendly formatting
+
+IMPORTANT:
+Do NOT provide generic marketing advice.
+Provide production-level SEO architecture and implementation recommendations suitable for a scalable AI SaaS platform.
+
+OUTPUT:
+- full topical authority strategy
+- page-by-page recommendations
+- semantic architecture
+- implementation roadmap
+- React/Vite implementation guidance
+- internal linking system
+- structured SEO strategy
