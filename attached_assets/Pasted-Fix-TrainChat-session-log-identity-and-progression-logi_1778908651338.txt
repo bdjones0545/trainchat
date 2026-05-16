@@ -1,0 +1,59 @@
+Fix TrainChat session log identity and progression logic.
+
+Bug:
+I intentionally logged Day 2 without logging Day 1 as an edge case.
+
+Observed:
+- Agent moved the user to Week 2 instead of the next incomplete day.
+- Future Day 2 sessions in later weeks appear started/resumable.
+- The system seems to treat "Day 2" as a global session identity across weeks.
+
+Expected:
+Logging Week 1 / Day 2 should only affect that exact session occurrence.
+
+Correct session identity must include:
+- trainingSystemId
+- weekNumber
+- sessionId or sessionInstanceId
+- dayNumber
+- phase/block id if available
+
+Do not use dayNumber alone as the unique key.
+
+Audit:
+1. Find all places where session active/completed/logged state is keyed by dayNumber only.
+2. Replace with a stable session occurrence key:
+   `${trainingSystemId}:${weekNumber}:${dayNumber}:${sessionId}`
+3. Ensure session_logs store and query exact occurrence identity.
+4. Ensure active/resume session state stores exact occurrence identity, not just dayNumber.
+5. Ensure future weeks with the same dayNumber are not marked active, completed, or resumable.
+
+Progression rules:
+1. Logging Day 2 while Day 1 is incomplete should NOT automatically move the user to Week 2.
+2. After logging a session, advance to the next incomplete session in chronological order.
+3. If earlier sessions are incomplete, either:
+   - keep current week active, or
+   - ask whether to skip/move past earlier sessions.
+4. Only advance to Week 2 when all required Week 1 sessions are completed, skipped, or intentionally marked complete.
+5. Never edit completed sessions.
+6. Never start future-week sessions unless the user explicitly opens/starts them.
+
+Agent response rules:
+- Agent may say “Day 2 logged.”
+- Agent must not say “Week 1 complete” unless Week 1 completion is verified.
+- Agent must not move user to the next week based on one logged day.
+
+Regression test:
+Given:
+- Week 1 has Day 1, Day 2, Day 3.
+- User logs Week 1 Day 2 first.
+Expected:
+- Only Week 1 Day 2 is logged.
+- Week 1 Day 1 remains incomplete.
+- Week 1 Day 3 remains not started.
+- Week 2 Day 2 remains not started.
+- Current week remains Week 1.
+- Agent says Day 2 was logged, but Week 1 is not complete.
+
+Goal:
+Session logging must be occurrence-specific, not day-number-specific.
