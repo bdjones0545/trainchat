@@ -100,6 +100,8 @@ router.get("/active-session", requireAuth, async (req: any, res): Promise<void> 
 // Creates or re-opens today's session for the given focus and program.
 const StartSessionBody = z.object({
   trainingSystemId: z.number().optional(),
+  trainingWeekId: z.number().optional(),
+  trainingSessionId: z.number().optional(),
   savedProgramId: z.number().optional(),
   dayNumber: z.number().optional(),
   focusMode: z.enum(["strength", "speed", "mobility"]).optional(),
@@ -124,24 +126,43 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
   const now = new Date();
   const focusMode = resolveFocusModeParam(parsed.data.focusMode ?? req.query.focus);
   const trainingSystemId = parsed.data.trainingSystemId ?? null;
+  const trainingWeekId = parsed.data.trainingWeekId ?? null;
+  const trainingSessionId = parsed.data.trainingSessionId ?? null;
 
   logger.info(
-    { userId, focusMode, trainingSystemId, dayNumber: parsed.data.dayNumber },
+    { userId, focusMode, trainingSystemId, trainingWeekId, trainingSessionId, dayNumber: parsed.data.dayNumber },
     "[SessionProgramWriteAudit] start — attempting"
   );
 
-  const existing = await db
-    .select()
-    .from(activeSessionsTable)
-    .where(
-      and(
-        eq(activeSessionsTable.userId, userId),
-        eq(activeSessionsTable.sessionDate, today),
-        eq(activeSessionsTable.focusMode, focusMode),
-        trainingSystemCondition(trainingSystemId),
+  // If a specific trainingSessionId is provided, look up by that (occurrence-scoped).
+  // Otherwise fall back to the date-scoped lookup.
+  let existing;
+  if (trainingSessionId != null) {
+    existing = await db
+      .select()
+      .from(activeSessionsTable)
+      .where(
+        and(
+          eq(activeSessionsTable.userId, userId),
+          eq(activeSessionsTable.trainingSessionId, trainingSessionId),
+          trainingSystemCondition(trainingSystemId),
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
+  } else {
+    existing = await db
+      .select()
+      .from(activeSessionsTable)
+      .where(
+        and(
+          eq(activeSessionsTable.userId, userId),
+          eq(activeSessionsTable.sessionDate, today),
+          eq(activeSessionsTable.focusMode, focusMode),
+          trainingSystemCondition(trainingSystemId),
+        )
+      )
+      .limit(1);
+  }
 
   if (existing.length > 0) {
     const row = existing[0];
@@ -151,6 +172,8 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
         status: "in_progress",
         focusMode: row.focusMode,
         trainingSystemId: row.trainingSystemId,
+        trainingWeekId: row.trainingWeekId,
+        trainingSessionId: row.trainingSessionId,
         startedAt: row.startedAt.toISOString(),
         savedProgramId: row.savedProgramId,
         dayNumber: row.dayNumber,
@@ -164,6 +187,8 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
       status: row.status,
       focusMode: row.focusMode,
       trainingSystemId: row.trainingSystemId,
+      trainingWeekId: row.trainingWeekId,
+      trainingSessionId: row.trainingSessionId,
       startedAt: row.startedAt.toISOString(),
       completedAt: row.completedAt?.toISOString() ?? null,
       savedProgramId: row.savedProgramId,
@@ -178,6 +203,8 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
     .values({
       userId,
       trainingSystemId,
+      trainingWeekId,
+      trainingSessionId,
       savedProgramId: parsed.data.savedProgramId ?? null,
       dayNumber: parsed.data.dayNumber ?? null,
       sessionDate: today,
@@ -189,7 +216,7 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
     .returning();
 
   logger.info(
-    { userId, focusMode, trainingSystemId, rowId: row.id, writeSucceeded: true },
+    { userId, focusMode, trainingSystemId, trainingWeekId, trainingSessionId, rowId: row.id, writeSucceeded: true },
     "[SessionProgramWriteAudit] start — created"
   );
 
@@ -198,6 +225,8 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
     status: "in_progress",
     focusMode: row.focusMode,
     trainingSystemId: row.trainingSystemId,
+    trainingWeekId: row.trainingWeekId,
+    trainingSessionId: row.trainingSessionId,
     startedAt: row.startedAt.toISOString(),
     savedProgramId: row.savedProgramId,
     dayNumber: row.dayNumber,
@@ -205,8 +234,8 @@ router.post("/active-session/start", requireAuth, async (req: any, res): Promise
 });
 
 // ── POST /api/active-session/complete ─────────────────────────────────────────
-// Marks today's session for the given focus and program as completed.
-// Body: { focusMode?: string; trainingSystemId?: number }
+// Marks the session for the given focus and program as completed.
+// Body: { focusMode?: string; trainingSystemId?: number; trainingWeekId?: number; trainingSessionId?: number }
 router.post("/active-session/complete", requireAuth, async (req: any, res): Promise<void> => {
   const userId = req.session.userId!;
   const today = todayDateString();
@@ -215,6 +244,14 @@ router.post("/active-session/complete", requireAuth, async (req: any, res): Prom
   const trainingSystemId =
     req.body?.trainingSystemId != null
       ? (parseInt(String(req.body.trainingSystemId), 10) || null)
+      : null;
+  const trainingWeekId =
+    req.body?.trainingWeekId != null
+      ? (parseInt(String(req.body.trainingWeekId), 10) || null)
+      : null;
+  const trainingSessionId =
+    req.body?.trainingSessionId != null
+      ? (parseInt(String(req.body.trainingSessionId), 10) || null)
       : null;
 
   if (!trainingSystemId) {
@@ -225,30 +262,49 @@ router.post("/active-session/complete", requireAuth, async (req: any, res): Prom
   }
 
   logger.info(
-    { userId, focusMode, trainingSystemId },
+    { userId, focusMode, trainingSystemId, trainingWeekId, trainingSessionId },
     "[SessionProgramWriteAudit] complete — attempting"
   );
 
-  const existing = await db
-    .select()
-    .from(activeSessionsTable)
-    .where(
-      and(
-        eq(activeSessionsTable.userId, userId),
-        eq(activeSessionsTable.sessionDate, today),
-        eq(activeSessionsTable.focusMode, focusMode),
-        trainingSystemCondition(trainingSystemId),
+  // If a specific trainingSessionId is provided, look up by that (occurrence-scoped).
+  // Otherwise fall back to today's date-scoped lookup.
+  let existing;
+  if (trainingSessionId != null) {
+    existing = await db
+      .select()
+      .from(activeSessionsTable)
+      .where(
+        and(
+          eq(activeSessionsTable.userId, userId),
+          eq(activeSessionsTable.trainingSessionId, trainingSessionId),
+          trainingSystemCondition(trainingSystemId),
+        )
       )
-    )
-    .limit(1);
+      .limit(1);
+  } else {
+    existing = await db
+      .select()
+      .from(activeSessionsTable)
+      .where(
+        and(
+          eq(activeSessionsTable.userId, userId),
+          eq(activeSessionsTable.sessionDate, today),
+          eq(activeSessionsTable.focusMode, focusMode),
+          trainingSystemCondition(trainingSystemId),
+        )
+      )
+      .limit(1);
+  }
 
   if (existing.length === 0) {
-    // No active session today for this program+focus — create a completed one
+    // No active session for this occurrence — create a completed one
     const [row] = await db
       .insert(activeSessionsTable)
       .values({
         userId,
         trainingSystemId,
+        trainingWeekId,
+        trainingSessionId,
         sessionDate: today,
         focusMode,
         status: "completed",

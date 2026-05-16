@@ -8,6 +8,8 @@ export const sessionLogsTable = pgTable("session_logs", {
   userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
   savedProgramId: integer("saved_program_id"),
   trainingSystemId: integer("training_system_id"),
+  trainingWeekId: integer("training_week_id"),
+  trainingSessionId: integer("training_session_id"),
   conversationId: integer("conversation_id"),
   dayNumber: integer("day_number"),
   sessionType: text("session_type").notNull().default("workout"),

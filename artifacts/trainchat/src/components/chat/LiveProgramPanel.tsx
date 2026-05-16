@@ -1557,7 +1557,7 @@ function ProgramTab({
   }, [panelFocusMode, expandedDay, serverStatus, activeSessionData?.dayNumber, localMode, sessionMode]);
 
   const startSessionMutation = useMutation({
-    mutationFn: (data: { trainingSystemId?: number; savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
+    mutationFn: (data: { trainingSystemId?: number; trainingWeekId?: number; trainingSessionId?: number; savedProgramId?: number; dayNumber?: number; focusMode?: string }) =>
       customFetch<ActiveSessionData>("/api/active-session/start", {
         method: "POST",
         body: JSON.stringify(data),
@@ -1576,6 +1576,8 @@ function ProgramTab({
     if (serverStatus === "not_started") {
       startSessionMutation.mutate({
         trainingSystemId: trainingSystemId ?? undefined,
+        trainingWeekId: viewingWeekId,
+        trainingSessionId: viewingSessionId,
         savedProgramId: savedProgramId ?? undefined,
         dayNumber: dayNum,
         focusMode: panelFocusMode,
@@ -1639,6 +1641,8 @@ function ProgramTab({
         body: JSON.stringify({
           focusMode: panelFocusMode,
           ...(trainingSystemId != null ? { trainingSystemId } : {}),
+          ...(viewingWeekId != null ? { trainingWeekId: viewingWeekId } : {}),
+          ...(viewingSessionId != null ? { trainingSessionId: viewingSessionId } : {}),
         }),
       })
         .then(() => {
@@ -1977,6 +1981,7 @@ function ProgramTab({
         .filter((s: any) => !s.isRestDay)
         .map((s: any, idx: number) => ({
           dayNumber: idx + 1,
+          sessionId: typeof s.id === "number" ? s.id : undefined,
           name: s.label,
           focus: s.emphasis ?? undefined,
           dayOfWeek: s.dayOfWeek ?? undefined,
@@ -1991,6 +1996,33 @@ function ProgramTab({
           notes: s.coachingNotes ?? undefined,
         }))
     : days;
+
+  // Derive occurrence-scoped IDs for the currently-expanded session.
+  // trainingWeekId: the DB ID of the training week being viewed.
+  // trainingSessionId: the DB ID of the specific training session being expanded.
+  // For alt-weeks: read from viewDays (altWeekData sessions have DB IDs).
+  // For current week: read from the React Query cache for "training-system-today".
+  const todayCache = queryClient
+    .getQueriesData<any>({ queryKey: ["training-system-today"] })
+    .map(([, data]) => data)
+    .find((d) => d?.currentSessionIndex != null);
+
+  const viewingWeekId: number | undefined = viewingAltWeek
+    ? (altWeekData?.id as number | undefined)
+    : (todayCache?.currentWeek?.id as number | undefined);
+
+  const viewingSessionId: number | undefined = (() => {
+    if (expandedDay === null) return undefined;
+    if (viewingAltWeek) {
+      return (viewDays[expandedDay] as any)?.sessionId as number | undefined;
+    }
+    // Current week: match against the session index returned by getTodaySession.
+    const todayIdx = todayCache?.currentSessionIndex as number | undefined;
+    if (todayIdx !== undefined && expandedDay === todayIdx) {
+      return todayCache?.id as number | undefined;
+    }
+    return undefined;
+  })();
 
   const isUpdating = buildingState?.isBuilding && !!program;
   const updatePhase = isUpdating ? getBuildPhase(buildingState!.stage) : null;

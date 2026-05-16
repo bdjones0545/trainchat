@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases, conversationsTable, messagesTable } from "@workspace/db";
-import { eq, desc, and, ilike, gte, lt } from "drizzle-orm";
+import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases, conversationsTable, messagesTable, activeSessionsTable } from "@workspace/db";
+import { eq, desc, and, ilike, gte, lt, inArray } from "drizzle-orm";
 import { analyzeSessionLogAdaptation } from "../lib/session-log-adaptation-analyzer";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
@@ -278,76 +278,137 @@ async function writePainAreasToMemory(
 }
 
 /**
- * After a session is logged, check whether the user has completed their weekly target.
- * Calendar week = Monday 00:00 → Sunday 23:59.
- * If sessions logged this week (non-skipped) >= weeklyFrequency:
- *   - advance the current training week to the next
- *   - post a chat acknowledgment about the transition
- *   - if block is complete, fire-and-forget auto-generate the continuation
+ * After a session is logged, check whether the user has completed ALL sessions
+ * in the current training week.
+ *
+ * Progression rules:
+ *  - Only advance when every non-rest training_session in the current week has a
+ *    corresponding completed active_sessions record (matched by trainingSessionId).
+ *  - Logging a single day never triggers advancement — all days must be done.
+ *  - Falls back to calendar-week counting only when occurrence data is absent
+ *    (legacy sessions without trainingSessionId stored).
  */
 async function checkAndAutoAdvanceWeek(userId: number): Promise<void> {
   try {
-    // Get active system and its weekly frequency
+    // Get active system
     const [system] = await db
-      .select({ id: trainingSystems.id, weeklyFrequency: trainingSystems.weeklyFrequency })
+      .select({ id: trainingSystems.id, weeklyFrequency: trainingSystems.weeklyFrequency, currentPhaseId: trainingSystems.currentPhaseId })
       .from(trainingSystems)
       .where(eq(trainingSystems.userId, userId))
       .limit(1);
-    if (!system) return;
+    if (!system || !system.currentPhaseId) return;
 
-    const weeklyFrequency = system.weeklyFrequency ?? 3;
+    // Get current training week (must be status "current")
+    const [currentPhaseRow] = await db
+      .select({ id: trainingPhases.id })
+      .from(trainingPhases)
+      .where(and(
+        eq(trainingPhases.id, system.currentPhaseId),
+        eq(trainingPhases.status, "current")
+      ))
+      .limit(1);
+    if (!currentPhaseRow) return;
 
-    // Current calendar week: Monday 00:00 → next Monday 00:00
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sun, 1=Mon...
-    const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - daysFromMonday);
-    monday.setHours(0, 0, 0, 0);
-    const nextMonday = new Date(monday);
-    nextMonday.setDate(monday.getDate() + 7);
+    const [currentWeekRow] = await db
+      .select({ id: trainingWeeks.id, weekNumber: trainingWeeks.weekNumber, status: trainingWeeks.status })
+      .from(trainingWeeks)
+      .where(and(
+        eq(trainingWeeks.trainingPhaseId, currentPhaseRow.id),
+        eq(trainingWeeks.status, "current")
+      ))
+      .limit(1);
+    if (!currentWeekRow || currentWeekRow.status === "completed") return;
 
-    // Count non-skipped sessions this calendar week
-    const weekLogs = await db
-      .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
-      .from(sessionLogsTable)
+    // Get all non-rest training sessions for the current week
+    const weekSessions = await db
+      .select({ id: trainingSessions.id })
+      .from(trainingSessions)
       .where(
         and(
-          eq(sessionLogsTable.userId, userId),
-          gte(sessionLogsTable.completedAt, monday),
-          lt(sessionLogsTable.completedAt, nextMonday)
+          eq(trainingSessions.trainingWeekId, currentWeekRow.id),
+          eq(trainingSessions.isRestDay, false)
         )
       );
 
-    const activeSessionCount = weekLogs.filter((l) => l.sessionStatus !== "skipped").length;
-    if (activeSessionCount < weeklyFrequency) {
-      // Rolling 7-day fallback: handles users who started mid-week (e.g. Wednesday onboarding)
-      // where the calendar Mon–Sun window may never fill up for that first partial week.
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(now.getDate() - 6);
-      sevenDaysAgo.setHours(0, 0, 0, 0);
-      const rollingLogs = await db
+    if (weekSessions.length === 0) return;
+    const weekSessionIds = weekSessions.map((s) => s.id);
+
+    // ── Occurrence-based check (new, correct path) ──────────────────────────
+    // Look for completed active_sessions records keyed by this week's trainingSessionIds.
+    const completedForWeek = await db
+      .select({ trainingSessionId: activeSessionsTable.trainingSessionId })
+      .from(activeSessionsTable)
+      .where(
+        and(
+          eq(activeSessionsTable.userId, userId),
+          eq(activeSessionsTable.status, "completed"),
+          system.id != null ? eq(activeSessionsTable.trainingSystemId, system.id) : undefined,
+          inArray(activeSessionsTable.trainingSessionId, weekSessionIds)
+        )
+      );
+
+    const completedSessionIds = new Set(
+      completedForWeek.map((r) => r.trainingSessionId).filter((id): id is number => id != null)
+    );
+    const allWeekSessionsDone = weekSessionIds.every((id) => completedSessionIds.has(id));
+
+    // If occurrence data is present, use it exclusively.
+    // Only fall back to the calendar heuristic when zero sessions have been
+    // tracked with trainingSessionId (i.e. all legacy data).
+    const hasOccurrenceData = completedSessionIds.size > 0;
+
+    if (hasOccurrenceData) {
+      if (!allWeekSessionsDone) {
+        logger.info(
+          { userId, completedCount: completedSessionIds.size, required: weekSessionIds.length, weekId: currentWeekRow.id },
+          "[WeekAdvance] Not all sessions complete — holding at current week"
+        );
+        return;
+      }
+      // Fall through to advance
+    } else {
+      // ── Legacy fallback: calendar-week heuristic ──────────────────────────
+      // Used only when no occurrence-scoped data exists yet.
+      const weeklyFrequency = system.weeklyFrequency ?? 3;
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - daysFromMonday);
+      monday.setHours(0, 0, 0, 0);
+      const nextMonday = new Date(monday);
+      nextMonday.setDate(monday.getDate() + 7);
+
+      const weekLogs = await db
         .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
         .from(sessionLogsTable)
         .where(
           and(
             eq(sessionLogsTable.userId, userId),
-            gte(sessionLogsTable.completedAt, sevenDaysAgo),
+            gte(sessionLogsTable.completedAt, monday),
             lt(sessionLogsTable.completedAt, nextMonday)
           )
         );
-      const rollingCount = rollingLogs.filter((l) => l.sessionStatus !== "skipped").length;
-      if (rollingCount < weeklyFrequency) return;
+      const activeSessionCount = weekLogs.filter((l) => l.sessionStatus !== "skipped").length;
+      if (activeSessionCount < weeklyFrequency) {
+        const sevenDaysAgo = new Date(now);
+        sevenDaysAgo.setDate(now.getDate() - 6);
+        sevenDaysAgo.setHours(0, 0, 0, 0);
+        const rollingLogs = await db
+          .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
+          .from(sessionLogsTable)
+          .where(
+            and(
+              eq(sessionLogsTable.userId, userId),
+              gte(sessionLogsTable.completedAt, sevenDaysAgo),
+              lt(sessionLogsTable.completedAt, nextMonday)
+            )
+          );
+        const rollingCount = rollingLogs.filter((l) => l.sessionStatus !== "skipped").length;
+        if (rollingCount < weeklyFrequency) return;
+      }
+      // Also require that we haven't done this already via occurrence path
     }
-
-    // Check: is the current training week already completed? (Avoid double-advance)
-    const currentWeekRows = await db
-      .select({ id: trainingWeeks.id, status: trainingWeeks.status })
-      .from(trainingWeeks)
-      .where(eq(trainingWeeks.status, "current"))
-      .limit(1);
-
-    if (currentWeekRows.length === 0 || currentWeekRows[0].status === "completed") return;
 
     // Advance to next week
     const advance = await advanceToNextWeek(userId);
@@ -408,6 +469,8 @@ const router: IRouter = Router();
 const CreateSessionLogBody = z.object({
   savedProgramId: z.number().optional(),
   trainingSystemId: z.number().optional(),
+  trainingWeekId: z.number().optional(),
+  trainingSessionId: z.number().optional(),
   conversationId: z.number().optional(),
   dayNumber: z.number().optional(),
   sessionType: z.string().default("workout"),
@@ -537,10 +600,37 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
   const data = parsed.data;
 
   // ── Duplicate prevention ─────────────────────────────────────────────────
-  // If the same savedProgramId + dayNumber was logged in the last 2 hours,
-  // return the existing log rather than creating a duplicate.
-  if (data.savedProgramId != null && data.dayNumber != null) {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  // When a specific trainingSessionId is provided, use it as the duplicate key
+  // (occurrence-scoped — prevents re-logging the same specific session instance).
+  // Otherwise fall back to savedProgramId + dayNumber scoping.
+  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  if (data.trainingSessionId != null) {
+    const [existing] = await db
+      .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
+      .from(sessionLogsTable)
+      .where(
+        and(
+          eq(sessionLogsTable.userId, userId),
+          eq(sessionLogsTable.trainingSessionId, data.trainingSessionId),
+          gte(sessionLogsTable.completedAt, twoHoursAgo)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      logger.info({ userId, existingId: existing.id, trainingSessionId: data.trainingSessionId }, "[SessionLog] Duplicate (occurrence-scoped) — returning existing");
+      res.status(200).json({
+        id: existing.id,
+        trainingSessionId: data.trainingSessionId,
+        sessionStatus: existing.sessionStatus,
+        completedAt: new Date().toISOString(),
+        recap: null,
+        adaptationApplied: false,
+        duplicate: true,
+      });
+      return;
+    }
+  } else if (data.savedProgramId != null && data.dayNumber != null) {
     const [existing] = await db
       .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
       .from(sessionLogsTable)
@@ -591,6 +681,8 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
       userId,
       savedProgramId: data.savedProgramId ?? null,
       trainingSystemId: resolvedTrainingSystemId,
+      trainingWeekId: data.trainingWeekId ?? null,
+      trainingSessionId: data.trainingSessionId ?? null,
       conversationId: data.conversationId ?? null,
       dayNumber: data.dayNumber ?? null,
       sessionType: data.sessionType,

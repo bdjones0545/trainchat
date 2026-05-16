@@ -613,12 +613,14 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
   if (sessions.length === 0) return null;
 
   // ── Session-history-based progression ────────────────────────────────────────
-  // Count ALL completed sessions for this user + program (not just today).
-  // This drives the current session index, replacing calendar/weekday matching.
-  // Rules: if 0 completed → Day 1, if 1 completed → Day 2, etc.
-  // Clamp so currentSessionIndex never exceeds the last session.
+  // Query ALL completed sessions for this user + program.
+  // Prefer occurrence-scoped logic (trainingSessionId) when available:
+  //   Find the first session in the current week whose trainingSession.id is NOT
+  //   in the completed set → that's the next session to do.
+  // Fall back to the legacy global-count approach when no occurrence data exists
+  //   (old sessions before this fix was deployed).
   const allCompletedRows = await db
-    .select()
+    .select({ trainingSessionId: activeSessionsTable.trainingSessionId, id: activeSessionsTable.id })
     .from(activeSessionsTable)
     .where(
       and(
@@ -630,10 +632,33 @@ export async function getTodaySession(userId: number, focusMode?: string | null,
       )
     );
 
-  const completedCount = allCompletedRows.length;
+  const completedBySessionId = new Set(
+    allCompletedRows
+      .map((r) => r.trainingSessionId)
+      .filter((id): id is number => id != null)
+  );
+  const hasOccurrenceData = completedBySessionId.size > 0;
+
   const totalSessions = sessions.length;
-  const isWeekComplete = completedCount >= totalSessions;
-  const currentSessionIndex = Math.min(completedCount, totalSessions - 1);
+  let completedCount: number;
+  let isWeekComplete: boolean;
+  let currentSessionIndex: number;
+
+  if (hasOccurrenceData) {
+    // Occurrence-based: find the first session in this week that hasn't been completed.
+    // Because trainingSession IDs are globally unique PKs, this is cross-week safe —
+    // completing Day 2 of Week 1 never marks Day 2 of Week 2 as done.
+    const firstIncompleteIdx = sessions.findIndex((s) => !completedBySessionId.has(s.id));
+    isWeekComplete = firstIncompleteIdx === -1;
+    currentSessionIndex = isWeekComplete ? totalSessions - 1 : firstIncompleteIdx;
+    completedCount = isWeekComplete ? totalSessions : firstIncompleteIdx;
+  } else {
+    // Legacy fallback: use total completed count as an index into the session array.
+    completedCount = allCompletedRows.length;
+    isWeekComplete = completedCount >= totalSessions;
+    currentSessionIndex = Math.min(completedCount, totalSessions - 1);
+  }
+
   const targetSession = sessions[currentSessionIndex] ?? sessions[0] ?? null;
 
   if (process.env.NODE_ENV !== "production") {
