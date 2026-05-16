@@ -673,6 +673,7 @@ function ProgramTab({
 }: Omit<Props, "hasActiveSystem">) {
   const queryClient = useQueryClient();
   const [expandedDay, setExpandedDay] = useState<number | null>(0);
+  const dayCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const prevProgramRef = useRef<ProgramStructure | null>(null);
   const pinnedProgramKey = useRef<string | null>(null);
   /** Set to true when a brand-new build just fired — forces Day 1 on next pin. */
@@ -1792,6 +1793,20 @@ function ProgramTab({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedDay]);
 
+  // Scroll the newly opened day card into view after layout settles.
+  useEffect(() => {
+    if (expandedDay === null) return;
+    const el = dayCardRefs.current.get(expandedDay);
+    if (!el) return;
+    // Two rAFs: first lets React flush the expand, second lets the browser
+    // compute the new layout height before we scroll.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      });
+    });
+  }, [expandedDay]);
+
   // Detect "draft → live" transition for new builds.
   // When a new program is saved, the panel initially shows `latestProgram` (AI stream order)
   // while weekData loads from the DB. Once weekData arrives, `programSource` switches
@@ -2581,7 +2596,14 @@ function ProgramTab({
           const dayDiff = animatedKeys.get(`d${idx}`);
 
           return (
-            <div key={idx}>
+            <div
+              key={idx}
+              ref={(el) => {
+                if (el) dayCardRefs.current.set(idx, el);
+                else dayCardRefs.current.delete(idx);
+              }}
+              style={{ scrollMarginTop: "8px" }}
+            >
               {/* Inline paywall — sits between Day 1 and Day 2, inside the scroll flow */}
               {showPaywall && idx === 1 && (
                 <div className="rounded-xl border border-primary/20 bg-card p-5 text-center mb-2">
