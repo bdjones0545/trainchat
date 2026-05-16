@@ -1,6 +1,18 @@
 import { X, CheckCircle, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+const PAIN_AREAS = [
+  { key: "knee",       label: "Knee" },
+  { key: "lower_back", label: "Lower back" },
+  { key: "shoulder",   label: "Shoulder" },
+  { key: "hip",        label: "Hip" },
+  { key: "elbow",      label: "Elbow" },
+  { key: "wrist",      label: "Wrist" },
+  { key: "ankle",      label: "Ankle" },
+  { key: "neck",       label: "Neck" },
+  { key: "upper_back", label: "Upper back" },
+];
+
 type SessionStatus = "completed" | "partial" | "skipped";
 
 const DURATION_CHIPS = [
@@ -25,6 +37,8 @@ interface Props {
     difficultyScore?: number;
     painScore?: number;
     energyScore?: number;
+    enjoymentScore?: number;
+    painAreas?: string[];
     notes?: string;
   }) => void;
   isSubmitting?: boolean;
@@ -115,9 +129,21 @@ export default function SessionLogModal({
   const [difficulty, setDifficulty] = useState<number | null>(null);
   const [pain, setPain] = useState<number | null>(null);
   const [energy, setEnergy] = useState<number | null>(null);
+  const [enjoyment, setEnjoyment] = useState<number | null>(null);
+  const [selectedPainAreas, setSelectedPainAreas] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState("");
 
   const isSkipped = sessionStatus === "skipped";
+  const showPainAreas = (pain ?? 0) >= 3;
+
+  function togglePainArea(key: string) {
+    setSelectedPainAreas((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function handleSubmit() {
     onSubmit({
@@ -128,6 +154,8 @@ export default function SessionLogModal({
       difficultyScore: isSkipped ? undefined : (difficulty ?? undefined),
       painScore: isSkipped ? undefined : (pain ?? undefined),
       energyScore: isSkipped ? undefined : (energy ?? undefined),
+      enjoymentScore: isSkipped ? undefined : (enjoyment ?? undefined),
+      painAreas: isSkipped || selectedPainAreas.size === 0 ? undefined : Array.from(selectedPainAreas),
       notes: notes.trim() || undefined,
     });
   }
@@ -225,6 +253,31 @@ export default function SessionLogModal({
                 getLabel={(v) => PAIN_LABELS[v]}
                 highlightColor={`${pain && pain >= 4 ? "bg-red-500 text-white border-red-500" : "bg-amber-500 text-white border-amber-500"}`}
               />
+
+              {showPainAreas && (
+                <div>
+                  <span className="block text-xs font-semibold text-foreground mb-2">Where? (tap all that apply)</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PAIN_AREAS.map((area) => {
+                      const active = selectedPainAreas.has(area.key);
+                      return (
+                        <button
+                          key={area.key}
+                          onClick={() => togglePainArea(area.key)}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-all ${
+                            active
+                              ? "bg-red-500/10 border-red-500/40 text-red-400"
+                              : "border-border/60 bg-white/4 text-muted-foreground hover:border-border hover:text-foreground"
+                          }`}
+                        >
+                          {area.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <ScoreSelector
                 label="Energy level after?"
                 value={energy}

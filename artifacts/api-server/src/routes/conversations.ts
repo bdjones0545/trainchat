@@ -100,6 +100,7 @@ import {
   inferExerciseReferenceFromMutation,
   inferSessionReferenceFromMutation,
 } from "../lib/conversation-context-resolver";
+import { buildSessionLogContext } from "../lib/session-log-adaptation-analyzer";
 
 const router: IRouter = Router();
 
@@ -688,12 +689,16 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
 
   if (isPro) {
     const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
-    const [adaptation, memories] = await Promise.all([
+    const [adaptation, memories, sessionLogCtx] = await Promise.all([
       buildAdaptationContext(userId, _sessionFocusMode).catch(() => ({ promptContext: "" })),
       allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
+      buildSessionLogContext(userId).catch(() => ""),
     ]);
     adaptationCtx = adaptation.promptContext;
     memoryCtx = allowMemory ? buildMemoryContext(memories) : "";
+    if (sessionLogCtx) {
+      memoryCtx += `\n\n${sessionLogCtx}`;
+    }
     if (allowInsights && allowMemory) {
       const insights = await generateInsights(userId, memories).catch(() => []);
       insightHint = buildInsightPromptHint(insights);
@@ -738,6 +743,9 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
     const constraintMemories = await listMemories(userId).catch(() => []);
     hardConstraintsNonSSE = loadHardConstraints(constraintMemories);
     constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
+    // Inject recent session logs for all users — grounding the coach in real feedback
+    const sessionLogCtxFree = await buildSessionLogContext(userId).catch(() => "");
+    if (sessionLogCtxFree) memoryCtx += `\n\n${sessionLogCtxFree}`;
   }
 
   // ── Priority 3: Mutation trust language directive ─────────────────────────
@@ -3488,12 +3496,16 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   if (isPro) {
     const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
-    const [adaptation, memories] = await Promise.all([
+    const [adaptation, memories, sessionLogCtxSSE] = await Promise.all([
       buildAdaptationContext(userId, _sessionFocusMode).catch(() => ({ promptContext: "" })),
       allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
+      buildSessionLogContext(userId).catch(() => ""),
     ]);
     adaptationCtx = adaptation.promptContext;
     memoryCtx = allowMemory ? buildMemoryContext(memories) : "";
+    if (sessionLogCtxSSE) {
+      memoryCtx += `\n\n${sessionLogCtxSSE}`;
+    }
     if (allowInsights && allowMemory) {
       const insights = await generateInsights(userId, memories).catch(() => []);
       insightHint = buildInsightPromptHint(insights);
@@ -3537,6 +3549,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     const constraintMemories = await listMemories(userId).catch(() => []);
     hardConstraintsSSE = loadHardConstraints(constraintMemories);
     constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
+    // Inject recent session logs for all users — grounding the coach in real feedback
+    const sessionLogCtxFreeSSE = await buildSessionLogContext(userId).catch(() => "");
+    if (sessionLogCtxFreeSSE) memoryCtx += `\n\n${sessionLogCtxFreeSSE}`;
   }
 
   // ── Priority 3: Mutation trust language directive (SSE path) ─────────────

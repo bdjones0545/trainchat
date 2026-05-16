@@ -8,8 +8,9 @@
  */
 
 import { useState } from "react";
-import { X, CheckCircle2, ChevronRight } from "lucide-react";
+import { X, CheckCircle2, ChevronRight, Sparkles } from "lucide-react";
 import { customFetch } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import NeuralGrowthOverlay, { type NeuralAwardResult } from "@/components/gamification/NeuralGrowthOverlay";
 
 // ─── Rating configs ────────────────────────────────────────────────────────
@@ -80,6 +81,9 @@ const STATUS_OPTIONS: { value: SessionStatus; label: string; emoji: string; colo
 interface SessionFeedbackProps {
   sessionLabel?: string;
   streakDays?: number;
+  savedProgramId?: number;
+  dayNumber?: number;
+  conversationId?: number;
   onClose: () => void;
   onSubmitted: () => void;
   onNeuralResult?: (result: NeuralAwardResult) => void;
@@ -179,7 +183,8 @@ function SessionRecapCard({ recap, onClose, onGotIt }: { recap: SessionRecap; on
 
 // ─── Main Component ────────────────────────────────────────────────────────
 
-export default function SessionFeedback({ sessionLabel, streakDays, onClose, onSubmitted, onNeuralResult }: SessionFeedbackProps) {
+export default function SessionFeedback({ sessionLabel, streakDays, savedProgramId, dayNumber, conversationId, onClose, onSubmitted, onNeuralResult }: SessionFeedbackProps) {
+  const queryClient = useQueryClient();
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [actualDuration, setActualDuration] = useState<number | null>(null);
   const [difficulty, setDifficulty] = useState<number | null>(null);
@@ -190,6 +195,8 @@ export default function SessionFeedback({ sessionLabel, streakDays, onClose, onS
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [recap, setRecap] = useState<SessionRecap | null>(null);
+  const [adaptationApplied, setAdaptationApplied] = useState(false);
+  const [adaptationReason, setAdaptationReason] = useState<string | null>(null);
   const [neuralResult, setNeuralResult] = useState<NeuralAwardResult | null>(null);
   const [showNeuralOverlay, setShowNeuralOverlay] = useState(false);
 
@@ -216,10 +223,13 @@ export default function SessionFeedback({ sessionLabel, streakDays, onClose, onS
     try {
       const isPerfect = (difficulty ?? 5) <= 2 && (pain ?? 5) === 1 && sessionStatus === "completed";
       const [result] = await Promise.all([
-        customFetch<{ recap: SessionRecap }>("/api/session-logs", {
+        customFetch<{ recap: SessionRecap; adaptationApplied?: boolean; adjustmentReason?: string | null }>("/api/session-logs", {
           method: "POST",
           body: JSON.stringify({
             sessionStatus,
+            savedProgramId: savedProgramId ?? undefined,
+            dayNumber: dayNumber ?? undefined,
+            conversationId: conversationId ?? undefined,
             actualDuration: actualDuration ?? undefined,
             difficultyScore: difficulty ?? undefined,
             painScore: pain ?? undefined,
@@ -240,6 +250,14 @@ export default function SessionFeedback({ sessionLabel, streakDays, onClose, onS
         }).then((r) => setNeuralResult(r)).catch(() => null),
       ]);
       setRecap(result.recap ?? null);
+      if (result.adaptationApplied) {
+        setAdaptationApplied(true);
+        setAdaptationReason(result.adjustmentReason ?? null);
+      }
+      // Invalidate program/change-log caches so Live Program Panel reflects adaptations
+      queryClient.invalidateQueries({ queryKey: ["training-system"] });
+      queryClient.invalidateQueries({ queryKey: ["change-log"] });
+      queryClient.invalidateQueries({ queryKey: ["session-logs"] });
       onSubmitted();
     } catch {
       setSubmitting(false);
@@ -277,7 +295,20 @@ export default function SessionFeedback({ sessionLabel, streakDays, onClose, onS
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {recap ? (
-            <SessionRecapCard recap={recap} onClose={handleClose} onGotIt={handleGotIt} />
+            <>
+              {adaptationApplied && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/10 border border-primary/20 mb-1">
+                  <Sparkles className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                  <div>
+                    <p className="text-[11px] font-bold text-primary leading-none mb-0.5">Program Adapted</p>
+                    {adaptationReason && (
+                      <p className="text-[10px] text-muted-foreground leading-snug">{adaptationReason}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              <SessionRecapCard recap={recap} onClose={handleClose} onGotIt={handleGotIt} />
+            </>
           ) : (
             <>
               {/* Session status */}

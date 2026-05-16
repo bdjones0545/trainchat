@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, sessionLogsTable, sessionFeedbackTable, systemChangeLog, trainingSystems, exerciseLogsTable, sessionExercises, trainingSessions, trainingWeeks, trainingPhases, conversationsTable, messagesTable } from "@workspace/db";
 import { eq, desc, and, ilike, gte, lt } from "drizzle-orm";
+import { analyzeSessionLogAdaptation } from "../lib/session-log-adaptation-analyzer";
 import { requireAuth } from "../middlewares/auth";
 import { z } from "zod";
 import { evaluateWorkoutCompletion } from "../lib/workout-evaluation";
@@ -406,6 +407,8 @@ const router: IRouter = Router();
 
 const CreateSessionLogBody = z.object({
   savedProgramId: z.number().optional(),
+  trainingSystemId: z.number().optional(),
+  conversationId: z.number().optional(),
   dayNumber: z.number().optional(),
   sessionType: z.string().default("workout"),
   completedAt: z.string().optional(),
@@ -533,12 +536,62 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
   const userId = req.session.userId!;
   const data = parsed.data;
 
+  // ── Duplicate prevention ─────────────────────────────────────────────────
+  // If the same savedProgramId + dayNumber was logged in the last 2 hours,
+  // return the existing log rather than creating a duplicate.
+  if (data.savedProgramId != null && data.dayNumber != null) {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const [existing] = await db
+      .select({ id: sessionLogsTable.id, sessionStatus: sessionLogsTable.sessionStatus })
+      .from(sessionLogsTable)
+      .where(
+        and(
+          eq(sessionLogsTable.userId, userId),
+          eq(sessionLogsTable.savedProgramId, data.savedProgramId),
+          eq(sessionLogsTable.dayNumber, data.dayNumber),
+          gte(sessionLogsTable.completedAt, twoHoursAgo)
+        )
+      )
+      .limit(1);
+
+    if (existing) {
+      logger.info({ userId, existingId: existing.id }, "[SessionLog] Duplicate log detected — returning existing");
+      res.status(200).json({
+        id: existing.id,
+        savedProgramId: data.savedProgramId,
+        dayNumber: data.dayNumber,
+        sessionStatus: existing.sessionStatus,
+        completedAt: new Date().toISOString(),
+        recap: null,
+        adaptationApplied: false,
+        duplicate: true,
+      });
+      return;
+    }
+  }
+
+  // ── Resolve trainingSystemId if not provided ─────────────────────────────
+  let resolvedTrainingSystemId = data.trainingSystemId ?? null;
+  if (!resolvedTrainingSystemId) {
+    try {
+      const [activeSystem] = await db
+        .select({ id: trainingSystems.id })
+        .from(trainingSystems)
+        .where(eq(trainingSystems.userId, userId))
+        .orderBy(desc(trainingSystems.createdAt))
+        .limit(1);
+      resolvedTrainingSystemId = activeSystem?.id ?? null;
+    } catch { /* non-fatal */ }
+  }
+
   // ── Save workout completion ───────────────────────────────────────────────
   const [log] = await db
     .insert(sessionLogsTable)
     .values({
       userId,
       savedProgramId: data.savedProgramId ?? null,
+      trainingSystemId: resolvedTrainingSystemId,
+      conversationId: data.conversationId ?? null,
       dayNumber: data.dayNumber ?? null,
       sessionType: data.sessionType,
       completedAt: data.completedAt ? new Date(data.completedAt) : new Date(),
@@ -679,16 +732,38 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
     })
     .catch(() => {});
 
-  // Part 8: System upgrade telemetry check
+  // ── Adaptation analyzer — runs async, emits change receipt ─────────────
+  // Determines adjustment scope from rolling signals and writes a change receipt
+  // if a meaningful adaptation is warranted. Result included in response.
+  let adaptationResult: Awaited<ReturnType<typeof analyzeSessionLogAdaptation>> | null = null;
+  try {
+    adaptationResult = await analyzeSessionLogAdaptation(
+      userId,
+      {
+        sessionStatus: data.sessionStatus,
+        difficultyScore: data.difficultyScore,
+        energyScore: data.energyScore,
+        painScore: data.painScore,
+        enjoymentScore: data.enjoymentScore,
+        painAreas: data.painAreas,
+        notes: data.notes,
+      },
+      resolvedTrainingSystemId
+    );
+  } catch { /* non-fatal */ }
+
   logger.info(
     {
       userId,
+      logId: log.id,
+      adaptationApplied: adaptationResult?.adaptationApplied ?? false,
+      adjustmentScope: adaptationResult?.recommendedAdjustmentScope ?? "none",
       predictiveAdaptation: true,
       memoryDominance: true,
       nextSessionAdjustment: true,
       blockContinuationIntelligent: true,
     },
-    "[SystemUpgradeCheck]"
+    "[SessionLog] Session logged with adaptation analysis"
   );
 
   res.status(201).json({
@@ -698,6 +773,9 @@ router.post("/session-logs", requireAuth, async (req: any, res): Promise<void> =
     sessionStatus: log.sessionStatus,
     completedAt: log.completedAt.toISOString(),
     recap,
+    adaptationApplied: adaptationResult?.adaptationApplied ?? false,
+    adaptationScope: adaptationResult?.recommendedAdjustmentScope ?? "none",
+    adjustmentReason: adaptationResult?.adjustmentReason ?? null,
   });
 });
 
@@ -1037,7 +1115,8 @@ router.post("/session-logs/complete", requireAuth, async (req: any, res): Promis
   postSessionAckToChat(userId, completeStatus, {
     difficulty: difficultyScore,
     pain: painScore,
-  }, data.notes).catch(() => {});
+    notes: data.notes ?? null,
+  }).catch(() => {});
   updateSessionAgentMemory(userId, {
     sessionStatus: completeStatus,
     difficultyScore,
