@@ -365,6 +365,18 @@
   50%       { opacity: 0.82; }
 }
 
+/* Wave-field floor: slow oscillation of perspective depth + rotateX.
+   Varying both values creates a subtle "breathing terrain" effect without
+   looking like water — it feels more like adaptive neural topology. */
+@keyframes ii-floor-wave {
+  0%   { transform: perspective(300px) rotateX(51.5deg); }
+  18%  { transform: perspective(318px) rotateX(53.0deg); }
+  36%  { transform: perspective(292px) rotateX(51.2deg); }
+  54%  { transform: perspective(312px) rotateX(52.8deg); }
+  72%  { transform: perspective(296px) rotateX(51.0deg); }
+  100% { transform: perspective(300px) rotateX(51.5deg); }
+}
+
 /* Horizontal sweep — fires briefly then rests */
 @keyframes ii-sweep {
   0%    { opacity: 0; }
