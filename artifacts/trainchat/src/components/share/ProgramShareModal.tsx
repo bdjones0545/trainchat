@@ -23,6 +23,9 @@ interface ProgramInput {
 
 interface Props {
   program: ProgramInput;
+  selectedWeekNumber?: number | null;
+  weekPhase?: string | null;
+  isAdapted?: boolean;
   onClose: () => void;
 }
 
@@ -44,7 +47,7 @@ async function logShareAudit(action: string) {
   }
 }
 
-export default function ProgramShareModal({ program, onClose }: Props) {
+export default function ProgramShareModal({ program, selectedWeekNumber, weekPhase, isAdapted, onClose }: Props) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [card, setCard] = useState<ProgramCardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -59,9 +62,15 @@ export default function ProgramShareModal({ program, onClose }: Props) {
       try {
         setLoading(true);
         setError(null);
+        const payload = {
+          ...program,
+          selectedWeekNumber: selectedWeekNumber ?? null,
+          weekPhase: weekPhase ?? null,
+          isAdapted: isAdapted ?? false,
+        };
         const result = await customFetch("/api/share-moments/program-card", {
           method: "POST",
-          body: JSON.stringify(program),
+          body: JSON.stringify(payload),
         });
         if (!cancelled) {
           setCard(result as ProgramCardData);

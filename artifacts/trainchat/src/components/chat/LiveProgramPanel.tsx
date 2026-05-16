@@ -2424,27 +2424,44 @@ function ProgramTab({
       </div>
 
       {/* ── Program Share Modal ─────────────────────────────────────────────── */}
-      {showShareModal && (
-        <ProgramShareModal
-          program={{
-            programName: program.programName,
-            daysPerWeek: days.length,
-            blockLengthWeeks: 4,
-            blockPhases: null,
-            day1: {
-              dayNumber: days[0]?.dayNumber ?? 1,
-              name: days[0]?.name ?? "Day 1",
-              exercises: (days[0]?.exercises ?? []).map((e) => ({
-                name: e.name,
-                sets: e.sets ?? null,
-                reps: e.reps ?? null,
-              })),
-            },
-            focusMode: panelFocusMode ?? "strength",
-          }}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
+      {showShareModal && (() => {
+        const shareDay = viewDays[0];
+        const shareWeekRole = getWeekRole(selectedWeek);
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[Share] payload debug", {
+            selectedWeek,
+            selectedSession: shareDay?.name ?? null,
+            renderedWeek: selectedWeek,
+            renderedSession: shareDay?.name ?? null,
+            sharePayloadSource: viewingAltWeek ? "alt_week" : "current_week",
+            weekPhase: shareWeekRole,
+          });
+        }
+        return (
+          <ProgramShareModal
+            program={{
+              programName: program.programName,
+              daysPerWeek: viewDays.length,
+              blockLengthWeeks: 4,
+              blockPhases: null,
+              day1: {
+                dayNumber: shareDay?.dayNumber ?? 1,
+                name: shareDay?.name ?? "Day 1",
+                exercises: (shareDay?.exercises ?? []).map((e: { name: string; sets?: number | null; reps?: string | null }) => ({
+                  name: e.name,
+                  sets: e.sets ?? null,
+                  reps: e.reps ?? null,
+                })),
+              },
+              focusMode: panelFocusMode ?? "strength",
+            }}
+            selectedWeekNumber={selectedWeek}
+            weekPhase={shareWeekRole}
+            isAdapted={viewingAltWeek && !!altWeekData}
+            onClose={() => setShowShareModal(false)}
+          />
+        );
+      })()}
 
       {/* ── Refinement Section: Chips + Freeform Input ─────────────────────── */}
       {onSendMessage && (
