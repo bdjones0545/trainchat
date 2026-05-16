@@ -210,6 +210,14 @@ const FAMILY_FALLBACK_PROFILES: Record<string, ExerciseThemeProfile> = {
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
+ * Returns every canonical exercise name in the theme profile registry.
+ * Used by the Session Description Integrity Validator to build its name-matching index.
+ */
+export function getKnownExerciseNames(): string[] {
+  return Object.keys(EXERCISE_THEME_PROFILES);
+}
+
+/**
  * Returns the theme contribution profile for an exercise.
  * Falls back to family-level defaults when the exact name is not in the registry.
  */

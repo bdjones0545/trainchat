@@ -74,6 +74,7 @@ import { extractAgentIntentProfile, buildAgentIntentProfilePromptSection } from 
 import { auditLanguageInterpretation } from "./language-audit";
 import { type ResponsePolicy, buildResponsePolicyPromptSection } from "./response-policy-engine";
 import { detectAndBuildDirectives } from "./programs/agentControlDirectives";
+import { runSessionDescriptionIntegrityCheck } from "./programs/sessionDescriptionIntegrityValidator";
 import { buildFocusModePromptContext, getFocusModeAdaptationHeuristics } from "./focus-engines/focus-mode-router";
 import { buildDNAPromptContext, type AthleteDNA } from "./athlete-dna";
 import {
@@ -5003,6 +5004,25 @@ Output the corrected program JSON and a brief calm confirmation.`;
           "[ArchitectureValidationEngine] BLOCKING — critical failure, program rejected"
         );
         throw new Error(`[ArchitectureValidationEngine] Critical validation failure: ${blockingIssue.description}`);
+      }
+    }
+
+    // ── Session Description Integrity Check ──────────────────────────────────
+    // Ensures that every exercise name mentioned in session descriptions, notes,
+    // or intent fields actually exists in the saved exercises[] for that day.
+    // Violations trigger either an exercise insertion (if < 7 exercises) or a
+    // surgical description rewrite. Emits a dev-mode audit log per violation.
+    if (isBuildIntent && structuredData?.days) {
+      try {
+        structuredData = runSessionDescriptionIntegrityCheck(
+          structuredData,
+          `build-${Date.now()}`,
+        ) as typeof structuredData;
+      } catch (err) {
+        logger.warn(
+          { err },
+          "[SessionDescriptionIntegrity] Validator threw — passing program through unpatched",
+        );
       }
     }
 
