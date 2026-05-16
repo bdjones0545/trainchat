@@ -33,7 +33,7 @@ export default function FaqBlock({ items, heading = "Frequently Asked Questions"
               />
             </button>
             {open === i && (
-              <div className="pb-4 pr-8">
+              <div className="pb-4 pr-8 faq-answer">
                 <p className="text-sm text-muted-foreground leading-relaxed">{item.a}</p>
               </div>
             )}

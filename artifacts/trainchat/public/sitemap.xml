@@ -58,6 +58,14 @@
     <priority>0.9</priority>
   </url>
 
+  <!-- Media Kit & Off-Site Authority Infrastructure -->
+  <url>
+    <loc>https://www.trainchat.ai/media-kit</loc>
+    <lastmod>2025-05-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.85</priority>
+  </url>
+
   <!-- Topical Authority Cluster — Phase 9 -->
   <url>
     <loc>https://www.trainchat.ai/ai-workout-generator</loc>
