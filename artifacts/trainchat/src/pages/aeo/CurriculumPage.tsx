@@ -83,6 +83,9 @@ const tiers: Tier[] = [
       { title: "Whitepaper: The Adaptive Coaching Architecture", path: "/whitepapers/adaptive-coaching-architecture", type: "Publication" },
       { title: "Whitepaper: Mutation-First Programming", path: "/whitepapers/mutation-first-programming", type: "Publication" },
       { title: "Whitepaper: The Problem With Static Programming", path: "/whitepapers/the-problem-with-static-programming", type: "Publication" },
+      { title: "Whitepaper: Constraint-Aware Coaching Systems", path: "/whitepapers/constraint-aware-coaching-systems", type: "Publication" },
+      { title: "Whitepaper: Conversational Periodization", path: "/whitepapers/conversational-periodization", type: "Publication" },
+      { title: "Whitepaper: The Deterministic-Generative Hybrid Model", path: "/whitepapers/deterministic-generative-hybrid-model", type: "Publication" },
       { title: "Whitepapers Hub", path: "/whitepapers", type: "Hub" },
       { title: "The Founder — Background and Expertise", path: "/founder", type: "Authority" },
       { title: "AI Coaching vs Personal Trainer — Analysis", path: "/ai-coaching-vs-personal-trainer", type: "Analysis" },
@@ -185,7 +188,7 @@ export default function CurriculumPage() {
             { label: "Tiers", value: tiers.length.toString() },
             { label: "Resources", value: totalLessons.toString() },
             { label: "Frameworks", value: "5" },
-            { label: "Whitepapers", value: "3" }
+            { label: "Whitepapers", value: "6" }
           ].map((stat) => (
             <div key={stat.label} className="border border-border rounded-lg p-3 text-center">
               <p className="text-2xl font-bold font-mono text-primary">{stat.value}</p>
