@@ -114,6 +114,12 @@ export interface CompleteEvent {
   updatedProgram?: unknown;
   /** Debug info from the edit-intent routing layer. Present in dev and when pathUsed is available. */
   routeDebug?: { pathUsed?: "deterministic" | "library_progression" | "rule_based" | "openai"; openaiCalled?: boolean; openaiSucceeded?: boolean; [key: string]: unknown };
+  /**
+   * Coach-voiced constraint reasons captured from the SSE micro_reasons event.
+   * Pre-screened by the server (safeToShow=true filter). Safe to surface to users.
+   * Empty array when no constraints were active or the server filtered them out.
+   */
+  microReasons: string[];
   /** Full audit receipt from the action contract enforcer. Present when contract enforcement ran. */
   auditReceipt?: {
     receiptId: string;
@@ -406,9 +412,13 @@ const INITIAL_STATE: StreamState = {
 export function useStreamMessage(): UseStreamMessageResult {
   const [state, setState] = useState<StreamState>(INITIAL_STATE);
   const abortRef = useRef<AbortController | null>(null);
+  // Always-current micro-reasons — written on every micro_reasons event so the
+  // complete-event return value can attach them without a stale-closure problem.
+  const microReasonsRef = useRef<string[]>([]);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    microReasonsRef.current = [];
     setState(INITIAL_STATE);
   }, []);
 
@@ -418,6 +428,7 @@ export function useStreamMessage(): UseStreamMessageResult {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      microReasonsRef.current = [];
       setState({
         phase: "acknowledged",
         acknowledgment: "",
@@ -534,9 +545,11 @@ export function useStreamMessage(): UseStreamMessageResult {
                 }));
 
               } else if (event.type === "micro_reasons") {
+                const safeReasons = event.safeToShow ? event.reasons : [];
+                microReasonsRef.current = safeReasons;
                 setState((s) => ({
                   ...s,
-                  microReasons: event.safeToShow ? event.reasons : [],
+                  microReasons: safeReasons,
                   safetyMode: event.safetyMode,
                 }));
 
@@ -596,7 +609,9 @@ export function useStreamMessage(): UseStreamMessageResult {
                 }
                 setState((s) => ({ ...s, phase: "complete" }));
                 reader.cancel();
-                return event;
+                // Attach captured micro-reasons to the return value so handleSend
+                // can store them without fighting stale-closure issues.
+                return { ...event, microReasons: microReasonsRef.current };
 
               } else if (event.type === "error") {
                 const isPaywall = event.status === 402 || event.code === "PAYWALL";
@@ -621,7 +636,7 @@ export function useStreamMessage(): UseStreamMessageResult {
         // button doesn't stay disabled indefinitely.
         setState((s) => {
           if (s.phase === "complete" || s.phase === "error" || s.phase === "idle") return s;
-          return { ...s, phase: "error", error: "Stream ended without a completion event." };
+          return { ...s, phase: "error", error: "Connection dropped — I couldn't safely save that update. Try again." };
         });
         return null;
       } catch (err: any) {

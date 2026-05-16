@@ -1,4 +1,4 @@
-import { CheckCircle2, ArrowRight, Zap, AlertTriangle, Info, Eye } from "lucide-react";
+import { CheckCircle2, ArrowRight, Zap, AlertTriangle, Info, Eye, ShieldCheck } from "lucide-react";
 import { useLocation } from "wouter";
 import CoachReasoningCallout from "./CoachReasoningCallout";
 import { VerificationSweep } from "@/components/laser-skill";
@@ -23,6 +23,12 @@ interface SystemEditData {
 interface Props {
   data: SystemEditData;
   onShowChange?: () => void;
+  /**
+   * Coach-voiced micro-reasons captured from the SSE stream during the edit.
+   * Pre-computed from persisted constraints (equipment, pain, sport context).
+   * Safe to show to users — never includes internal IDs or debug data.
+   */
+  microReasons?: string[];
 }
 
 interface StatusConfig {
@@ -81,7 +87,7 @@ function getStatusConfig(status: SystemEditData["verificationStatus"]): StatusCo
   }
 }
 
-export default function SystemUpdateCard({ data, onShowChange }: Props) {
+export default function SystemUpdateCard({ data, onShowChange, microReasons = [] }: Props) {
   const [, setLocation] = useLocation();
   const config = getStatusConfig(data.verificationStatus);
   const { Icon } = config;
@@ -110,6 +116,8 @@ export default function SystemUpdateCard({ data, onShowChange }: Props) {
     }
     return parts.join(", ") || "system";
   }
+
+  const visibleMicroReasons = microReasons.slice(0, 3);
 
   return (
     <div className={`mt-3 rounded-xl border ${config.borderColor} ${config.bgColor} overflow-hidden relative`}>
@@ -140,6 +148,24 @@ export default function SystemUpdateCard({ data, onShowChange }: Props) {
         )}
         {data.coachReasoning && (
           <CoachReasoningCallout reasoning={data.coachReasoning} variant="edit" />
+        )}
+        {/* Coaching constraint reasons — shown when present and no coachReasoning covers them */}
+        {visibleMicroReasons.length > 0 && !data.coachReasoning && (
+          <div className="mt-2.5 space-y-1">
+            {visibleMicroReasons.map((reason, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="w-1 h-1 rounded-full bg-primary/40 flex-shrink-0 mt-[5px]" />
+                <p className="text-[11px] text-muted-foreground/75 leading-relaxed italic">{reason}</p>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Verified indicator — compact trust signal */}
+        {data.verificationStatus === "verified" && (
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <ShieldCheck className="w-3 h-3 text-green-400/70 flex-shrink-0" />
+            <span className="text-[10px] text-green-400/70 font-medium">Saved · constraints respected</span>
+          </div>
         )}
       </div>
 

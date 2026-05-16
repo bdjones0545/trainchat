@@ -224,6 +224,26 @@ async function postSessionLog(data: any) {
   });
 }
 
+// ─── Post-build next-step chips ────────────────────────────────────────────────
+// Focus-specific quick actions shown in chat after every program build.
+// These drive the user's first edit and make the AI feel immediately useful.
+const POST_BUILD_CHIPS: Record<string, Array<{ label: string; prompt: string }>> = {
+  strength: [
+    { label: "Make it harder", prompt: "Add more intensity and progressive overload to this program" },
+    { label: "Explain the plan", prompt: "Walk me through the logic behind this training structure" },
+    { label: "Swap an exercise", prompt: "Are there any exercises worth swapping based on my goals?" },
+  ],
+  speed: [
+    { label: "Add more speed work", prompt: "Increase the emphasis on speed and acceleration development" },
+    { label: "Explain the plan", prompt: "Walk me through the logic behind this training structure" },
+    { label: "Shorten sessions", prompt: "Can we shorten the sessions to around 30 minutes each?" },
+  ],
+  mobility: [
+    { label: "More hip work", prompt: "Add more hip mobility and thoracic rotation exercises" },
+    { label: "Explain the plan", prompt: "Walk me through the logic behind this training structure" },
+    { label: "Make it shorter", prompt: "Shorten this to a focused 20-minute daily routine" },
+  ],
+};
 
 export default function Chat() {
   useNoIndex();
@@ -284,7 +304,11 @@ export default function Chat() {
    * panel is closed. Lets the user stay in conversation and choose to view changes.
    * Cleared on the next send or when the panel is opened.
    */
-  const [editReceipt, setEditReceipt] = useState<{ summary: string | null; receiptId: string } | null>(null);
+  const [editReceipt, setEditReceipt] = useState<{ summary: string | null; receiptId: string; microReasons?: string[] } | null>(null);
+  /** Coach constraint reasons from the most-recent SSE stream (used in SystemUpdateCard + editReceipt). */
+  const [lastMicroReasons, setLastMicroReasons] = useState<string[]>([]);
+  /** Post-build quick-action chips — set after program build, cleared on next send. */
+  const [postBuildChips, setPostBuildChips] = useState<Array<{ label: string; prompt: string }> | null>(null);
   const [newChangeSignal, setNewChangeSignal] = useState(0);
   const [newProgramSignal, setNewProgramSignal] = useState(0);
   const [changeTargets, setChangeTargets] = useState<Array<{
@@ -1497,6 +1521,7 @@ export default function Chat() {
     // Clear any stale panel receipt and edit receipt from the previous turn.
     setLastPanelReceipt(null);
     setEditReceipt(null);
+    setPostBuildChips(null);
     // Snapshot the current program version for post-refetch reconciliation.
     // We use updatedAt when available (most precise), else fall back to system id string.
     preSendActiveSystemVersionRef.current =
@@ -1624,6 +1649,7 @@ export default function Chat() {
     // Stream completed — process result.
     // Store the full event for the Agent Turn Report (dev-only debug panel).
     setLastTurnReport(result);
+    setLastMicroReasons(result.microReasons);
     if (import.meta.env.DEV) {
       console.log("[ThinkingStateAudit] finalResponseCommitted", {
         outcomeType: result.outcomeType,
@@ -2107,6 +2133,8 @@ export default function Chat() {
           // localStorage unavailable (private browsing etc.) — non-fatal
         }
         setNewProgramSignal((n) => n + 1);
+        // Surface focus-specific next-action chips in chat so the user has an immediate edit path.
+        setPostBuildChips(POST_BUILD_CHIPS[focusMode as string] ?? POST_BUILD_CHIPS.strength);
         // Delay panel reveal by 200ms so the transition feels staged, not instant
         setTimeout(() => {
           setRightPanelOpen(true);
@@ -2205,6 +2233,7 @@ export default function Chat() {
           setEditReceipt({
             summary: chatReceiptSummary,
             receiptId,
+            microReasons: result.microReasons.length > 0 ? result.microReasons.slice(0, 2) : undefined,
           });
         }
         // If the panel is already open, it will highlight changes via newChangeSignal —
@@ -3727,6 +3756,11 @@ export default function Chat() {
                           ? lastPanelReceipt
                           : null
                       }
+                      microReasons={
+                        lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                          ? lastMicroReasons
+                          : undefined
+                      }
                     />
                   ))
                 ) : (
@@ -3768,6 +3802,11 @@ export default function Chat() {
                           lastPanelReceipt && lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
                             ? lastPanelReceipt
                             : null
+                        }
+                        microReasons={
+                          lastTurnReport && msg.role === "assistant" && msg.id === lastTurnReport.assistantMessage?.id
+                            ? lastMicroReasons
+                            : undefined
                         }
                       />
                     )}
@@ -3844,7 +3883,17 @@ export default function Chat() {
                     <div className="flex-1 max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border/70">
                       <p className="text-[13px] font-semibold text-foreground mb-0.5">Program updated</p>
                       {editReceipt.summary && (
-                        <p className="text-[12px] text-muted-foreground leading-snug mb-3">{editReceipt.summary}</p>
+                        <p className="text-[12px] text-muted-foreground leading-snug mb-1.5">{editReceipt.summary}</p>
+                      )}
+                      {editReceipt.microReasons && editReceipt.microReasons.length > 0 && (
+                        <div className="mb-2.5 space-y-0.5">
+                          {editReceipt.microReasons.map((r, i) => (
+                            <div key={i} className="flex items-start gap-1.5">
+                              <span className="w-1 h-1 rounded-full bg-primary/30 flex-shrink-0 mt-[5px]" />
+                              <p className="text-[11px] text-muted-foreground/60 leading-relaxed italic">{r}</p>
+                            </div>
+                          ))}
+                        </div>
                       )}
                       <div className="flex items-center gap-4">
                         <button
@@ -3860,6 +3909,42 @@ export default function Chat() {
                         <button
                           onClick={() => setEditReceipt(null)}
                           className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Post-build next-steps chips ──────────────────────────────────
+                    Focus-specific quick actions after every program build. Drives
+                    the first edit. Suppressed when FirstValueOverlay is showing. */}
+                {postBuildChips && !stream.isActive && !convShowFirstValue && (
+                  <div className="flex items-start gap-3 mb-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center mt-0.5">
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <div className="flex-1 max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border/70">
+                      <p className="text-[12px] text-muted-foreground mb-2.5 leading-snug">What would you like to do next?</p>
+                      <div className="flex flex-wrap gap-2">
+                        {postBuildChips.map((chip) => (
+                          <button
+                            key={chip.label}
+                            onClick={() => {
+                              setPostBuildChips(null);
+                              handleSend(chip.prompt, {
+                                buttonPayload: makeChatButtonPayload(chip.prompt, activeSystem?.id ?? null),
+                              });
+                            }}
+                            className="px-3 py-1.5 text-[11px] font-medium text-primary border border-primary/30 rounded-full hover:bg-primary/10 transition-all duration-150 whitespace-nowrap touch-manipulation"
+                          >
+                            {chip.label}
+                          </button>
+                        ))}
+                        <button
+                          onClick={() => setPostBuildChips(null)}
+                          className="px-3 py-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                         >
                           Dismiss
                         </button>
@@ -4029,7 +4114,7 @@ export default function Chat() {
 
           {/* Operation error banner — honest failures for build/edit/save */}
           {operationError && (
-            <div className="flex-shrink-0 px-4 py-2 flex justify-center">
+            <div className="flex-shrink-0 px-4 py-2 flex justify-center" role="alert" aria-live="assertive">
               <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 border border-destructive/30 rounded-xl shadow-sm animate-in fade-in slide-in-from-bottom-2 duration-200 max-w-sm">
                 <span className="text-[11px] text-destructive font-medium flex-1">{operationError}</span>
                 {operationErrorRetryable && lastSentInputRef.current && (
@@ -4203,6 +4288,7 @@ export default function Chat() {
                 <motion.button
                   type="button"
                   disabled={stream.isActive}
+                  aria-label={isPushToTalk ? "Release to send" : voice.isListening ? "Stop listening" : "Tap or hold for voice"}
                   onPointerDown={handleMicPointerDown}
                   onPointerUp={handleMicPointerUp}
                   onPointerCancel={handleMicPointerCancel}
@@ -4253,9 +4339,10 @@ export default function Chat() {
                 {/* Send button */}
                 <button
                   data-testid="button-send"
+                  aria-label="Send message"
                   onClick={() => submitUserMessage({ message: inputText.trim(), source: "typed" })}
                   disabled={!inputText.trim() || stream.isActive}
-                  className="m-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm"
+                  className="m-2 p-2.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 disabled:opacity-25 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-sm touch-manipulation"
                 >
                   {stream.isActive ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

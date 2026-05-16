@@ -1,0 +1,198 @@
+Implement Phase 4 UX refinement and trust-layer improvements for TrainChat.
+
+Do NOT add major new features.
+Do NOT rewrite the agent architecture.
+Do NOT change core coaching logic unless needed for UI correctness.
+Do NOT replace existing SSE streaming, mutation, or Live Program Panel systems.
+
+Goal:
+Make TrainChat feel more trustworthy, premium, responsive, and clearly intelligent to users by improving feedback, visibility, recovery states, and mutation clarity.
+
+========================
+PHASE 4 PRIORITIES
+========================
+
+1. Mutation receipt clarity
+Improve how users see what changed after an edit.
+
+Tasks:
+- Ensure every successful mutation clearly displays:
+  - what changed
+  - where it changed
+  - why it changed
+  - whether it was saved
+- If change logs already exist, surface them more clearly.
+- Avoid dumping technical JSON.
+- Keep language coach-like and concise.
+- Example:
+  “Updated Day 2: swapped barbell back squat for trap bar deadlift, reduced accessory volume, and moved med ball throws before strength work.”
+
+2. Live Program Panel transition polish
+Improve perceived reliability when the sidebar updates.
+
+Tasks:
+- Use savedProgram from SSE complete as immediate DB-backed payload.
+- Avoid stale flashes.
+- Add subtle “Saved” / “Updated” confirmation state.
+- If refetch reconciliation changes anything, update smoothly.
+- Avoid duplicate loading states.
+- Preserve mobile layout.
+
+3. SSE error and retry UX
+Improve temporary failure states.
+
+Tasks:
+- When SSE error event is received, show a friendly recoverable message.
+- Provide a retry action when safe.
+- Make sure failed generations/edits never look saved.
+- Avoid leaving the chat in a permanent thinking/loading state.
+- Error copy should be short and coach-like:
+  “Connection issue — I couldn’t safely save that update. Try again.”
+
+4. “What changed and why” trust layer
+Add or improve a lightweight explanation after edits/builds.
+
+Tasks:
+- For edits, include 1–3 short coaching reasons.
+- For builds, include 2–4 short architecture reasons.
+- Use existing micro_reasons, change logs, AgentTurnReport, or validation output if available.
+- Do not add another LLM call just for explanations.
+- Keep explanations human-readable:
+  - “Power work stayed first to protect speed output.”
+  - “Accessory volume was reduced instead of removing primary lifts.”
+  - “Shoulder-sensitive exercises were avoided.”
+
+5. AgentTurnReport user-visible mode investigation
+Inspect current AgentTurnReport/dev-only reporting.
+
+Tasks:
+- Determine if a simplified user-facing version can be safely shown.
+- Do not expose internal IDs, raw prompts, stack traces, model names, or debug-only data.
+- If low-risk, create a simplified “Coach Check” or “Verified Update” card.
+- Show:
+  - saved status
+  - constraints checked
+  - major training logic checked
+  - change summary
+- Keep full AgentTurnReport dev-only.
+
+6. Mobile UX polish
+Audit TrainChat on mobile.
+
+Tasks:
+- Check chat input behavior
+- keyboard overlap
+- scroll anchoring
+- sticky composer
+- Live Program Panel access
+- tap targets
+- long assistant messages
+- mutation receipt readability
+- voice/push-to-talk if present
+
+Make surgical fixes only.
+
+7. Loading/stage polish
+Review SSE stage narration and loading states.
+
+Tasks:
+- Remove duplicate/contradictory loading states.
+- Ensure stages match actual backend work.
+- Improve copy if needed.
+- Avoid fake progress.
+- If a stage stalls, show a calm holding state rather than appearing broken.
+
+8. Empty and post-build states
+Improve first-run and post-build clarity.
+
+Tasks:
+- Empty state should guide users toward building or refining a plan.
+- After a program is built, make next actions obvious:
+  - refine
+  - swap exercise
+  - make harder/easier
+  - adjust schedule
+  - explain plan
+- Keep suggestions contextual and not cluttered.
+
+9. Accessibility and readability
+Audit:
+- contrast
+- font sizes
+- button labels
+- ARIA labels where obvious
+- reduced motion preference
+- focus states
+- screen-reader-friendly status updates where practical
+
+Do not overbuild.
+
+10. UX regression tests / verification
+Add tests only where practical.
+
+Verify:
+- mutation receipt appears after successful edit
+- savedProgram updates Live Program Panel without stale flash
+- SSE error exits thinking state
+- retry button/action appears only when safe
+- failed mutation does not show saved state
+- mobile layout does not break core chat flow
+
+========================
+IMPORTANT CONSTRAINTS
+========================
+
+- Preserve TrainChat’s current visual identity.
+- Keep changes surgical and production-safe.
+- Do not introduce a new state-management system.
+- Do not add more LLM calls.
+- Do not expose internal debug details to users.
+- Do not make the interface noisy.
+- Favor clarity over complexity.
+- User trust is the priority.
+
+========================
+OUTPUT REPORT
+========================
+
+After implementation, provide:
+
+A. Files changed
+
+B. Mutation receipt improvements
+- what users now see
+- how saved status is shown
+- what data source powers it
+
+C. Live Program Panel improvements
+- how savedProgram is consumed
+- how stale flashes were prevented
+- how reconciliation works
+
+D. SSE error/retry improvements
+- error states
+- retry behavior
+- unsaved-state protection
+
+E. Trust layer / Coach Check improvements
+- what is shown
+- what remains dev-only
+- safety/privacy checks
+
+F. Mobile UX improvements
+- issues found
+- fixes made
+
+G. Loading/stage polish
+- stages adjusted
+- duplicate states removed
+
+H. Accessibility/readability improvements
+
+I. Tests/typecheck
+- commands run
+- results
+- pre-existing errors if any
+
+J. Recommended Phase 5
+Only recommend after Phase 4 is complete.

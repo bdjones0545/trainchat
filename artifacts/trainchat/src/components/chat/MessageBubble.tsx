@@ -26,6 +26,11 @@ interface Props {
   turnReport?: CompleteEvent | null;
   /** Dev-only: Panel action receipt for right-sidebar direct edits that reconciled as success. */
   panelReceipt?: PanelActionReceipt | null;
+  /**
+   * Coaching constraint reasons captured from the SSE stream (micro_reasons event).
+   * Surfaced in SystemUpdateCard to explain *why* the edit respected the user's context.
+   */
+  microReasons?: string[];
 }
 
 function formatTime(dateStr: string) {
@@ -236,7 +241,7 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport, panelReceipt }: Props) {
+function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport, panelReceipt, microReasons }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
@@ -346,7 +351,7 @@ function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, tu
         ) : isSystemEdit ? (
           /* MUTATION-FIRST: SystemUpdateCard is the primary artifact — rendered standalone above text */
           <div className="min-w-0 max-w-[95%]">
-            <SystemUpdateCard data={parsed.data} onShowChange={onShowChange} />
+            <SystemUpdateCard data={parsed.data} onShowChange={onShowChange} microReasons={microReasons} />
             {message.content && (
               <p className="text-[12px] text-muted-foreground/75 leading-relaxed mt-2 px-1">
                 {message.content}
@@ -444,5 +449,6 @@ export default memo(MessageBubble, (prev, next) =>
   prev.message.structuredData === next.message.structuredData &&
   prev.message.role === next.message.role &&
   prev.turnReport === next.turnReport &&
-  prev.panelReceipt === next.panelReceipt,
+  prev.panelReceipt === next.panelReceipt &&
+  prev.microReasons === next.microReasons,
 );
