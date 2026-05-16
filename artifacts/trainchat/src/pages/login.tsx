@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -45,6 +46,7 @@ async function trackGuestEvent(deviceId: string, event: string) {
 }
 
 export default function Login() {
+  useNoIndex();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const params = new URLSearchParams(search);

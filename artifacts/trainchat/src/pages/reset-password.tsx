@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -63,6 +64,7 @@ function PasswordStrengthBar({ password }: { password: string }) {
 }
 
 export default function ResetPassword() {
+  useNoIndex();
   const [, setLocation] = useLocation();
   const search = useSearch();
   const token = new URLSearchParams(search).get("token") ?? "";

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import {
   ArrowLeft, CreditCard, Calendar, AlertCircle, CheckCircle, XCircle, Zap,
   Crown, Star, User, Mail, LogOut, Trash2, ChevronRight, Dumbbell, Target,
@@ -1405,6 +1406,7 @@ function DangerZone({ isAnonymousUser }: { isAnonymousUser: boolean }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  useNoIndex();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();

@@ -114,6 +114,12 @@ export default function MfpWhitepaper() {
       description="Establishes the Mutation-First Programming Principle (MFP) — the principle that the correct response to new athlete information is the most surgical available intervention — and defines the five-level decision hierarchy through which coaching precision is operationalized."
       schema={schema}
       canonical="/whitepapers/mutation-first-programming"
+      breadcrumbs={[
+        { name: "Whitepapers", url: "/whitepapers" },
+        { name: "Mutation-First Programming", url: "/whitepapers/mutation-first-programming" },
+      ]}
+      articleDatePublished="2025-05-16"
+      articleDateModified="2025-05-16"
     >
       <div className="space-y-8">
         <div>

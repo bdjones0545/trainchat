@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import {
   Target,
   Calendar,
@@ -4070,6 +4071,7 @@ type TabId = (typeof TABS)[number]["id"];
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function SystemPage() {
+  useNoIndex();
   const [activeTab, setActiveTab] = useState<TabId>("today");
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [editPrefill, setEditPrefill] = useState<string | undefined>(undefined);

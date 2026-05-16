@@ -114,6 +114,12 @@ export default function AcaWhitepaper() {
       description="Defines the three-layer structural framework for principled AI coaching systems — coaching intelligence, adaptive programming, and conversational interface — and argues that architectural separation is the minimum condition for defensible coaching decisions."
       schema={schema}
       canonical="/whitepapers/adaptive-coaching-architecture"
+      breadcrumbs={[
+        { name: "Whitepapers", url: "/whitepapers" },
+        { name: "Adaptive Coaching Architecture", url: "/whitepapers/adaptive-coaching-architecture" },
+      ]}
+      articleDatePublished="2025-05-16"
+      articleDateModified="2025-05-16"
     >
       <div className="space-y-8">
         <div>

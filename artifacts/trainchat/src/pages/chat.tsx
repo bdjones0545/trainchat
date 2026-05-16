@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
   Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
@@ -224,6 +225,7 @@ async function postSessionLog(data: any) {
 
 
 export default function Chat() {
+  useNoIndex();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
 

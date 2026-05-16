@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,6 +15,7 @@ type FormData = z.infer<typeof schema>;
 type State = "idle" | "loading" | "success" | "error";
 
 export default function ForgotPassword() {
+  useNoIndex();
   const [, setLocation] = useLocation();
   const [state, setState] = useState<State>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

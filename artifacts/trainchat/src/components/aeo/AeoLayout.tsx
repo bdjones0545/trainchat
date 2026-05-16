@@ -2,27 +2,83 @@ import { useLocation } from "wouter";
 import { ChevronLeft, Zap } from "lucide-react";
 import { useEffect } from "react";
 
+interface BreadcrumbItem {
+  name: string;
+  url: string;
+}
+
 interface AeoLayoutProps {
   title: string;
   description: string;
   children: React.ReactNode;
   schema?: object;
   canonical?: string;
+  breadcrumbs?: BreadcrumbItem[];
+  ogTitle?: string;
+  ogDescription?: string;
+  articleDatePublished?: string;
+  articleDateModified?: string;
 }
 
-export default function AeoLayout({ title, description, children, schema, canonical }: AeoLayoutProps) {
+export default function AeoLayout({
+  title,
+  description,
+  children,
+  schema,
+  canonical,
+  breadcrumbs,
+  ogTitle,
+  ogDescription,
+  articleDatePublished,
+  articleDateModified,
+}: AeoLayoutProps) {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    const prev = document.title;
-    document.title = `${title} | TrainChat®`;
+    const resolvedTitle = `${title} | TrainChat®`;
+    const resolvedOgTitle = ogTitle ?? resolvedTitle;
+    const resolvedOgDesc = ogDescription ?? description;
 
-    let metaDesc = document.querySelector('meta[name="description"]');
-    const prevDesc = metaDesc?.getAttribute("content") ?? "";
-    if (metaDesc) metaDesc.setAttribute("content", description);
+    // --- Document title ---
+    const prevTitle = document.title;
+    document.title = resolvedTitle;
 
+    // --- Meta description ---
+    const metaDescEl = document.querySelector('meta[name="description"]');
+    const prevDesc = metaDescEl?.getAttribute("content") ?? "";
+    if (metaDescEl) metaDescEl.setAttribute("content", description);
+
+    // --- Open Graph: title ---
+    const ogTitleEl = document.querySelector('meta[property="og:title"]');
+    const prevOgTitle = ogTitleEl?.getAttribute("content") ?? "";
+    if (ogTitleEl) ogTitleEl.setAttribute("content", resolvedOgTitle);
+
+    // --- Open Graph: description ---
+    const ogDescEl = document.querySelector('meta[property="og:description"]');
+    const prevOgDesc = ogDescEl?.getAttribute("content") ?? "";
+    if (ogDescEl) ogDescEl.setAttribute("content", resolvedOgDesc);
+
+    // --- Open Graph: url ---
+    const ogUrlEl = document.querySelector('meta[property="og:url"]');
+    const prevOgUrl = ogUrlEl?.getAttribute("content") ?? "";
+    if (ogUrlEl && canonical) {
+      ogUrlEl.setAttribute("content", `https://www.trainchat.ai${canonical}`);
+    }
+
+    // --- Twitter: title ---
+    const twTitleEl = document.querySelector('meta[name="twitter:title"]');
+    const prevTwTitle = twTitleEl?.getAttribute("content") ?? "";
+    if (twTitleEl) twTitleEl.setAttribute("content", resolvedOgTitle);
+
+    // --- Twitter: description ---
+    const twDescEl = document.querySelector('meta[name="twitter:description"]');
+    const prevTwDesc = twDescEl?.getAttribute("content") ?? "";
+    if (twDescEl) twDescEl.setAttribute("content", resolvedOgDesc);
+
+    // --- Canonical link ---
     let canonicalEl = document.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
     let addedCanonical = false;
+    const prevCanonicalHref = canonicalEl?.getAttribute("href") ?? "";
     if (canonical && !canonicalEl) {
       canonicalEl = document.createElement("link");
       canonicalEl.rel = "canonical";
@@ -33,6 +89,7 @@ export default function AeoLayout({ title, description, children, schema, canoni
       canonicalEl.href = `https://www.trainchat.ai${canonical}`;
     }
 
+    // --- Page-specific JSON-LD schema ---
     let schemaEl: HTMLScriptElement | null = null;
     if (schema) {
       schemaEl = document.createElement("script");
@@ -42,13 +99,69 @@ export default function AeoLayout({ title, description, children, schema, canoni
       document.head.appendChild(schemaEl);
     }
 
+    // --- BreadcrumbList JSON-LD ---
+    let breadcrumbEl: HTMLScriptElement | null = null;
+    if (breadcrumbs && breadcrumbs.length > 0) {
+      const breadcrumbSchema = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "TrainChat®",
+            "item": "https://www.trainchat.ai",
+          },
+          ...breadcrumbs.map((b, i) => ({
+            "@type": "ListItem",
+            "position": i + 2,
+            "name": b.name,
+            "item": `https://www.trainchat.ai${b.url}`,
+          })),
+        ],
+      };
+      breadcrumbEl = document.createElement("script");
+      breadcrumbEl.type = "application/ld+json";
+      breadcrumbEl.id = "aeo-breadcrumb-schema";
+      breadcrumbEl.textContent = JSON.stringify(breadcrumbSchema);
+      document.head.appendChild(breadcrumbEl);
+    }
+
+    // --- Article date meta tags ---
+    let articlePublishedEl: HTMLMetaElement | null = null;
+    let articleModifiedEl: HTMLMetaElement | null = null;
+    if (articleDatePublished) {
+      articlePublishedEl = document.createElement("meta");
+      articlePublishedEl.setAttribute("property", "article:published_time");
+      articlePublishedEl.content = articleDatePublished;
+      document.head.appendChild(articlePublishedEl);
+    }
+    if (articleDateModified) {
+      articleModifiedEl = document.createElement("meta");
+      articleModifiedEl.setAttribute("property", "article:modified_time");
+      articleModifiedEl.content = articleDateModified;
+      document.head.appendChild(articleModifiedEl);
+    }
+
     return () => {
-      document.title = prev;
-      if (metaDesc) metaDesc.setAttribute("content", prevDesc);
-      if (addedCanonical && canonicalEl) document.head.removeChild(canonicalEl);
+      document.title = prevTitle;
+      if (metaDescEl) metaDescEl.setAttribute("content", prevDesc);
+      if (ogTitleEl) ogTitleEl.setAttribute("content", prevOgTitle);
+      if (ogDescEl) ogDescEl.setAttribute("content", prevOgDesc);
+      if (ogUrlEl) ogUrlEl.setAttribute("content", prevOgUrl);
+      if (twTitleEl) twTitleEl.setAttribute("content", prevTwTitle);
+      if (twDescEl) twDescEl.setAttribute("content", prevTwDesc);
+      if (addedCanonical && canonicalEl) {
+        document.head.removeChild(canonicalEl);
+      } else if (!addedCanonical && canonicalEl && prevCanonicalHref) {
+        canonicalEl.href = prevCanonicalHref;
+      }
       if (schemaEl) document.head.removeChild(schemaEl);
+      if (breadcrumbEl) document.head.removeChild(breadcrumbEl);
+      if (articlePublishedEl) document.head.removeChild(articlePublishedEl);
+      if (articleModifiedEl) document.head.removeChild(articleModifiedEl);
     };
-  }, [title, description, schema, canonical]);
+  }, [title, description, schema, canonical, breadcrumbs, ogTitle, ogDescription, articleDatePublished, articleDateModified]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">

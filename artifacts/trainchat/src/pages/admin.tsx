@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useGetMe } from "@workspace/api-client-react";
+import { useNoIndex } from "@/hooks/useNoIndex";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1900,6 +1901,7 @@ function ResearchLibraryPanel() {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  useNoIndex();
   const [, navigate] = useLocation();
   const { data: me, isLoading: meLoading } = useGetMe();
 

@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
+import { useNoIndex } from "@/hooks/useNoIndex";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Loader2, ArrowRight } from "lucide-react";
 import { analytics } from "@/lib/analytics";
 
 export default function BillingSuccess() {
+  useNoIndex();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");

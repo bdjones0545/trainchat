@@ -1,16 +1,91 @@
 User-agent: *
 Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /billing/success
+Disallow: /billing/cancelled
+Disallow: /system
+Disallow: /admin
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /api/
 
 User-agent: GPTBot
 Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /system
+Disallow: /admin
+Disallow: /api/
 
 User-agent: ClaudeBot
 Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /system
+Disallow: /admin
+Disallow: /api/
 
 User-agent: PerplexityBot
 Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /system
+Disallow: /admin
+Disallow: /api/
 
 User-agent: Google-Extended
+Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /system
+Disallow: /admin
+Disallow: /api/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /billing/success
+Disallow: /billing/cancelled
+Disallow: /system
+Disallow: /admin
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /api/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /chat
+Disallow: /settings
+Disallow: /billing
+Disallow: /billing/success
+Disallow: /billing/cancelled
+Disallow: /system
+Disallow: /admin
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /api/
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Applebot-Extended
 Allow: /
 
 Sitemap: https://www.trainchat.ai/sitemap.xml

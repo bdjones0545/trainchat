@@ -50,6 +50,12 @@ export default function ConceptPage() {
       description={concept.metaDescription}
       schema={schema}
       canonical={`/concepts/${concept.slug}`}
+      breadcrumbs={[
+        { name: "Concept Library", url: "/concepts" },
+        { name: concept.title, url: `/concepts/${concept.slug}` },
+      ]}
+      articleDatePublished="2025-05-16"
+      articleDateModified="2025-05-16"
     >
       <div className="space-y-6">
         {/* Breadcrumb */}

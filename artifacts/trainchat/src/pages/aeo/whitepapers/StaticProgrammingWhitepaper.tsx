@@ -106,6 +106,12 @@ export default function StaticProgrammingWhitepaper() {
       description="The structural case against fixed training plans — establishing the three properties of a living training system (persistence, adaptability, continuity) and explaining why the architectural requirements are non-negotiable for coaching quality."
       schema={schema}
       canonical="/whitepapers/the-problem-with-static-programming"
+      breadcrumbs={[
+        { name: "Whitepapers", url: "/whitepapers" },
+        { name: "The Problem With Static Programming", url: "/whitepapers/the-problem-with-static-programming" },
+      ]}
+      articleDatePublished="2025-05-16"
+      articleDateModified="2025-05-16"
     >
       <div className="space-y-8">
         <div>

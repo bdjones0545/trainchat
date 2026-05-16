@@ -1,7 +1,9 @@
 import { useLocation } from "wouter";
 import { XCircle } from "lucide-react";
+import { useNoIndex } from "@/hooks/useNoIndex";
 
 export default function BillingCancelled() {
+  useNoIndex();
   const [, navigate] = useLocation();
 
   return (
