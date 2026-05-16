@@ -81,10 +81,13 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@react-three/postprocessing": "^3.0.4",
     "@tanstack/react-virtual": "^3.13.24",
     "html-to-image": "^1.11.13",
     "posthog-js": "^1.372.8",
+    "postprocessing": "^6.39.1",
     "three": "^0.184.0"
   }
 }

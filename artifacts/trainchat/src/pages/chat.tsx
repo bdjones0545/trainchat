@@ -3643,7 +3643,7 @@ export default function Chat() {
                 className="relative flex flex-col animate-in fade-in duration-700 min-h-[78dvh]"
                 style={{ paddingTop: "clamp(28px, 5dvh, 52px)" }}
               >
-                <IdleIntelligenceField isTyping={inputText.trim().length > 0} />
+                <IdleIntelligenceField isTyping={inputText.trim().length > 0} isThinking={stream.isActive} />
 
                 {/* ── Zone 1: Upper — Neural Hub label + dominant heading ── */}
                 <div className="flex-none px-6 md:px-10 max-w-2xl mx-auto w-full">
@@ -3718,19 +3718,24 @@ export default function Chat() {
 
                   {/* Chips — vertical stack, full-width pill buttons like reference */}
                   <div className="flex flex-col gap-3 w-full max-w-sm">
-                    {getFocusModeConfig(focusMode).suggestionChips.slice(0, 3).map((chip) => (
-                      <button
+                    {getFocusModeConfig(focusMode).suggestionChips.slice(0, 3).map((chip, i) => (
+                      <motion.button
                         key={chip.label}
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.50, delay: 0.10 + i * 0.09, ease: [0.22, 1, 0.36, 1] }}
+                        whileHover={{ scale: 1.016, y: -2, transition: { duration: 0.18, ease: "easeOut" } }}
+                        whileTap={{ scale: 0.97, transition: { duration: 0.08 } }}
                         onClick={() => {
                           triggerCorePulse();
                           handleSend(chip.prompt, {
                             buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
                           });
                         }}
-                        className="w-full px-6 py-4 text-[14px] font-medium rounded-[20px] text-center transition-all duration-150 select-none active:scale-[0.97] adaptive-chip text-foreground/80"
+                        className="w-full px-6 py-4 text-[14px] font-medium rounded-[20px] text-center select-none adaptive-chip text-foreground/80"
                       >
                         {chip.label}
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </div>
@@ -4232,7 +4237,9 @@ export default function Chat() {
                     ? "border border-blue-500/50 shadow-[0_4px_32px_rgba(0,0,0,0.45)] bg-card/50 backdrop-blur-xl"
                     : messages.length === 0 && !stream.isActive
                       ? "chat-input-glass ii-idle-input"
-                      : "chat-input-glass"
+                      : stream.isActive
+                        ? "chat-input-glass ii-thinking-input"
+                        : "chat-input-glass"
               }`}>
                 {/* Mic button — left side, circular, glass treatment */}
                 <motion.button

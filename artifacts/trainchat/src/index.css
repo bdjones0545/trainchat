@@ -439,6 +439,30 @@
   animation: ii-input-breathe 5s ease-in-out infinite;
 }
 
+/* AI thinking state — active ring pulse on input bar */
+@keyframes ii-thinking-pulse {
+  0%, 100% {
+    border-color: hsl(var(--primary) / 0.14);
+    box-shadow:
+      0 4px 28px rgba(0, 0, 0, 0.38),
+      0 0 0 1px hsl(var(--primary) / 0.06),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+  50% {
+    border-color: hsl(var(--primary) / 0.26);
+    box-shadow:
+      0 4px 28px rgba(0, 0, 0, 0.38),
+      0 0 20px 3px hsl(var(--primary) / 0.10),
+      0 0 0 1px hsl(var(--primary) / 0.20),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+}
+
+.ii-thinking-input {
+  border-color: hsl(var(--primary) / 0.14);
+  animation: ii-thinking-pulse 1.8s ease-in-out infinite;
+}
+
 /* Honor prefers-reduced-motion for idle intelligence */
 @media (prefers-reduced-motion: reduce) {
   .ii-field * { animation: none !important; }
