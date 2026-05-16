@@ -62,6 +62,9 @@ import type { ResolvedAgentControls } from "./programs/agentControlTypes";
 import { getAnchorPenaltyMultiplierForMode } from "./programs/agentControlResolver";
 import type { HardConstraints } from "./constraint-memory";
 import { filterCandidatesByConstraints, computeConstraintPenalties } from "./exercise-constraint-filter";
+import type { SessionAdaptationFingerprint } from "./programs/sessionAdaptationFingerprint";
+import { computeCoherenceFit } from "./programs/themeCoherenceValidator";
+import { runCoherenceAudit, emitCoherenceAuditLog } from "./programs/themeCoherenceValidator";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -141,6 +144,16 @@ export interface ScoreContext {
    * layer after pre-filtering has already removed most violations.
    */
   hardConstraints?: HardConstraints | null;
+  /**
+   * Session adaptation fingerprint parsed from the goal/blockType/adaptation text.
+   * When provided, enables themeCoherenceFit and compositionConstraintPenalty scoring
+   * dimensions that steer exercise selection toward the declared session theme.
+   *
+   * Example: a fingerprint of { hamstring_resilience: 0.35, adductor_resilience: 0.25,
+   * hip_strength: 0.25, injury_prevention: 0.15 } will boost Nordic Curls, Single-Leg
+   * RDLs, and Copenhagen Planks over Rack Pulls and Farmers Carries.
+   */
+  themeFingerprint?: SessionAdaptationFingerprint | null;
 }
 
 export interface SlotExerciseSelection {
@@ -235,6 +248,15 @@ interface CandidateScore {
     dislikedPenalty: number;
     /** -6 (hard) or -3 (soft) pain-region conflict */
     painConflictPenalty: number;
+    // ── Theme Coherence Layer ─────────────────────────────────────────────────
+    /** −1 to +3: how strongly this exercise expresses the session adaptation theme.
+     *  Nordic Curls score high for hamstring_resilience themes; Rack Pulls score low.
+     *  Only active when a themeFingerprint is provided. */
+    themeCoherenceFit: number;
+    /** 0 to −2.5: composition constraint penalty for resilience sessions.
+     *  Generic compound lifts (Rack Pull, Farmers Carry, Jump Squat) are penalised
+     *  in sessions themed around tissue resilience/injury prevention. */
+    compositionConstraintPenalty: number;
   };
 }
 
@@ -1132,6 +1154,26 @@ function scoreCandidate(
     painConflictPenalty = cp.painConflictPenalty;
   }
 
+  // ── Theme Coherence Fit (−1 to +3) + Composition Constraint Penalty (0 to −2.5) ─
+  // Steers exercise selection toward exercises that directly express the session's
+  // declared adaptation theme (e.g. hamstring_resilience, adductor_resilience).
+  // This is a PRIMARY selector dimension — it is intentionally strong enough to
+  // prefer Nordic Curls over Rack Pulls when the session is resilience-themed,
+  // but not strong enough to override hard constraints or equipment limitations.
+  let themeCoherenceFit = 0;
+  let compositionConstraintPenalty = 0;
+  if (ctx.themeFingerprint) {
+    const coherenceResult = computeCoherenceFit(
+      meta.name,
+      getExerciseExtendedMeta(meta.name).family,
+      ctx.themeFingerprint,
+      ctx.slotName,
+      meta.intentTags,
+    );
+    themeCoherenceFit = coherenceResult.themeCoherenceFit;
+    compositionConstraintPenalty = coherenceResult.compositionConstraintPenalty;
+  }
+
   // ── Total ─────────────────────────────────────────────────────────────────
   //
   // New decision hierarchy (read top-to-bottom = highest priority first):
@@ -1180,7 +1222,9 @@ function scoreCandidate(
     - blockExposurePenalty
     + phaseAffinityFit
     // CONSTRAINT ENFORCEMENT: persisted user constraints (last-resort safety)
-    - bannedPenalty - dislikedPenalty - painConflictPenalty;
+    - bannedPenalty - dislikedPenalty - painConflictPenalty
+    // THEME COHERENCE: steer exercise selection toward declared adaptation theme
+    + themeCoherenceFit - compositionConstraintPenalty;
 
   return {
     name: meta.name,
@@ -1224,6 +1268,8 @@ function scoreCandidate(
       bannedPenalty,
       dislikedPenalty,
       painConflictPenalty,
+      themeCoherenceFit,
+      compositionConstraintPenalty,
     },
   };
 }
@@ -2344,6 +2390,7 @@ export function selectSlotExercises(
   registerSelections: boolean = true,
   blockExposure?: BlockExposureTracker,
   hardConstraints?: HardConstraints | null,
+  themeFingerprint?: SessionAdaptationFingerprint | null,
 ): SlotExerciseSelection {
   const alreadySelected = new Set<string>();
   const debugInfos: SlotDebugInfo[] = [];
@@ -2411,6 +2458,7 @@ export function selectSlotExercises(
       dayIndex,
       blockExposure,
       hardConstraints: hardConstraints ?? undefined,
+      themeFingerprint: themeFingerprint ?? undefined,
     };
     const { chosen, debugInfo } = ranked(effectivePool, ctx, primeMultiplier);
     debugInfos.push(debugInfo);
@@ -2554,6 +2602,33 @@ export function selectSlotExercises(
       lower_power, bilateral_squat_strength, bilateral_squat_strength_d2,
       bilateral_hinge_strength, unilateral_lower, trunk_anti_rotation, trunk_anti_extension,
     });
+  }
+
+  // ── Post-selection Theme Coherence Audit ────────────────────────────────────
+  // Runs once per week selection when a theme fingerprint is present.
+  // Validates that the selected exercises express the declared session theme,
+  // logs coherence scores, and flags mismatched sessions for debugging.
+  // Never blocks selection — this is a read-only audit/logging layer.
+  if (themeFingerprint && process.env.NODE_ENV !== "production") {
+    const weekNum = blockExposure?.currentWeek ?? 1;
+    const auditExercises: Record<string, string> = {
+      bilateral_hinge_strength,
+      unilateral_lower,
+      unilateral_lower_alt,
+      bilateral_squat_strength,
+      positional_support,
+      lower_power,
+      elastic_power,
+      conditioning_finisher,
+      trunk_anti_rotation,
+      trunk_anti_extension,
+    };
+    const audit = runCoherenceAudit(
+      auditExercises,
+      themeFingerprint,
+      `week-${weekNum}`,
+    );
+    emitCoherenceAuditLog(audit, `week-${weekNum}`, weekNum);
   }
 
   return sel;

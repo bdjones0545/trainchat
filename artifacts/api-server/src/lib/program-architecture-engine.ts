@@ -81,6 +81,8 @@ import { buildExtendedFingerprint } from "./programs/programFingerprint";
 import { runProgramVarianceAudit } from "./programs/programVarianceAudit";
 import { emitRerollLog } from "./programs/programVarianceReroll";
 import { runPerceivedVarianceAudit } from "./programs/perceivedVarianceAudit";
+import { parseSessionFingerprint } from "./programs/sessionAdaptationFingerprint";
+import type { SessionAdaptationFingerprint } from "./programs/sessionAdaptationFingerprint";
 
 // ─── One-time validation on module load ──────────────────────────────────────
 // DEV-only coherence checks fire once per process start.
@@ -3400,9 +3402,33 @@ export function buildArchitectureBrief(
 
   // Use the split's variationSeed for session template selection
   const splitVariationSeed = blockSelection.variationSeed;
+
+  // ── Session Adaptation Theme Fingerprint ─────────────────────────────────
+  // Parsed once per build from the block's declared adaptation context.
+  // This fingerprint steers exercise selection toward exercises that directly
+  // express the session theme (e.g. hamstring_resilience → Nordic Curls,
+  // Copenhagen Planks) and penalises generic compound lifts (Rack Pull,
+  // Farmers Carry) when the session is themed around tissue resilience.
+  const sessionThemeFingerprint: SessionAdaptationFingerprint | null = parseSessionFingerprint(
+    goal,
+    String(enrichedMonthlyPlan.blockType),
+    enrichedMonthlyPlan.primaryAdaptation ?? "",
+    enrichedMonthlyPlan.secondaryAdaptation ?? "",
+    sport,
+  );
+
+  if (process.env.NODE_ENV !== "production" && sessionThemeFingerprint) {
+    const dominantDims = Object.entries(sessionThemeFingerprint)
+      .sort(([, a], [, b]) => b - a)
+      .slice(0, 3)
+      .map(([dim, w]) => `${dim}=${w.toFixed(2)}`)
+      .join(", ");
+    console.log(`[SessionThemeFingerprint] blockType=${enrichedMonthlyPlan.blockType} primary="${enrichedMonthlyPlan.primaryAdaptation}" secondary="${enrichedMonthlyPlan.secondaryAdaptation}" → dominant: ${dominantDims}`);
+  }
+
   // dayIndex=0: architecture brief generates the primary/anchor day template
   blockExposure.setWeek(1);
-  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0, true, blockExposure, hardConstraints);
+  const slotSelection = selectSlotExercises(splitVariationSeed, sport, goal, neuralDemand, equipmentLevel, isDeload, blockCtx, programContext, 0, true, blockExposure, hardConstraints, sessionThemeFingerprint);
   _lastSlotSelection = slotSelection;
 
   // ── Per-week slot selections (Weeks 2–4) ─────────────────────────────────
@@ -3451,7 +3477,7 @@ export function buildArchitectureBrief(
     weeklyPlans[1].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "build" },
-    programContextW2, 0, false, blockExposure, hardConstraints,
+    programContextW2, 0, false, blockExposure, hardConstraints, sessionThemeFingerprint,
   );
 
   blockExposure.setWeek(3);
@@ -3460,7 +3486,7 @@ export function buildArchitectureBrief(
     weeklyPlans[2].overallNeuralDemand,
     equipmentLevel, false,
     { blockType: blockTypeStr, weekRole: "intensify" },
-    programContextW3, 0, false, blockExposure, hardConstraints,
+    programContextW3, 0, false, blockExposure, hardConstraints, sessionThemeFingerprint,
   );
 
   blockExposure.setWeek(4);
@@ -3469,7 +3495,7 @@ export function buildArchitectureBrief(
     "low",
     equipmentLevel, true,
     { blockType: blockTypeStr, weekRole: "deload" },
-    programContextW4, 0, false, blockExposure, hardConstraints,
+    programContextW4, 0, false, blockExposure, hardConstraints, sessionThemeFingerprint,
   );
 
   if (process.env.NODE_ENV !== "production") {
