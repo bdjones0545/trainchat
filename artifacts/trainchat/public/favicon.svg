@@ -1,4 +1,11 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="180" height="180" rx="36" fill="#FF3C00"/>
-  <text x="90" y="122" font-family="Arial, Helvetica, sans-serif" font-size="84" font-weight="700" fill="white" text-anchor="middle" letter-spacing="-2">TC</text>
+  <rect width="180" height="180" rx="36" fill="#0a0f1e"/>
+  <rect x="8" y="8" width="164" height="164" rx="30" fill="#0d1528"/>
+  <!-- Chat bubble mark -->
+  <rect x="38" y="52" width="104" height="68" rx="14" fill="#3b82f6"/>
+  <polygon points="52,120 38,140 74,120" fill="#3b82f6"/>
+  <!-- Pulse dots inside bubble -->
+  <circle cx="67" cy="86" r="7" fill="white"/>
+  <circle cx="90" cy="86" r="7" fill="white" opacity="0.75"/>
+  <circle cx="113" cy="86" r="7" fill="white" opacity="0.5"/>
 </svg>

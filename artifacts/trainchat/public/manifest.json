@@ -1,0 +1,24 @@
+{
+  "name": "TrainChat",
+  "short_name": "TrainChat",
+  "description": "AI Training System — adaptive programming, conversational coaching, real-time workout adaptation",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1e",
+  "theme_color": "#0a0f1e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/trainchat-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/trainchat-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
