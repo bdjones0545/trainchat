@@ -8,6 +8,9 @@
     "seed-products": "tsx ./src/seed-products.ts",
     "stripe:setup-products": "tsx ./src/setup-trainchat-stripe-products.ts",
     "stripe:setup-webhook": "tsx ./src/setup-stripe-webhook.ts",
+    "indexnow": "tsx ./src/indexnow-ping.ts all",
+    "indexnow:priority": "tsx ./src/indexnow-ping.ts priority",
+    "indexnow:url": "tsx ./src/indexnow-ping.ts url",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

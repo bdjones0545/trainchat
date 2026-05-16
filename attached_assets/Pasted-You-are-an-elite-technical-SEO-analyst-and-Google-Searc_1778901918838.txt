@@ -1,0 +1,178 @@
+You are an elite technical SEO analyst and Google Search Console optimization strategist.
+
+TrainChat already has:
+- strong technical SEO foundation
+- semantic metadata architecture
+- dynamic canonical handling
+- structured data
+- FAQ schema
+- topical authority landing pages
+- sitemap.xml
+- robots.txt governance
+- internal semantic linking
+- AEO optimization
+- whitepapers
+- AI-search optimized content
+
+The next objective is:
+
+BUILD A COMPLETE GOOGLE SEARCH CONSOLE + INDEXING OPTIMIZATION SYSTEM.
+
+GOAL:
+Maximize:
+- indexing efficiency
+- crawl prioritization
+- search impressions
+- ranking acceleration
+- crawl health
+- semantic visibility
+- AI overview eligibility
+
+IMPORTANT:
+This is NOT a generic GSC setup guide.
+Provide a production-level indexing and search visibility optimization system specifically for TrainChat.ai.
+
+TASKS:
+
+1. FULL GOOGLE SEARCH CONSOLE AUDIT PLAN
+
+Provide:
+- exact setup checklist
+- domain property recommendations
+- URL prefix recommendations
+- sitemap submission structure
+- indexing verification steps
+- preferred property architecture
+
+Include:
+- Google Search Console
+- Bing Webmaster Tools
+- IndexNow opportunities if applicable
+
+2. INDEXING PRIORITY STRATEGY
+
+Categorize all TrainChat pages into:
+- highest-priority pages
+- medium-priority pages
+- low-priority pages
+- noindex pages
+
+Prioritize:
+- topical authority pages
+- whitepapers
+- glossary pages
+- comparison pages
+- founder pages
+- semantic cluster pages
+
+Explain:
+- crawl budget allocation strategy
+- why certain pages deserve more crawl frequency
+- how to reinforce crawl priority internally
+
+3. MANUAL INDEXING ROADMAP
+
+Provide a specific launch order for:
+- requesting indexing
+- sitemap resubmission
+- content update cadence
+- recrawl encouragement
+
+Include:
+- exact sequence
+- timing recommendations
+- how often to inspect URLs
+- when to request reindexing
+- how to avoid indexing spam signals
+
+4. SEARCH CONSOLE MONITORING SYSTEM
+
+Create a monitoring framework for:
+- impressions
+- clicks
+- CTR
+- average position
+- indexed pages
+- crawl anomalies
+- duplicate content warnings
+- Core Web Vitals
+- mobile usability
+- schema enhancement reports
+
+Most importantly:
+Explain how to identify:
+- pages gaining semantic traction
+- emerging keyword clusters
+- AI overview opportunities
+- pages that should receive more internal links
+
+5. INTERNAL LINKING FEEDBACK LOOP
+
+Design a system where:
+- pages gaining impressions automatically become authority hubs
+- internal links are adjusted dynamically based on Search Console performance
+- semantic authority compounds over time
+
+Provide:
+- rules for promoting pages internally
+- how to redistribute PageRank
+- how to reinforce winning clusters
+
+6. AI OVERVIEW OPTIMIZATION STRATEGY
+
+Explain how to use Search Console data to identify:
+- pages appearing in AI Overviews
+- question-style queries
+- featured snippet opportunities
+- conversational retrieval opportunities
+
+Optimize specifically for:
+- ChatGPT retrieval
+- Perplexity citations
+- Gemini indexing
+- Google AI Overviews
+
+7. INDEXING ACCELERATION STRATEGY
+
+Provide methods for:
+- increasing crawl frequency
+- accelerating discovery of new pages
+- improving recrawl cadence
+- reinforcing freshness signals
+
+Include:
+- sitemap tactics
+- internal linking tactics
+- external signal tactics
+- update cadence recommendations
+
+8. CREATE A 90-DAY SEARCH CONSOLE EXECUTION PLAN
+
+Break down:
+- weekly priorities
+- what to monitor
+- when to intervene
+- expected indexing milestones
+- expected impression growth
+- expected authority growth
+
+9. PRIORITIZE BY ROI
+
+For every recommendation include:
+- SEO impact
+- indexing impact
+- implementation complexity
+- expected time-to-result
+
+IMPORTANT:
+Do NOT provide beginner SEO advice.
+Provide a modern indexing and semantic visibility strategy designed for a rapidly growing AI SaaS platform competing in AI fitness/coaching search.
+
+OUTPUT:
+- full Search Console optimization strategy
+- indexing system
+- crawl prioritization framework
+- semantic visibility framework
+- AI overview optimization plan
+- monitoring dashboards
+- 90-day execution roadmap
