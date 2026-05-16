@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Share2 } from "lucide-react";
 import SystemUpdateCard from "./SystemUpdateCard";
 import BuildSummaryCard from "./BuildSummaryCard";
@@ -76,7 +76,7 @@ function RichContent({ text }: { text: string }) {
             const parsed = JSON.parse(blockContent);
             if (parsed?.days && Array.isArray(parsed.days) && parsed.days.length > 0) {
               // Suppress: this is a program JSON block — it is shown in the right panel
-              console.log("[RichContent] Suppressing valid program JSON block");
+              if (import.meta.env.DEV) console.log("[RichContent] Suppressing valid program JSON block");
               continue;
             }
           } catch {
@@ -91,7 +91,7 @@ function RichContent({ text }: { text: string }) {
             (blockContent.includes('"days"') && blockContent.includes('"exercises"')) ||
             (blockContent.includes('"sets"') && blockContent.includes('"reps"') && blockContent.includes('"dayNumber"'))
           ) {
-            console.log("[RichContent] Suppressing malformed/truncated program JSON block", { blockLen: blockContent.length, lang });
+            if (import.meta.env.DEV) console.log("[RichContent] Suppressing malformed/truncated program JSON block", { blockLen: blockContent.length, lang });
             continue;
           }
         }
@@ -236,7 +236,7 @@ function parseStructuredData(raw: string | null | undefined) {
   return { type: "none" as const };
 }
 
-export default function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport, panelReceipt }: Props) {
+function MessageBubble({ message, onViewProgram, onShowChange, onShareMoment, turnReport, panelReceipt }: Props) {
   const isUser = message.role === "user";
   const parsed = parseStructuredData(message.structuredData);
   const isSystemEdit = !isUser && parsed.type === "system_edit";
@@ -271,7 +271,7 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
     ? stripProgramJson(message.content)
     : message.content;
 
-  if (!isUser) {
+  if (!isUser && import.meta.env.DEV) {
     console.log("[Program render suppression check]", {
       messageId: message.id,
       hasStructuredData: !!message.structuredData,
@@ -424,3 +424,25 @@ export default function MessageBubble({ message, onViewProgram, onShowChange, on
     </div>
   );
 }
+
+// ─── Memoization ───────────────────────────────────────────────────────────────
+//
+// Custom comparator intentionally ignores callback props (onViewProgram,
+// onShowChange, onShareMoment). These are inline arrow functions in the parent
+// render and create new references on every chat.tsx re-render — but their
+// behavior is identical for every message and never actually changes. Skipping
+// them in the comparison lets React reuse the previous render for all historical
+// messages, so only the actively-changing message ever re-renders.
+//
+// This is the primary INP fix for the streaming path: each SSE event triggers
+// a chat.tsx re-render that previously caused N × MessageBubble re-renders
+// (one per message in the conversation). After this change, streaming SSE events
+// cause 0 historical message re-renders.
+export default memo(MessageBubble, (prev, next) =>
+  prev.message.id === next.message.id &&
+  prev.message.content === next.message.content &&
+  prev.message.structuredData === next.message.structuredData &&
+  prev.message.role === next.message.role &&
+  prev.turnReport === next.turnReport &&
+  prev.panelReceipt === next.panelReceipt,
+);

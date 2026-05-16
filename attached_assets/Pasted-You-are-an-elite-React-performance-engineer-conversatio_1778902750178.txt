@@ -1,0 +1,252 @@
+You are an elite React performance engineer, conversational AI rendering architect, and INP optimization specialist.
+
+TrainChat already has:
+- route-level code splitting
+- vendor chunk splitting
+- advanced semantic SEO
+- Core Web Vitals optimization strategy
+- Framer Motion optimization planning
+- AI-search optimized architecture
+- conversational AI infrastructure
+- streaming SSE responses
+- semantic content clusters
+- advanced internal linking
+
+The next objective is:
+
+BUILD A COMPLETE STREAMING RENDERING + INTERACTION PERFORMANCE OPTIMIZATION SYSTEM.
+
+GOAL:
+Maximize:
+- INP (Interaction to Next Paint)
+- conversational responsiveness
+- streaming smoothness
+- perceived AI intelligence
+- React rendering efficiency
+- mobile responsiveness
+- chat fluidity
+- UI responsiveness under streaming load
+
+IMPORTANT CONTEXT:
+TrainChat is:
+- a streaming AI chat application
+- SSE/token-stream driven
+- React 18 + Vite
+- highly interactive
+- sidebar + program panel heavy
+- state-intensive
+- animation-rich
+- mobile-first
+- continuously rendering during AI responses
+
+The likely remaining bottlenecks are:
+- token-by-token rerenders
+- message list rerenders
+- excessive React reconciliation
+- shared/global state invalidation
+- sidebar rerenders
+- program panel rerenders
+- long tasks during streaming
+- render propagation
+- expensive component trees
+- large conversation histories
+
+TASKS:
+
+1. FULL REACT RENDERING AUDIT PLAN
+
+Design a complete profiling workflow for:
+- React render frequency
+- unnecessary rerenders
+- reconciliation cost
+- commit duration
+- render propagation
+- state invalidation
+- streaming update cost
+
+Provide:
+- React DevTools Profiler workflow
+- flamegraph interpretation
+- commit timing analysis
+- render count instrumentation
+- mobile profiling workflow
+
+Focus heavily on:
+- streaming assistant responses
+- sidebar updates
+- Live Program Panel
+- message history rendering
+- suggestion chips
+- conversation switching
+
+2. STREAMING TOKEN OPTIMIZATION SYSTEM
+
+Design an architecture where:
+- only the actively streaming assistant message rerenders
+- token updates are batched efficiently
+- streaming does NOT rerender the entire conversation tree
+
+Provide:
+- requestAnimationFrame batching strategy
+- buffered token architecture
+- state isolation patterns
+- React streaming optimization patterns
+- ideal flush cadence
+
+Include:
+- exact React architecture recommendations
+- state boundary recommendations
+- memoization strategy
+
+3. MESSAGE LIST OPTIMIZATION
+
+Create a rendering system for:
+- large conversations
+- infinite histories
+- mobile devices
+- rapid streaming updates
+
+Implement strategies for:
+- virtualization
+- incremental rendering
+- offscreen message handling
+- render windowing
+- lazy hydration for historical messages
+
+Recommend:
+- react-window vs react-virtual vs custom implementation
+- ideal thresholds for virtualization
+- scroll anchoring strategy
+- streaming-safe virtualization
+
+4. STATE SEGMENTATION ARCHITECTURE
+
+Audit and redesign state boundaries.
+
+Separate:
+- streaming state
+- message history state
+- sidebar/program state
+- animation state
+- UI interaction state
+- network state
+- draft input state
+
+Goal:
+prevent unrelated UI rerenders during streaming.
+
+Provide:
+- ideal store architecture
+- React context boundaries
+- memoization boundaries
+- derived-state strategies
+
+5. LIVE PROGRAM PANEL OPTIMIZATION
+
+The Live Program Panel is likely expensive.
+
+Create a strategy where:
+- program updates do not rerender chat
+- chat updates do not rerender the panel
+- expensive exercise/program trees are memoized
+- mutation updates are localized
+
+Include:
+- component memoization plan
+- virtualization opportunities
+- selector optimization
+- stable reference strategy
+
+6. MOBILE INP OPTIMIZATION
+
+Design specifically for:
+- mid-range Android devices
+- slower CPUs
+- touch interaction latency
+- keyboard/input responsiveness
+
+Optimize:
+- tap responsiveness
+- input latency
+- scrolling smoothness
+- animation smoothness
+- interaction prioritization
+
+Include:
+- passive event listeners
+- touch-action optimization
+- RAF scheduling
+- deferred work queues
+
+7. BACKGROUND TASK SCHEDULING SYSTEM
+
+Move non-critical work off the interaction path.
+
+Identify work suitable for:
+- requestIdleCallback
+- scheduler.postTask
+- setTimeout deferral
+- transitions
+- workers
+
+Examples:
+- analytics
+- suggestion generation
+- secondary parsing
+- background indexing
+- low-priority UI effects
+
+8. PERFORMANCE BUDGET SYSTEM
+
+Create enforceable budgets for:
+- render duration
+- commit duration
+- rerender counts
+- streaming latency
+- input responsiveness
+- memory growth
+
+Include:
+- CI performance checks
+- regression prevention
+- profiling cadence
+- monitoring dashboards
+
+9. 90-DAY INTERACTION PERFORMANCE ROADMAP
+
+Break down:
+- highest ROI optimizations first
+- expected INP improvements
+- expected UX improvements
+- expected SEO impact
+- expected retention improvements
+- expected perceived intelligence improvements
+
+10. PRIORITIZE BY ROI
+
+For every recommendation include:
+- INP impact
+- UX impact
+- implementation complexity
+- SEO impact
+- mobile impact
+- perceived AI quality impact
+
+IMPORTANT:
+Do NOT provide generic React optimization advice.
+Provide a production-level interaction performance architecture specifically designed for:
+- conversational AI interfaces
+- streaming LLM applications
+- React/Vite AI systems
+- SSE token streaming
+- mobile-first AI UX
+- premium AI application feel
+
+OUTPUT:
+- full rendering optimization strategy
+- streaming architecture
+- state segmentation system
+- virtualization strategy
+- mobile INP optimization framework
+- performance monitoring infrastructure
+- 90-day implementation roadmap
