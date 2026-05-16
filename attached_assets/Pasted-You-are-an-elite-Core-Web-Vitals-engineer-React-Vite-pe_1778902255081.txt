@@ -1,0 +1,228 @@
+You are an elite Core Web Vitals engineer, React/Vite performance architect, and technical SEO optimization specialist.
+
+TrainChat already has:
+- advanced semantic SEO architecture
+- topical authority clusters
+- structured data
+- FAQ schema
+- AI-search optimization
+- internal semantic linking
+- Google Search Console strategy
+- IndexNow infrastructure
+- whitepapers
+- authority distribution systems
+
+The next objective is:
+
+BUILD A COMPLETE CORE WEB VITALS + PERFORMANCE OPTIMIZATION SYSTEM FOR TRAINCHAT.
+
+GOAL:
+Maximize:
+- Core Web Vitals scores
+- mobile performance
+- interaction responsiveness
+- crawl efficiency
+- rendering speed
+- SEO ranking potential
+- AI overview eligibility
+- user engagement signals
+
+IMPORTANT CONTEXT:
+TrainChat is:
+- a React 18 + Vite application
+- heavily animated
+- AI/chat intensive
+- Framer Motion driven
+- route-heavy
+- dynamically rendered
+- conversational and interaction-heavy
+- mobile-first
+
+This means the likely bottlenecks are:
+- JS bundle inflation
+- hydration overhead
+- interaction latency (INP)
+- render-blocking assets
+- animation cost
+- route payload size
+- excessive re-renders
+- image delivery inefficiencies
+- long tasks on mobile
+
+TASKS:
+
+1. FULL CORE WEB VITALS AUDIT PLAN
+
+Create a complete audit framework for:
+- LCP (Largest Contentful Paint)
+- CLS (Cumulative Layout Shift)
+- INP (Interaction to Next Paint)
+- TTFB
+- hydration time
+- JS execution time
+- route transition latency
+
+Provide:
+- exact measurement tools
+- Lighthouse workflow
+- Chrome DevTools profiling workflow
+- real-user monitoring recommendations
+- mobile testing strategy
+
+2. REACT + VITE PERFORMANCE ARCHITECTURE AUDIT
+
+Audit likely bottlenecks in:
+- route structure
+- bundle splitting
+- lazy loading
+- Framer Motion usage
+- state management
+- React Query usage
+- hydration patterns
+- dynamic imports
+- animation timing
+- image handling
+- font loading
+
+Identify:
+- highest-probability performance issues
+- likely ranking suppressors
+- interaction bottlenecks
+
+3. BUNDLE OPTIMIZATION SYSTEM
+
+Design:
+- route-level code splitting
+- dynamic imports
+- chunking strategy
+- vendor splitting
+- lazy hydration strategy
+- component loading hierarchy
+
+Prioritize:
+- SEO pages
+- landing pages
+- whitepapers
+- glossary pages
+- homepage
+
+Provide:
+- exact Vite optimization recommendations
+- Rollup chunk strategy
+- preload/prefetch recommendations
+- script priority strategy
+
+4. FRAMER MOTION + ANIMATION OPTIMIZATION
+
+TrainChat uses extensive animation and ambient effects.
+
+Create a system for:
+- animation deferral
+- motion budget management
+- viewport-triggered animation loading
+- reduced-motion handling
+- GPU acceleration optimization
+- avoiding layout thrashing
+
+Identify:
+- which animations should never run immediately
+- which animations should be disabled on mobile
+- how to preserve premium feel while improving CWV
+
+5. IMAGE + MEDIA DELIVERY OPTIMIZATION
+
+Design:
+- WebP/AVIF conversion pipeline
+- responsive image strategy
+- lazy loading system
+- image CDN recommendations
+- hero image optimization
+- OG image optimization
+
+Provide:
+- ideal image dimensions
+- compression targets
+- loading priority rules
+- LCP optimization strategy
+
+6. INTERACTION PERFORMANCE (INP) OPTIMIZATION
+
+This is likely critical due to TrainChat’s conversational UI.
+
+Create a system for:
+- reducing long tasks
+- batching updates
+- memoization strategy
+- React rendering optimization
+- streaming optimization
+- chat responsiveness optimization
+
+Focus heavily on:
+- mobile responsiveness
+- AI interaction smoothness
+- perceived performance
+
+7. SEO-SPECIFIC PERFORMANCE OPTIMIZATION
+
+Optimize specifically for:
+- crawl efficiency
+- rendering accessibility for bots
+- AI Overview eligibility
+- semantic extraction speed
+- lightweight initial page loads
+
+Include:
+- static rendering recommendations where applicable
+- prerendering opportunities
+- SEO-safe hydration strategies
+
+8. PERFORMANCE MONITORING SYSTEM
+
+Create:
+- Lighthouse benchmarking workflow
+- weekly performance review checklist
+- regression prevention system
+- performance budget system
+
+Include:
+- target CWV scores
+- acceptable JS payload sizes
+- route size thresholds
+- image weight thresholds
+
+9. 90-DAY PERFORMANCE ROADMAP
+
+Break down:
+- highest ROI fixes first
+- implementation sequence
+- expected CWV improvements
+- expected SEO impact
+- expected ranking improvements
+- expected mobile UX improvements
+
+10. PRIORITIZE BY ROI
+
+For every recommendation include:
+- SEO impact
+- Core Web Vitals impact
+- implementation complexity
+- mobile UX impact
+- expected ranking effect
+
+IMPORTANT:
+Do NOT provide generic frontend optimization advice.
+Provide a production-level performance optimization system specifically designed for:
+- AI SaaS applications
+- React/Vite architecture
+- semantic SEO ecosystems
+- conversational AI interfaces
+- animation-heavy premium experiences
+
+OUTPUT:
+- full CWV optimization strategy
+- React/Vite performance architecture
+- bundle optimization system
+- animation optimization strategy
+- interaction performance framework
+- monitoring infrastructure
+- 90-day implementation roadmap
