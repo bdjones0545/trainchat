@@ -30,6 +30,30 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // Strip crossorigin attribute from Vite-generated module scripts and
+    // modulepreload links. Mobile Safari (iOS) enforces strict CORS for ES
+    // modules with crossorigin set — if the static CDN doesn't return
+    // Access-Control-Allow-Origin headers the entire module graph silently
+    // fails to load, leaving a black screen. Same-origin modules load fine
+    // without the attribute.
+    {
+      name: "strip-module-crossorigin",
+      transformIndexHtml(html: string): string {
+        return html
+          .replace(
+            /(<script[^>]*type="module"[^>]*?) crossorigin(?:="[^"]*")?/g,
+            "$1",
+          )
+          .replace(
+            /(<link[^>]*rel="modulepreload"[^>]*?) crossorigin(?:="[^"]*")?/g,
+            "$1",
+          )
+          .replace(
+            /(<link[^>]*rel="stylesheet"[^>]*?) crossorigin(?:="[^"]*")?/g,
+            "$1",
+          );
+      },
+    },
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -60,6 +84,9 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // Target Safari 14+ explicitly so Rollup doesn't emit syntax that
+    // older mobile Safari engines reject at parse time.
+    target: ["es2020", "safari14"],
     // Raise the warning threshold — individual AEO page chunks will be small,
     // but the chat bundle is legitimately large due to the AI interface.
     chunkSizeWarningLimit: 1_200,

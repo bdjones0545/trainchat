@@ -4,6 +4,64 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
 
+    <!-- Pre-React diagnostics: captures JS errors before the app mounts and
+         shows them on-screen + posts to /api/client-error so they appear in
+         production logs. This is the only way to diagnose crashes that happen
+         before React's ErrorBoundary can fire. -->
+    <script>
+      (function () {
+        function _banner(bg, text) {
+          function _append() {
+            var d = document.createElement("div");
+            d.style.cssText =
+              "position:fixed;top:0;left:0;right:0;padding:10px 14px;" +
+              "background:" + bg + ";color:#fff;font-size:11px;" +
+              "font-family:monospace;z-index:99999;" +
+              "word-break:break-all;white-space:pre-wrap;" +
+              "max-height:45vh;overflow-y:auto;";
+            d.textContent = text.slice(0, 600);
+            document.body.appendChild(d);
+          }
+          try {
+            document.body ? _append() : document.addEventListener("DOMContentLoaded", _append);
+          } catch (e) {}
+        }
+        window.addEventListener("error", function (e) {
+          var msg = (e.message || "unknown error") +
+            "\n" + (e.filename || "") + ":" + (e.lineno || "");
+          _banner("#c0392b", "JS ERROR\n" + msg);
+          try {
+            fetch("/api/client-error", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message: e.message,
+                stack: (e.filename || "") + ":" + (e.lineno || ""),
+                url: location.href,
+                userAgent: navigator.userAgent,
+              }),
+            }).catch(function () {});
+          } catch (ex) {}
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+          var msg = String(e.reason || "unknown rejection");
+          _banner("#e67e22", "PROMISE ERROR\n" + msg.slice(0, 400));
+          try {
+            fetch("/api/client-error", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                message: msg,
+                stack: "",
+                url: location.href,
+                userAgent: navigator.userAgent,
+              }),
+            }).catch(function () {});
+          } catch (ex) {}
+        });
+      })();
+    </script>
+
     <!-- Page title -->
     <title>TrainChat® — AI Training System</title>
 
@@ -44,10 +102,11 @@
     <meta name="twitter:description" content="Build, adapt, and evolve your athletic program through conversational AI coaching. Real-time workout adaptation. Persistent memory. Built by a strength coach." />
     <meta name="twitter:image" content="https://www.trainchat.ai/opengraph.jpg" />
 
-    <!-- Fonts -->
+    <!-- Fonts (async — avoids render-blocking on mobile) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
 
     <!-- Global Structured Data -->
     <script type="application/ld+json">
