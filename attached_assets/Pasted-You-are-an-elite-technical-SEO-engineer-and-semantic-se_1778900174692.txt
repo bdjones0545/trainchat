@@ -1,0 +1,115 @@
+You are an elite technical SEO engineer and semantic search optimization specialist.
+
+Your task is to fully optimize the metadata layer for TrainChat AI — an AI-powered adaptive coaching platform that allows users to “vibe code” workouts through conversational AI agents.
+
+GOAL:
+Improve SEO score, search indexing quality, click-through rate, semantic understanding, and AI search discoverability (Google, ChatGPT, Perplexity, Gemini, Claude, etc.).
+
+IMPORTANT CONTEXT ABOUT TRAINCHAT:
+- TrainChat is NOT a generic fitness app
+- It is an AI coaching platform with adaptive programming intelligence
+- Core concepts:
+  - Adaptive Coaching Architecture (ACA)
+  - AI strength coaching
+  - vibe coding workouts
+  - conversational program design
+  - performance architecture
+  - intelligent training systems
+  - neuromuscular efficiency
+  - adaptive periodization
+- Founder has 10+ years experience in strength & conditioning and exercise science
+- Platform positioning is premium, futuristic, intelligent, and research-backed
+
+TASKS:
+
+1. Audit ALL current metadata implementation across the application
+Check:
+- <title>
+- meta description
+- canonical URLs
+- Open Graph tags
+- Twitter/X cards
+- robots directives
+- favicon usage
+- social preview images
+- duplicate metadata
+- missing metadata
+- missing alt text
+- page indexing issues
+
+2. Create a COMPLETE metadata architecture system for:
+- Homepage
+- Features pages
+- Whitepaper pages
+- Pricing page
+- About/founder page
+- Contact page
+- Login/signup pages
+- Blog/article pages
+- AI specialist/agent pages
+- Dynamic conversation/program pages
+
+3. Generate optimized:
+- SEO titles
+- meta descriptions
+- Open Graph titles/descriptions
+- Twitter card metadata
+- canonical structures
+- semantic keyword targeting
+
+4. Build reusable SEO utilities/components for React + Vite application:
+Requirements:
+- Centralized SEO component
+- Dynamic metadata injection
+- Route-aware metadata
+- Open Graph support
+- Twitter card support
+- canonical support
+- JSON-LD structured data support
+- clean TypeScript implementation
+- production-ready architecture
+
+5. Add JSON-LD structured data support for:
+- Organization
+- SoftwareApplication
+- Person (founder)
+- Article
+- FAQ
+- BreadcrumbList
+
+6. Ensure all metadata aligns with:
+- Google SEO best practices
+- AI search engine discoverability
+- semantic indexing
+- entity-based search
+- modern LLM retrieval systems
+
+7. Optimize specifically for these search intents:
+- AI workout generator
+- AI strength coach
+- adaptive coaching AI
+- AI fitness platform
+- conversational workout builder
+- vibe coding workouts
+- AI personal trainer
+- intelligent periodization software
+
+8. Create a final implementation roadmap with:
+- highest priority fixes first
+- estimated SEO impact
+- estimated score improvement
+- technical complexity
+- deployment order
+
+OUTPUT FORMAT:
+- Full audit
+- Improved metadata examples
+- Exact React/Vite implementation code
+- Reusable SEO architecture
+- Structured data implementation
+- Technical recommendations
+- Prioritized roadmap
+
+IMPORTANT:
+Do NOT give generic SEO advice.
+Provide production-level implementation details and exact code architecture recommendations suitable for a scalable SaaS AI platform.
