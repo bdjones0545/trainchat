@@ -33,6 +33,19 @@ export type EvidenceType = (typeof EVIDENCE_TYPES)[number];
 export const RESEARCH_CONFIDENCE = ["strong", "moderate", "limited", "conflicting"] as const;
 export type ResearchConfidence = (typeof RESEARCH_CONFIDENCE)[number];
 
+// ─── Applicability Classification ─────────────────────────────────────────────
+// Classifies each retrieval chunk by how directly it informs coaching decisions.
+// Used in scoring to rank direct programming evidence above explanatory context.
+
+export const APPLICABILITY_CLASSES = [
+  "direct_programming",   // specific sets/reps/load prescriptions — directly informs program
+  "explanation_support",  // explains the "why" — supports coaching rationale
+  "foundational_context", // establishes evidence base — background principle
+  "emerging_caution",     // preliminary/limited evidence — must be framed cautiously by the AI
+  "weak",                 // tangential or insufficiently evidenced for direct use
+] as const;
+export type ApplicabilityClass = (typeof APPLICABILITY_CLASSES)[number];
+
 export const DOCUMENT_STATUS = ["pending", "approved", "rejected", "archived"] as const;
 export type DocumentStatus = (typeof DOCUMENT_STATUS)[number];
 
@@ -84,6 +97,10 @@ export const researchDocumentsTable = pgTable("research_documents", {
   // Foundational paper flag — exempts from freshness age penalty; still retrieved alongside newer work
   isFoundational: boolean("is_foundational").notNull().default(false),
 
+  // Knowledge provenance / auditability
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+
   // Timestamps
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -116,6 +133,9 @@ export const researchChunksTable = pgTable("research_chunks", {
   category: text("category", { enum: RESEARCH_CATEGORIES }).notNull(),
   trustLevel: text("trust_level", { enum: TRUST_LEVELS }).notNull().default("high"),
   chunkType: text("chunk_type").notNull().default("summary"),
+
+  // Applicability classification — how directly this chunk informs coaching/programming decisions
+  applicabilityClass: text("applicability_class", { enum: APPLICABILITY_CLASSES }),
 
   // Reserved for future pgvector embedding
   embedding: jsonb("embedding").$type<number[] | null>().default(null),

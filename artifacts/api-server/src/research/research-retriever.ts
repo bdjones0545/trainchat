@@ -46,6 +46,7 @@ export interface RetrievedResearchChunk {
   topicTags: string[];
   category: string;
   warningFlags: string[];
+  applicabilityClass?: string | null;
 }
 
 export interface ResearchContext {
@@ -67,6 +68,8 @@ export interface ScoreBreakdown {
   injuryBoost: number;
   populationBoost: number;
   warningPenalty: number;
+  titleRelevanceScore: number;
+  applicabilityScore: number;
   diversityBonus: number;
   finalScore: number;
 }
@@ -78,6 +81,63 @@ export interface RetrievalComposition {
   chunksPerDocument: Record<string, number>;
   categories: string[];
   evidenceTypes: string[];
+}
+
+// ─── Applicability class score boosts ────────────────────────────────────────
+// Rewards chunks whose content is directly actionable for programming decisions.
+
+export const APPLICABILITY_CLASS_BOOSTS: Record<string, number> = {
+  direct_programming: 2,   // specific sets/reps/load prescriptions
+  explanation_support: 1,  // explains the "why" — supports coaching rationale
+  foundational_context: 1, // establishes evidence base — background principle
+  emerging_caution: -1,    // preliminary evidence — must be framed cautiously
+  weak: -2,                // tangential or insufficiently evidenced
+};
+
+// ─── Title relevance scoring ──────────────────────────────────────────────────
+// Matches context tag keywords against the document title.
+// Rewards specificity — a paper with "progressive overload" in the title beats
+// a generic review paper with identical topic tags.
+
+export function getTitleRelevanceScore(
+  docTitle: string | undefined,
+  contextTags: string[],
+): number {
+  if (!docTitle || contextTags.length === 0) return 0;
+  const titleLower = docTitle.toLowerCase();
+  let matches = 0;
+  for (const tag of contextTags) {
+    const tagWords = tag.replace(/_/g, " ").split(" ").filter((w) => w.length > 2);
+    if (tagWords.some((w) => titleLower.includes(w))) {
+      matches++;
+    }
+  }
+  return Math.min(matches, 3); // cap at +3 — title is a tiebreaker, not a primary signal
+}
+
+// ─── Token footprint estimation ──────────────────────────────────────────────
+// ~4 chars per token (conservative estimate for mixed prose + markdown).
+// Hard cap prevents research injection from bloating the Coach Agent prompt.
+
+export const MAX_RESEARCH_TOKENS = 1200;
+const MAX_RESEARCH_CHARS = MAX_RESEARCH_TOKENS * 4;
+
+export function estimateResearchTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+// ─── Chunk deduplication (exported for testing) ──────────────────────────────
+// Filters near-identical chunks by normalized 90-char leading text.
+// Prevents the same coaching insight from entering the prompt twice.
+
+export function deduplicateChunks<T extends { chunkText: string }>(chunks: T[]): T[] {
+  const seen = new Set<string>();
+  return chunks.filter((c) => {
+    const key = c.chunkText.trim().toLowerCase().slice(0, 90).replace(/\s+/g, " ");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 // ─── Warning flag score penalties ─────────────────────────────────────────────
@@ -283,7 +343,7 @@ function extractContextTags(params: ResearchRetrievalParams): string[] {
 // ─── Core scoring function ────────────────────────────────────────────────────
 
 function scoreChunk(
-  chunk: { topicTags: string[]; category: string; trustLevel: string; chunkType: string },
+  chunk: { topicTags: string[]; category: string; trustLevel: string; chunkType: string; applicabilityClass?: string | null },
   contextTags: string[],
   hasInjuries: boolean,
   population: string | null | undefined,
@@ -341,9 +401,16 @@ function scoreChunk(
     warningPenalty += WARNING_FLAG_PENALTIES[flag] ?? 0;
   }
 
+  // Title relevance: rewards chunks from papers with topic-specific titles
+  const titleRelevanceScore = getTitleRelevanceScore(docMeta?.documentTitle, contextTags);
+
+  // Applicability class: rewards directly actionable programming evidence
+  const applicabilityScore = APPLICABILITY_CLASS_BOOSTS[chunk.applicabilityClass ?? ""] ?? 0;
+
   const finalScore =
     tagOverlap + trustBoost + evidenceBoost + freshnessBoost +
-    injuryBoost + populationBoost + chunkTypeBoost + warningPenalty;
+    injuryBoost + populationBoost + chunkTypeBoost + warningPenalty +
+    titleRelevanceScore + applicabilityScore;
 
   return {
     chunkId: docMeta.chunkId,
@@ -356,6 +423,8 @@ function scoreChunk(
     injuryBoost,
     populationBoost,
     warningPenalty,
+    titleRelevanceScore,
+    applicabilityScore,
     diversityBonus: 0, // applied externally after candidate pool is known
     finalScore,
   };
@@ -505,29 +574,47 @@ export async function getRelevantResearchContext(
 
     const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
 
-    const baseScored = chunks
-      .map((chunk) => {
-        const doc = docMap.get(chunk.documentId);
-        const breakdown = scoreChunk(
-          chunk,
+    const allScored = chunks.map((chunk) => {
+      const doc = docMap.get(chunk.documentId);
+      const breakdown = scoreChunk(
+        chunk,
+        contextTags,
+        hasInjuries,
+        params.population,
+        (doc?.warningFlags as string[]) ?? [],
+        {
+          documentId: chunk.documentId,
+          chunkId: chunk.id,
+          evidenceType: doc?.evidenceType ?? null,
+          year: doc?.year ?? null,
+          isFoundational: doc?.isFoundational ?? false,
+          documentTitle: doc?.title,
+        },
+      );
+      return { chunk, score: breakdown.finalScore };
+    });
+
+    // Observability: log rejected chunks for retrieval auditing
+    const rejectedChunks = allScored.filter((s) => s.score < 2);
+    if (rejectedChunks.length > 0) {
+      logger.debug(
+        {
+          event: "research_chunks_rejected",
+          count: rejectedChunks.length,
           contextTags,
-          hasInjuries,
-          params.population,
-          (doc?.warningFlags as string[]) ?? [],
-          {
-            documentId: chunk.documentId,
-            chunkId: chunk.id,
-            evidenceType: doc?.evidenceType ?? null,
-            year: doc?.year ?? null,
-            isFoundational: doc?.isFoundational ?? false,
-            documentTitle: doc?.title,
-          },
-        );
-        return { chunk, score: breakdown.finalScore };
-      })
-      // Phase 3: raised threshold from >0 to ≥2 to prevent weakly-matched chunks
-      // from being injected into AI prompts (score=1 = single tag hit, low signal).
-      .filter((s) => s.score >= 2);
+          rejected: rejectedChunks.map((s) => ({
+            documentId: s.chunk.documentId,
+            score: s.score,
+            category: s.chunk.category,
+          })),
+        },
+        "[ResearchRetriever] Chunks below quality threshold (score < 2) — excluded from context",
+      );
+    }
+
+    // Phase 3: raised threshold from >0 to ≥2 to prevent weakly-matched chunks
+    // from being injected into AI prompts (score=1 = single tag hit, low signal).
+    const baseScored = allScored.filter((s) => s.score >= 2);
 
     // Category diversity bonus: +1 tie-breaker when complementary categories are both present
     const candidateCategories = new Set(baseScored.map((s) => (s.chunk.category as string) ?? ""));
@@ -541,7 +628,25 @@ export async function getRelevantResearchContext(
     // Post-ranking diversity filter: max 2 chunks per document
     const scored = applyDiversityFilter(diversified, maxChunks);
 
-    if (scored.length === 0) return "";
+    // Chunk deduplication — prevent near-identical insights from appearing twice
+    const _seenTxts = new Set<string>();
+    const deduped = scored.filter((s) => {
+      const key = (s.chunk.chunkText as string).trim().toLowerCase().slice(0, 90).replace(/\s+/g, " ");
+      if (_seenTxts.has(key)) return false;
+      _seenTxts.add(key);
+      return true;
+    });
+
+    // Token footprint cap — prevents research from bloating the prompt
+    let _charTotal = 0;
+    const capped = deduped.filter((s) => {
+      const est = (s.chunk.chunkText as string).length + 200;
+      if (_charTotal + est > MAX_RESEARCH_CHARS && _charTotal > 0) return false;
+      _charTotal += est;
+      return true;
+    });
+
+    if (capped.length === 0) return "";
 
     const lines: string[] = ["\n## RESEARCH CONTEXT (Evidence-Informed Coaching Notes)"];
     lines.push(
@@ -552,7 +657,7 @@ export async function getRelevantResearchContext(
 
     const seenDocIds = new Set<number>();
 
-    for (const { chunk } of scored) {
+    for (const { chunk } of capped) {
       const doc = docMap.get(chunk.documentId);
       if (!doc) continue;
 
@@ -626,29 +731,48 @@ export async function getRelevantResearchContextWithChunks(
 
     const hasInjuries = Boolean(params.injuries && params.injuries.trim().length > 0);
 
-    const baseScored = rawChunks
-      .map((chunk) => {
-        const doc = docMap.get(chunk.documentId);
-        const breakdown = scoreChunk(
-          chunk,
+    const allRawScored = rawChunks.map((chunk) => {
+      const doc = docMap.get(chunk.documentId);
+      const breakdown = scoreChunk(
+        chunk,
+        contextTags,
+        hasInjuries,
+        params.population,
+        (doc?.warningFlags as string[]) ?? [],
+        {
+          documentId: chunk.documentId,
+          chunkId: chunk.id,
+          evidenceType: doc?.evidenceType ?? null,
+          year: doc?.year ?? null,
+          isFoundational: doc?.isFoundational ?? false,
+          documentTitle: doc?.title,
+        },
+      );
+      return { chunk, breakdown, score: breakdown.finalScore };
+    });
+
+    // Observability: log rejected chunks for retrieval auditing
+    const rejectedRaw = allRawScored.filter((s) => s.score < 2);
+    if (rejectedRaw.length > 0) {
+      logger.debug(
+        {
+          event: "research_chunks_rejected",
+          count: rejectedRaw.length,
           contextTags,
-          hasInjuries,
-          params.population,
-          (doc?.warningFlags as string[]) ?? [],
-          {
-            documentId: chunk.documentId,
-            chunkId: chunk.id,
-            evidenceType: doc?.evidenceType ?? null,
-            year: doc?.year ?? null,
-            isFoundational: doc?.isFoundational ?? false,
-            documentTitle: doc?.title,
-          },
-        );
-        return { chunk, breakdown, score: breakdown.finalScore };
-      })
-      // Phase 3: raised threshold from >0 to ≥2 to prevent weakly-matched chunks
-      // from being injected into AI prompts (score=1 = single tag hit, low signal).
-      .filter((s) => s.score >= 2);
+          rejected: rejectedRaw.map((s) => ({
+            documentId: s.chunk.documentId,
+            score: s.score,
+            category: s.chunk.category,
+            applicabilityClass: s.chunk.applicabilityClass ?? null,
+          })),
+        },
+        "[ResearchRetriever] Chunks below quality threshold (score < 2) — excluded from context",
+      );
+    }
+
+    // Phase 3: raised threshold from >0 to ≥2 to prevent weakly-matched chunks
+    // from being injected into AI prompts (score=1 = single tag hit, low signal).
+    const baseScored = allRawScored.filter((s) => s.score >= 2);
 
     // Category diversity bonus: +1 tie-breaker when complementary categories co-exist in pool
     const candidateCategories = new Set(baseScored.map((s) => (s.chunk.category as string) ?? ""));
@@ -662,10 +786,28 @@ export async function getRelevantResearchContextWithChunks(
     // Post-ranking diversity filter: max 2 chunks per document
     const scored = applyDiversityFilter(diversified, maxChunks);
 
-    if (scored.length === 0) return { text: "", chunks: [] };
+    // Chunk deduplication — prevent near-identical insights from appearing twice
+    const _seenRawTxts = new Set<string>();
+    const dedupedRaw = scored.filter((s) => {
+      const key = (s.chunk.chunkText as string).trim().toLowerCase().slice(0, 90).replace(/\s+/g, " ");
+      if (_seenRawTxts.has(key)) return false;
+      _seenRawTxts.add(key);
+      return true;
+    });
+
+    // Token footprint cap — prevents research from bloating the prompt
+    let _rawCharTotal = 0;
+    const cappedRaw = dedupedRaw.filter((s) => {
+      const est = (s.chunk.chunkText as string).length + 200;
+      if (_rawCharTotal + est > MAX_RESEARCH_CHARS && _rawCharTotal > 0) return false;
+      _rawCharTotal += est;
+      return true;
+    });
+
+    if (cappedRaw.length === 0) return { text: "", chunks: [] };
 
     // Build structured chunk objects
-    const retrievedChunks: RetrievedResearchChunk[] = scored.map(({ chunk }) => {
+    const retrievedChunks: RetrievedResearchChunk[] = cappedRaw.map(({ chunk }) => {
       const doc = docMap.get(chunk.documentId);
       return {
         documentId: chunk.documentId,
@@ -677,6 +819,7 @@ export async function getRelevantResearchContextWithChunks(
         topicTags: Array.isArray(chunk.topicTags) ? chunk.topicTags : [],
         category: chunk.category ?? "",
         warningFlags: (doc?.warningFlags as string[]) ?? [],
+        applicabilityClass: chunk.applicabilityClass ?? null,
       };
     });
 
@@ -725,7 +868,7 @@ export async function getRelevantResearchContextWithChunks(
 
     // ── Retrieval observability log ───────────────────────────────────────────
     // Full score breakdown per chunk + composition summary for diversity auditing.
-    const composition = buildRetrievalComposition(scored, docMap);
+    const composition = buildRetrievalComposition(cappedRaw, docMap);
     logger.info(
       {
         event: "research_retrieval_hit",
@@ -741,7 +884,7 @@ export async function getRelevantResearchContextWithChunks(
         categorySpread: composition.categories,
         evidenceTypeSpread: composition.evidenceTypes,
         // Per-chunk score breakdown
-        scoreBreakdowns: scored.map((s) => ({
+        scoreBreakdowns: cappedRaw.map((s) => ({
           chunkId: s.breakdown.chunkId,
           documentId: s.breakdown.documentId,
           tagOverlap: s.breakdown.tagOverlap,
@@ -752,10 +895,14 @@ export async function getRelevantResearchContextWithChunks(
           injuryBoost: s.breakdown.injuryBoost,
           populationBoost: s.breakdown.populationBoost,
           warningPenalty: s.breakdown.warningPenalty,
+          titleRelevanceScore: s.breakdown.titleRelevanceScore,
+          applicabilityScore: s.breakdown.applicabilityScore,
+          applicabilityClass: s.chunk.applicabilityClass ?? null,
           diversityBonus: s.breakdown.diversityBonus,
           finalScore: s.score,
         })),
         trustLevels: retrievedChunks.map((c) => c.trustLevel),
+        applicabilityClasses: retrievedChunks.map((c) => c.applicabilityClass ?? null),
         warningFlagsPresent: retrievedChunks.flatMap((c) => c.warningFlags).filter(Boolean),
       },
       "[ResearchRetriever] Retrieval hit",

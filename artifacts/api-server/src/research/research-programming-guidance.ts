@@ -33,6 +33,7 @@ export interface ResearchProgrammingGuidance {
   confidenceLevel: "high" | "moderate" | "low" | "insufficient";
   influencedDimensions: string[];
   researchSources: string[];
+  framingNote?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -438,10 +439,40 @@ function determineConfidenceLevel(
   if (chunks.length === 0) return "insufficient";
   const goldCount = chunks.filter((c) => c.trustLevel === "gold").length;
   const highCount = chunks.filter((c) => c.trustLevel === "high").length;
-  if (goldCount >= 2 || (goldCount >= 1 && highCount >= 1)) return "high";
-  if (goldCount >= 1 || highCount >= 2) return "moderate";
-  if (chunks.length >= 2) return "low";
-  return "insufficient";
+
+  // Emerging-caution or weak applicability class downgrades confidence
+  const hasEmergingOrWeak = chunks.some(
+    (c) => c.applicabilityClass === "emerging_caution" || c.applicabilityClass === "weak",
+  );
+  const directProgrammingCount = chunks.filter(
+    (c) => c.applicabilityClass === "direct_programming",
+  ).length;
+
+  let level: ResearchProgrammingGuidance["confidenceLevel"];
+  if (goldCount >= 2 || (goldCount >= 1 && highCount >= 1)) level = "high";
+  else if (goldCount >= 1 || highCount >= 2) level = "moderate";
+  else if (chunks.length >= 2) level = "low";
+  else level = "insufficient";
+
+  // Downgrade if the majority of evidence is exploratory and none is direct programming
+  if (hasEmergingOrWeak && directProgrammingCount === 0 && level === "high") level = "moderate";
+  if (hasEmergingOrWeak && directProgrammingCount === 0 && level === "moderate") level = "low";
+
+  return level;
+}
+
+// ─── Emerging evidence caution notice ─────────────────────────────────────────
+// When chunks flagged as emerging/weak are present, append a guardrail instruction
+// to prevent the AI from overstating confidence in unproven claims.
+
+function buildEmergingEvidenceNotice(chunks: RetrievedResearchChunk[]): string {
+  const hasEmergingCaution = chunks.some((c) => c.applicabilityClass === "emerging_caution");
+  const hasWeak = chunks.some((c) => c.applicabilityClass === "weak");
+  if (!hasEmergingCaution && !hasWeak) return "";
+  const parts: string[] = [];
+  if (hasEmergingCaution) parts.push("some retrieved evidence is preliminary — frame with cautious language (\"emerging evidence suggests\", \"limited data indicates\") rather than as established fact");
+  if (hasWeak) parts.push("one or more retrieved chunks are weakly applicable — omit or caveat rather than citing as strong support");
+  return `HALLUCINATION GUARD: ${parts.join("; ")}.`;
 }
 
 // ─── Main Builder ─────────────────────────────────────────────────────────────
@@ -512,6 +543,7 @@ export function buildResearchProgrammingGuidance(
     confidenceLevel,
     influencedDimensions,
     researchSources,
+    framingNote: buildEmergingEvidenceNotice(retrievedChunks) || undefined,
   };
 }
 
@@ -553,6 +585,10 @@ export function formatResearchGuidanceForPrompt(
     lines.push(
       `**CONTRAINDICATIONS:** Avoid or modify:\n${guidance.contraindications.map((c) => `  - ${c}`).join("\n")}`,
     );
+  }
+
+  if (guidance.framingNote) {
+    lines.push(`\n${guidance.framingNote}`);
   }
 
   lines.push(

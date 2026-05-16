@@ -42,6 +42,7 @@ export interface LibrarianRetrievalChunk {
   topicTags: string[];
   populationTags: string[];
   confidence: string;
+  applicabilityClass?: "direct_programming" | "explanation_support" | "foundational_context" | "emerging_caution" | "weak";
 }
 
 export interface ResearchLibrarianResult {
@@ -132,6 +133,14 @@ Explain when evidence applies differently by population, training age, goal, spo
 
 **5. Retrieval Chunk Crafting**
 Create concise, high-signal chunks that directly help programming decisions. Each chunk should be immediately usable without additional interpretation.
+
+**6. Applicability Classification**
+For each retrieval chunk, classify how directly it informs coaching decisions:
+- direct_programming: includes specific sets/reps/load/intensity prescriptions directly applicable to program design
+- explanation_support: explains the mechanism or "why" behind a training principle — supports coaching rationale but doesn't prescribe numbers
+- foundational_context: establishes the evidence base for a broad training principle — useful background but not immediately actionable
+- emerging_caution: preliminary, limited, or single-study evidence — the AI must frame this with cautious language ("early evidence suggests", "limited data indicates")
+- weak: tangential to coaching, anecdotal, or insufficiently evidenced — will be deprioritized in retrieval
 
 **6. Claim Discipline**
 Actively distinguish what "supports," "suggests," and "does not prove." Avoid overclaiming. Use the weakest accurate language: "suggests," "may support," "preliminary evidence indicates," "consistent with." The claim ceiling is set by the evidence quality — never exceed it.
@@ -255,7 +264,8 @@ Return a single JSON object with this exact structure:
       "chunkText": "Concise, practical coaching insight that stands alone without context",
       "topicTags": ["tag1"],
       "populationTags": ["general_adults"],
-      "confidence": "moderate"
+      "confidence": "moderate",
+      "applicabilityClass": "direct_programming | explanation_support | foundational_context | emerging_caution | weak"
     }
   ],
   "adminNotes": "Brief notes for the admin reviewer about this document's quality or concerns",
@@ -686,6 +696,14 @@ async function saveLibrarianChunks(
   const trustLevel = mapTrustLevel(result.trustLevel);
   const category = doc.category;
 
+  const VALID_APPLICABILITY = new Set([
+    "direct_programming",
+    "explanation_support",
+    "foundational_context",
+    "emerging_caution",
+    "weak",
+  ]);
+
   const rows = result.retrievalChunks
     .filter((c) => c.chunkText?.trim())
     .map((chunk) => ({
@@ -695,6 +713,9 @@ async function saveLibrarianChunks(
       category,
       trustLevel,
       chunkType: "librarian",
+      applicabilityClass: VALID_APPLICABILITY.has(chunk.applicabilityClass ?? "")
+        ? chunk.applicabilityClass
+        : null,
     }));
 
   if (rows.length === 0) return 0;

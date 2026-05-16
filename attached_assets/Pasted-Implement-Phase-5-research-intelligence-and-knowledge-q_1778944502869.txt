@@ -1,0 +1,223 @@
+Implement Phase 5 research intelligence and knowledge quality improvements for TrainChat.
+
+Do NOT add generic AI frameworks.
+Do NOT add Firecrawl, LangChain, CrewAI, Claude Code, or autonomous browsing systems.
+Do NOT expose raw research ingestion directly to users.
+Do NOT replace the current Research Librarian architecture.
+
+Goal:
+Improve research quality, retrieval precision, source trust weighting, recency handling, coaching applicability, and long-term maintainability of TrainChat’s research intelligence layer.
+
+Preserve the current:
+- admin-curated research pipeline
+- deterministic coaching architecture
+- Research Librarian role
+- coaching-first philosophy
+
+========================
+PHASE 5 PRIORITIES
+========================
+
+1. Research retrieval scoring improvements
+Audit current research retrieval scoring.
+
+Tasks:
+- Improve retrieval ranking using:
+  - relevance
+  - trust level
+  - recency
+  - coaching applicability
+  - evidence quality
+- Weakly-related research should not enter prompts.
+- Prefer fewer high-quality chunks over many weak chunks.
+- Maintain deterministic filtering where possible.
+
+Suggested scoring dimensions:
+- tag relevance
+- title relevance
+- semantic overlap
+- trustLevel weighting
+- publication recency weighting
+- applicability to athlete/coaching context
+- specificity vs genericity
+
+Do not overcomplicate.
+
+2. Recency awareness
+Research from 2017 and 2025 should not be treated equally.
+
+Tasks:
+- Add recency weighting if publication date exists.
+- More recent evidence should slightly outrank older evidence when quality is comparable.
+- Do NOT blindly suppress older foundational papers.
+- Add special handling for:
+  - foundational/classic literature
+  - evergreen physiology concepts
+  - newer intervention studies
+- If publication date is missing, fall back gracefully.
+
+3. Research applicability classification
+Not all evidence is equally useful for coaching decisions.
+
+Tasks:
+- Add or improve a lightweight classification layer:
+  - foundational
+  - applied coaching
+  - mechanistic
+  - emerging
+  - weak/low applicability
+- Coaching-oriented evidence should rank higher for direct program decisions.
+- Mechanistic evidence can still support explanations.
+- Preserve existing trustLevel structure if already present.
+
+4. Research injection quality control
+Audit how research enters prompts.
+
+Tasks:
+- Prevent low-scoring or loosely-related chunks from inflating prompt size.
+- Add hard caps on:
+  - number of injected chunks
+  - total token footprint if practical
+- Prefer the highest-signal chunks.
+- Remove duplicate/redundant research snippets before injection.
+
+5. Admin research review workflow improvements
+Improve the admin-side review process only.
+
+Tasks:
+- Surface:
+  - trust level
+  - recency
+  - applicability
+  - retrieval score
+  - tags/categories
+- Make it easier to reject weak evidence.
+- Preserve human approval workflow.
+- Do not auto-promote research into coaching behavior.
+
+6. Knowledge versioning / auditability
+TrainChat should know where coaching knowledge came from.
+
+Tasks:
+- Add lightweight versioning or metadata tracking where practical.
+- Track:
+  - when research was added
+  - who approved it
+  - trust level
+  - source category
+  - major tags
+- Do not overbuild a full academic database.
+- Goal is traceability and future maintainability.
+
+7. Coaching explanation quality
+Use research intelligently without sounding robotic.
+
+Tasks:
+- When research influences a coaching explanation:
+  - keep explanations coach-like
+  - avoid academic jargon overload
+  - avoid citation spam
+- Use research to support:
+  - progression logic
+  - fatigue management
+  - power sequencing
+  - recovery rationale
+  - injury-sensitive modifications
+- Do not expose raw retrieval chunks to users.
+
+8. Research retrieval observability
+Add lightweight logging/observability.
+
+Track:
+- retrieval score
+- selected chunks
+- rejected chunks
+- why chunks were rejected
+- token usage estimate if practical
+
+This can be logging only.
+No dashboard required yet.
+
+9. Guardrails against “research hallucination”
+TrainChat should not invent evidence.
+
+Tasks:
+- Ensure unsupported claims are not framed as established science.
+- Emerging/weak evidence should be framed cautiously.
+- Avoid overconfident phrasing on uncertain findings.
+- Preserve coaching practicality.
+
+10. Research quality tests
+Add focused tests where practical.
+
+Test:
+- relevance ranking
+- recency weighting
+- duplicate chunk removal
+- weak chunk rejection
+- applicability classification
+- trustLevel weighting
+- prompt injection caps
+- foundational paper preservation
+- emerging evidence caution language
+
+========================
+IMPORTANT CONSTRAINTS
+========================
+
+- Preserve the deterministic Architect + Coach separation.
+- Preserve admin-controlled research ingestion.
+- Do not build an autonomous research crawler.
+- Do not add live web search into user coaching flows.
+- Keep retrieval focused and high-signal.
+- Favor coaching usefulness over academic complexity.
+- Keep research invisible unless it improves coaching quality or trust.
+
+========================
+OUTPUT REPORT
+========================
+
+After implementation, provide:
+
+A. Files changed
+
+B. Retrieval scoring improvements
+- new ranking logic
+- weighting system
+- weak chunk filtering
+
+C. Recency handling
+- how recency is weighted
+- foundational paper handling
+- fallback behavior
+
+D. Applicability classification
+- categories added
+- ranking impact
+
+E. Prompt injection improvements
+- chunk caps
+- deduplication
+- token control
+
+F. Admin workflow improvements
+- new metadata surfaced
+- review improvements
+
+G. Knowledge traceability/versioning
+- metadata tracked
+- auditability improvements
+
+H. Coaching explanation improvements
+- how research is translated into coach-like language
+- hallucination safeguards
+
+I. Observability/logging improvements
+
+J. Tests/typecheck
+- commands run
+- results
+- pre-existing issues if any
+
+K. Recommended future Phase 6
+Only recommend after Phase 5 is complete.

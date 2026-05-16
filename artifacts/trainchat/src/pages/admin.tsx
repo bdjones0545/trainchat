@@ -503,6 +503,8 @@ interface ResearchDoc {
   url: string | null;
   createdAt: string;
   lastReviewedAt: string | null;
+  approvedBy: string | null;
+  approvedAt: string | null;
 }
 
 interface LibrarianResult {
@@ -576,6 +578,24 @@ const CONFIDENCE_COLORS: Record<string, string> = {
   moderate: "hsl(199 70% 55%)",
   limited: "hsl(40 90% 60%)",
   conflicting: "hsl(0 60% 60%)",
+};
+
+function getRecencyLabel(year: number | null | undefined, isFoundational?: boolean): { label: string; color: string } | null {
+  if (!year) return null;
+  const age = new Date().getFullYear() - year;
+  if (isFoundational && age > 12) return { label: "★ Foundational Classic", color: "hsl(40 90% 60%)" };
+  if (age <= 3) return { label: `Recent (${year})`, color: "hsl(142 60% 55%)" };
+  if (age <= 7) return { label: `Established (${year})`, color: "hsl(199 70% 55%)" };
+  if (age > 12) return { label: `Older evidence (${year})`, color: "hsl(0 60% 55%)" };
+  return null;
+}
+
+const APPLICABILITY_LABELS: Record<string, { label: string; color: string }> = {
+  direct_programming: { label: "Direct Programming", color: "hsl(142 60% 50%)" },
+  explanation_support: { label: "Explanation Support", color: "hsl(199 70% 55%)" },
+  foundational_context: { label: "Foundational Context", color: "hsl(270 60% 60%)" },
+  emerging_caution: { label: "⚠ Emerging — Caution", color: "hsl(40 90% 55%)" },
+  weak: { label: "Weak Applicability", color: "hsl(0 55% 55%)" },
 };
 
 const WARNING_FLAG_LABELS: Record<string, string> = {
@@ -1663,6 +1683,14 @@ function ResearchLibraryPanel() {
                           ★ Foundational
                         </span>
                       )}
+                      {(() => {
+                        const recency = getRecencyLabel(doc.year, doc.isFoundational);
+                        return recency && !doc.isFoundational ? (
+                          <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ color: recency.color, background: recency.color + "18", border: `1px solid ${recency.color}33` }}>
+                            {recency.label}
+                          </span>
+                        ) : null;
+                      })()}
                       {doc.librarianRecommendation && (() => {
                         const rc = RECOMMENDATION_COLORS[doc.librarianRecommendation];
                         return rc ? (
@@ -1691,6 +1719,9 @@ function ResearchLibraryPanel() {
                     {doc.authors && (
                       <p className="text-zinc-500 text-xs mt-0.5">
                         {doc.authors}{doc.year ? ` (${doc.year})` : ""} — {doc.source}
+                        {doc.approvedBy && (
+                          <span className="ml-2 text-zinc-600">· Approved by {doc.approvedBy}{doc.approvedAt ? ` on ${new Date(doc.approvedAt).toLocaleDateString()}` : ""}</span>
+                        )}
                         {doc.doi ? (
                           <> · <a href={`https://doi.org/${doc.doi}`} target="_blank" rel="noopener noreferrer" className="underline hover:text-zinc-300 transition-colors">DOI ↗</a></>
                         ) : doc.url ? (
