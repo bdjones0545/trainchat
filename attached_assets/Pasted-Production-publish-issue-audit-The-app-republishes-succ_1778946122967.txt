@@ -1,0 +1,110 @@
+Production publish issue audit.
+
+The app republishes successfully, but on mobile Safari the user only sees the dark background/app shell and no UI renders.
+
+Likely symptoms:
+- HTML shell loads
+- CSS/background loads
+- React app never hydrates OR crashes immediately after hydration
+
+Perform a full production runtime investigation.
+
+Tasks:
+
+1. Check browser console/runtime errors
+- Inspect production logs
+- Inspect frontend runtime logs
+- Look for:
+  - React render crashes
+  - undefined access
+  - hydration failures
+  - import/module failures
+  - failed dynamic imports
+  - provider initialization failures
+  - auth/session crashes
+  - query client crashes
+  - missing env variables
+  - SSE initialization crashes
+  - Suspense deadlocks
+  - mobile-only failures
+
+2. Verify build output
+- Confirm Vite build completed correctly
+- Confirm hashed JS/CSS assets exist
+- Confirm index.html references correct asset paths
+- Confirm no stale asset references after republish
+
+3. Check root render path
+Audit:
+- main.tsx
+- App.tsx
+- providers
+- auth wrappers
+- query client setup
+- router initialization
+- theme initialization
+- any startup useEffect
+
+Look for:
+- infinite loading states
+- uncaught exceptions
+- blocking awaits
+- rejected promises
+- null context crashes
+
+4. Check publish/runtime env vars
+Verify all required production env vars exist:
+- OpenAI keys
+- DB URLs
+- auth secrets
+- public frontend env vars
+- anything newly added during Phases 1–5
+
+5. Check mobile Safari compatibility
+Look for:
+- unsupported APIs
+- ResizeObserver loops
+- SpeechRecognition issues
+- autoplay/audio init crashes
+- viewport/layout deadlocks
+- virtualized list startup crashes
+- Framer Motion hydration mismatch
+
+6. Add temporary startup diagnostics
+Add temporary console logs at:
+- app bootstrap
+- provider mount
+- router mount
+- auth resolution
+- chat page mount
+- sidebar mount
+
+Goal:
+Find the last successful render point before failure.
+
+7. Check recent Phase 4/5 changes
+Specifically inspect:
+- microReasons wiring
+- savedProgram hydration
+- quick-action chips
+- AgentTurnReport logic
+- research metadata rendering
+- any new optional chaining gaps
+- any assumptions about arrays/objects existing
+
+8. Ensure app fails gracefully
+If any optional payload is missing:
+- do not white-screen
+- render fallback UI
+- log safely
+
+9. Output:
+A. Root cause
+B. Files involved
+C. Exact failing line/component
+D. Why production broke but build passed
+E. Surgical fix
+F. Any remaining production risks
+
+Do NOT refactor broadly.
+Find the exact crash and fix it surgically.
