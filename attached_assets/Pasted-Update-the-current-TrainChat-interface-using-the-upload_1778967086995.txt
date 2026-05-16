@@ -1,0 +1,58 @@
+Update the current TrainChat interface using the uploaded image as the visual reference.
+
+Do not rebuild the app from scratch.
+
+Preserve the existing TrainChat architecture, routes, chat logic, training-system state, right sidebar behavior, and mutation flows.
+
+The goal is to simplify and visually elevate the current interface so it feels like the uploaded concept:
+- dark cinematic background
+- neural grid atmosphere
+- premium glass input bar
+- calm AI-native layout
+- subtle cyan glow accents
+- minimal UI chrome
+- Atlas-centered conversational experience
+- polished mobile-first design
+
+Apply this aesthetic to the current TrainChat construct.
+
+Primary direction:
+TrainChat should feel like an AI performance intelligence system, not a traditional fitness app.
+
+Implement:
+1. A simplified central chat/home experience inspired by the uploaded image
+2. Subtle animated neural-grid background
+3. Ambient glow layers that do not interfere with readability
+4. Premium rounded glass command input
+5. Voice button styling consistent with the concept
+6. Refined quick-action buttons/chips
+7. Smooth transitions for AI thinking, generating, refining, and saved states
+8. Subtle animated system status indicator
+9. Maintain existing “Vibe Code Your Training” identity where appropriate
+10. Keep all existing program generation and sidebar functionality intact
+
+Right sidebar direction:
+Simplify the right sidebar visually.
+It should match the same calm cinematic design language, but it should not become a cluttered dashboard.
+
+The sidebar should feel like a live training system panel with:
+- active system status
+- current week/session structure
+- recent changes
+- adaptive refinement state
+- concise memory/constraint indicators
+
+Avoid adding too many charts, metrics, or dashboard widgets.
+
+Animation style:
+- subtle neural movement
+- slow ambient glow
+- soft card transitions
+- streaming/thinking shimmer
+- refined button hover/tap states
+- no flashy cyberpunk effects
+
+Important:
+Prioritize production-quality UI over concept art.
+This should look usable, clean, and real.
+Make the app feel simpler, more premium, and more alive.
