@@ -1,0 +1,199 @@
+We need to restore the persistent contextual control layer above the input area in TrainChat, but evolve it into a premium adaptive control system instead of the old basic tabs.
+
+GOAL
+Bring back the functional clarity of:
+- Check-In
+- Atlas
+
+while maintaining the upgraded cinematic neural-interface aesthetic.
+
+This should feel like:
+“Performance OS controls”
+NOT:
+“old mobile app tabs”
+
+-----------------------------------
+UI STRUCTURE
+-----------------------------------
+
+Add a horizontally scrollable/pill-based control row directly ABOVE the chat input container.
+
+Desktop:
+- centered
+- max-width aligned with chat composer
+
+Mobile:
+- full width
+- smooth horizontal overflow if needed
+- safe-area aware
+
+Controls:
+1. Check-In
+2. Atlas
+3. Program
+4. Readiness
+
+These are NOT page tabs.
+They are contextual operating modes / quick access controls.
+
+-----------------------------------
+VISUAL STYLE
+-----------------------------------
+
+Design language:
+- Neural interface
+- Premium AGI system
+- Cinematic
+- Minimal but intelligent
+
+Each pill should have:
+- soft glassmorphism
+- subtle blue neural glow
+- low-opacity border
+- slight inner gradient
+- depth/shadow separation from background
+
+Inactive state:
+- dark navy surface
+- muted text
+- subtle border
+
+Hover / pressed:
+- soft electric blue bloom
+- slight elevation
+- micro scale increase
+- animated border illumination
+
+Active state:
+- brighter neural glow
+- stronger text contrast
+- animated pulse traveling through border every few seconds
+- subtle ambient blue radial behind active pill
+
+NO harsh neon.
+NO cheap glowing gamer UI.
+Everything should feel refined and Apple-level smooth.
+
+-----------------------------------
+MOTION / INTERACTION
+-----------------------------------
+
+Animations should be extremely smooth and physically believable.
+
+Requirements:
+- Framer Motion spring transitions
+- no abrupt opacity jumps
+- smooth shared-layout active indicator
+- active pill should glide fluidly between selections
+- touch latency should feel instant
+
+Microinteractions:
+- subtle magnetic feel on press
+- glow trails fade naturally
+- active indicator slightly lags behind touch for premium feel
+
+Animation timing:
+- 220–320ms range
+- spring easing
+- no bouncy cartoon motion
+
+-----------------------------------
+FUNCTIONALITY
+-----------------------------------
+
+Check-In:
+- Opens readiness / recovery / fatigue interaction flow
+- Can trigger check-in modal or chat preset
+
+Atlas:
+- Returns to main adaptive coaching chat state
+- Default active mode
+
+Program:
+- Opens or focuses the live training system panel/sidebar
+- If mobile: open bottom sheet or modal
+
+Readiness:
+- Opens CNS/readiness/performance metrics view
+- Placeholder allowed for now if backend not complete
+
+-----------------------------------
+ARCHITECTURAL REQUIREMENTS
+-----------------------------------
+
+Build as reusable component:
+components/chat/AdaptiveControlBar.tsx
+
+Props:
+- activeMode
+- onModeChange
+- className optional
+
+Modes should be typed:
+type AdaptiveMode =
+  | "atlas"
+  | "checkin"
+  | "program"
+  | "readiness";
+
+Use centralized config array:
+- id
+- label
+- icon
+- description
+- accent color token
+
+Icons:
+Use existing icon system (lucide/react-icons already in project)
+
+-----------------------------------
+IMPORTANT UX REQUIREMENTS
+-----------------------------------
+
+This control bar restores ORIENTATION inside TrainChat.
+
+The current UI is visually impressive but users lose workflow anchoring.
+
+This system should make TrainChat feel like:
+- an intelligent performance operating system
+- adaptive coaching infrastructure
+- not just a chatbot
+
+The user should instantly understand:
+- where they are
+- what mode they’re in
+- what the system is focused on
+
+WITHOUT adding clutter.
+
+-----------------------------------
+MOBILE REQUIREMENTS
+-----------------------------------
+
+This must feel elite on iPhone:
+- proper safe area spacing
+- thumb reachable
+- no jitter during scroll
+- no accidental double taps
+- smooth on Safari iOS
+
+Avoid:
+- overflow clipping
+- layout shift
+- text wrapping inside pills
+
+-----------------------------------
+FINAL DESIGN TARGET
+-----------------------------------
+
+Think:
+Apple + Linear + neural performance system.
+
+Not:
+Discord tabs
+Not:
+gaming dashboard
+Not:
+generic SaaS pills
+
+The UI should feel like an adaptive intelligence layer sitting above the command input.
