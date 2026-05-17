@@ -4089,14 +4089,14 @@ export default function Chat() {
                     Focus-specific quick actions after every program build. Drives
                     the first edit. Suppressed when FirstValueOverlay is showing. */}
                 {postBuildChips && !stream.isActive && !convShowFirstValue && (
-                  <div className="flex items-start gap-3 mb-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
-                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center mt-0.5">
-                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                  <div className="flex items-start gap-2 md:gap-3 mb-2 md:mb-5 animate-in fade-in slide-in-from-bottom-1 duration-300">
+                    <div className="flex-shrink-0 w-6 h-6 md:w-7 md:h-7 rounded-full bg-primary/15 border border-primary/30 flex items-center justify-center mt-0.5">
+                      <Sparkles className="w-3 h-3 md:w-3.5 md:h-3.5 text-primary" />
                     </div>
-                    <div className="flex-1 max-w-[90%] px-4 py-3 rounded-2xl rounded-tl-sm bg-card border border-border/70">
-                      <p className="text-[12px] text-muted-foreground mb-2.5 leading-snug">What would you like to do next?</p>
-                      <div className="flex flex-wrap gap-2">
-                        {postBuildChips.map((chip) => (
+                    <div className="flex-1 max-w-[90%] px-3 py-2 md:px-4 md:py-3 rounded-2xl rounded-tl-sm bg-card border border-border/70">
+                      <p className="text-[11px] md:text-[12px] text-muted-foreground mb-1.5 md:mb-2.5 leading-snug">What would you like to do next?</p>
+                      <div className="flex flex-wrap gap-1.5 md:gap-2">
+                        {postBuildChips.map((chip, idx) => (
                           <button
                             key={chip.label}
                             onClick={() => {
@@ -4105,14 +4105,14 @@ export default function Chat() {
                                 buttonPayload: makeChatButtonPayload(chip.prompt, activeSystem?.id ?? null),
                               });
                             }}
-                            className="px-3 py-1.5 text-[11px] font-medium text-primary border border-primary/30 rounded-full hover:bg-primary/10 transition-all duration-150 whitespace-nowrap touch-manipulation"
+                            className={`px-3 py-1 md:py-1.5 text-[11px] font-medium text-primary border border-primary/30 rounded-full hover:bg-primary/10 transition-all duration-150 whitespace-nowrap touch-manipulation${idx === 2 ? " hidden sm:inline-flex" : ""}`}
                           >
                             {chip.label}
                           </button>
                         ))}
                         <button
                           onClick={() => setPostBuildChips(null)}
-                          className="px-3 py-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                          className="px-3 py-1 md:py-1.5 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
                         >
                           Dismiss
                         </button>
@@ -4544,8 +4544,8 @@ export default function Chat() {
               {/* ── end input row */}
               </div>
               {/* ── end composer-shell */}
-              {/* "Try saying" guidance strip */}
-              {hasActiveSystem && !stream.isActive && (
+              {/* "Try saying" guidance strip — hidden when post-build chips or first-value overlay is active */}
+              {hasActiveSystem && !stream.isActive && !postBuildChips && !convShowFirstValue && (
                 <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
                   <span className="text-[9px] text-muted-foreground/35 flex-shrink-0 flex items-center gap-1 uppercase tracking-widest font-semibold">
                     <Sparkles className="w-2.5 h-2.5" />
