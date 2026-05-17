@@ -4297,13 +4297,6 @@ export default function Chat() {
             style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
           >
             <div className="max-w-2xl mx-auto">
-              {/* Adaptive control bar — operating mode selector */}
-              <AdaptiveControlBar
-                activeMode={adaptiveMode}
-                onModeChange={handleAdaptiveModeChange}
-                onOpenAtlasModal={() => setShowAthleteProfile(true)}
-                onOpenCheckInModal={() => setShowReadiness(true)}
-              />
               {/* Voice status strip — zero height when idle, no layout shift */}
               <AnimatePresence>
                 {(voice.isListening || voice.error || pttNoSpeechError) && (
@@ -4353,7 +4346,8 @@ export default function Chat() {
                 )}
               </AnimatePresence>
 
-              <div className={`relative flex items-end gap-2 rounded-2xl transition-all duration-200 ${
+              {/* ── Unified composer module: tabs docked to input ── */}
+              <div className={`composer-shell transition-all duration-200 ${
                 isPushToTalk
                   ? "border border-blue-400/60 shadow-[0_0_14px_rgba(96,165,250,0.18),0_4px_32px_rgba(0,0,0,0.45)] bg-card/50 backdrop-blur-xl"
                   : voice.isListening
@@ -4364,6 +4358,22 @@ export default function Chat() {
                         ? "chat-input-glass ii-thinking-input"
                         : "chat-input-glass"
               }`}>
+
+                {/* Mode tabs — top header of the shell */}
+                <div className="composer-shell__tabs">
+                  <AdaptiveControlBar
+                    activeMode={adaptiveMode}
+                    onModeChange={handleAdaptiveModeChange}
+                    onOpenAtlasModal={() => setShowAthleteProfile(true)}
+                    onOpenCheckInModal={() => setShowReadiness(true)}
+                  />
+                </div>
+
+                {/* Separator */}
+                <div className="composer-shell__sep" />
+
+                {/* Input row */}
+                <div className="relative flex items-end gap-2">
                 {/* Mic button — left side, circular, glass treatment */}
                 <motion.button
                   type="button"
@@ -4461,6 +4471,9 @@ export default function Chat() {
                   )}
                 </button>
               </div>
+              {/* ── end input row */}
+              </div>
+              {/* ── end composer-shell */}
               {/* "Try saying" guidance strip */}
               {hasActiveSystem && !stream.isActive && (
                 <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
