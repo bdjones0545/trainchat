@@ -65,6 +65,15 @@ export interface QuickAction {
   prompt: string;
 }
 
+// ─── Atlas Messages ────────────────────────────────────────────────────────────
+
+export interface AtlasMessages {
+  /** Shown when no training system exists yet */
+  noSystem: string[];
+  /** Shown when a training system is active */
+  withSystem: string[];
+}
+
 // ─── Full Mode Config ─────────────────────────────────────────────────────────
 
 export interface FocusModeConfig {
@@ -81,6 +90,8 @@ export interface FocusModeConfig {
   quickActions: QuickAction[];
   /** Keywords that signal this mode (used for wrong-focus nudge) */
   keywords: string[];
+  /** Conversational Atlas messages for the empty state */
+  atlasMessages: AtlasMessages;
 }
 
 // ─── Configs ──────────────────────────────────────────────────────────────────
@@ -132,12 +143,26 @@ const STRENGTH_CONFIG: FocusModeConfig = {
     inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
   },
   keywords: ["squat", "deadlift", "bench", "barbell", "dumbbell", "hypertrophy", "lift", "1rm", "strength", "powerlifting", "bodybuilding", "muscle"],
+  atlasMessages: {
+    noSystem: [
+      "I'm Atlas. Tell me your goal — I'll architect the system around you.",
+      "No training system yet. Describe your sport, schedule, or starting point and I'll build it.",
+      "Ready to build your foundation. What are we training for?",
+      "Every system starts with a conversation. Tell me what you want to achieve.",
+    ],
+    withSystem: [
+      "Your strength system is live. Want to push harder, load differently, or adapt for today?",
+      "I've been looking at your program. Ready to refine, intensify, or adjust the week?",
+      "System active. Tell me what you want to change, add, or challenge.",
+      "Your foundation is built. Where do we take it from here?",
+    ],
+  },
   suggestionChips: [
     { label: "Build a 3-day strength program", prompt: "Build me a 3-day strength program", highlight: true },
     { label: "Build a 4-day muscle program", prompt: "Build a 4-day muscle building program", highlight: true },
-    { label: "Build a fat-loss training plan", prompt: "Build a fat-loss training plan for me", highlight: false },
-    { label: "Build around knee pain", prompt: "Build a training program around knee pain", highlight: false },
-    { label: "Build with dumbbells only", prompt: "Build a program using dumbbells only", highlight: false },
+    { label: "Adjust for fat loss", prompt: "Build a fat-loss training plan for me", highlight: false },
+    { label: "Work around knee pain", prompt: "Build a training program around knee pain", highlight: false },
+    { label: "Dumbbells only", prompt: "Build a program using dumbbells only", highlight: false },
     { label: "Build a home gym program", prompt: "Build a strength program for a home gym", highlight: false },
   ],
   quickActions: [
@@ -196,11 +221,25 @@ const SPEED_CONFIG: FocusModeConfig = {
     inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
   },
   keywords: ["sprint", "speed", "agility", "footwork", "acceleration", "deceleration", "change of direction", "reactive", "ladder", "cone", "fast feet"],
+  atlasMessages: {
+    noSystem: [
+      "I'm Atlas. Speed is built in layers. Tell me your sport or movement goal.",
+      "Acceleration starts with a system. What position, sport, or output are we optimizing?",
+      "Fast athletes aren't born — they're engineered. Tell me what you're chasing.",
+      "Let's build your speed foundation. What sport or performance target are we working toward?",
+    ],
+    withSystem: [
+      "Your speed system is running. Want to push the acceleration ceiling or refine footwork quality?",
+      "I've reviewed your program. Ready to dial in intensity, add reactive work, or adjust the load?",
+      "You're building real speed. Tell me what you want to sharpen next.",
+      "System active. Where do we push today — output, rhythm, or recovery?",
+    ],
+  },
   suggestionChips: [
     { label: "Build a football speed program", prompt: "Build a football speed program", highlight: true },
     { label: "Build a speed & acceleration program", prompt: "Build a speed and acceleration training program for me", highlight: true },
-    { label: "Improve change of direction", prompt: "Build a program to improve my change of direction and agility", highlight: false },
-    { label: "Build around knee pain", prompt: "Build a speed program around knee pain", highlight: false },
+    { label: "Sharpen change of direction", prompt: "Build a program to improve my change of direction and agility", highlight: false },
+    { label: "Work around knee pain", prompt: "Build a speed program around knee pain", highlight: false },
     { label: "In-season speed maintenance", prompt: "Design an in-season speed maintenance program for my sport", highlight: false },
   ],
   quickActions: [
@@ -259,9 +298,23 @@ const MOBILITY_CONFIG: FocusModeConfig = {
     inactiveClass: "text-muted-foreground hover:text-foreground hover:bg-muted/50",
   },
   keywords: ["mobility", "flexibility", "range of motion", "hip", "shoulder mobility", "joint", "stretch", "restore", "recovery", "fascia", "tissue", "stiffness", "yoga"],
+  atlasMessages: {
+    noSystem: [
+      "I'm Atlas. Your body has a story. Tell me what needs unlocking or restoring.",
+      "Mobility work begins with honest assessment. What's tight, restricted, or holding you back?",
+      "Recovery and range work is precise work. Tell me where you want to start.",
+      "Let's build your mobility system. What are we restoring — hips, shoulders, or something deeper?",
+    ],
+    withSystem: [
+      "Your mobility system is active. Want to deepen range, shift recovery focus, or address something specific?",
+      "I've been tracking your program. Ready to progress the work or add a new target area?",
+      "Restoration is a process. Tell me what's improved and where we go next.",
+      "System active. Want to layer in more range work, or adjust today's focus?",
+    ],
+  },
   suggestionChips: [
     { label: "Restore hip mobility", prompt: "Design a hip mobility and range of motion restoration program for me", highlight: true },
-    { label: "Improve shoulder range", prompt: "I want to improve my shoulder range of motion and control", highlight: false },
+    { label: "Unlock shoulder range", prompt: "I want to improve my shoulder range of motion and control", highlight: false },
     { label: "Joint prep for training", prompt: "Build a joint prep and movement quality routine for my training", highlight: false },
     { label: "Recovery & restoration flow", prompt: "Design a recovery and restoration mobility program for me", highlight: false },
   ],

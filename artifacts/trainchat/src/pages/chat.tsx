@@ -801,6 +801,14 @@ export default function Chat() {
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
 
+  // Atlas message — pick once per [focusMode, systemStatus] combination, stable across renders
+  const atlasMessage = useMemo(() => {
+    const cfg = getFocusModeConfig(focusMode);
+    const pool = displayProgramSource === "live" ? cfg.atlasMessages.withSystem : cfg.atlasMessages.noSystem;
+    return pool[Math.floor(Math.random() * pool.length)];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMode, displayProgramSource]);
+
   // The program is "in system" if explicitly saved this session OR if we're showing the
   // DB-backed live program (displayProgramSource !== "draft").
   //
@@ -3661,30 +3669,32 @@ export default function Chat() {
               >
                 <IdleIntelligenceField isTyping={inputText.trim().length > 0} isThinking={stream.isActive} />
 
-                {/* ── Zone 1: Upper — Neural Hub label + dominant heading ── */}
+                {/* ── Zone 1: Upper — Atlas Interface label + conversational message ── */}
                 <div className="flex-none px-6 md:px-10 max-w-2xl mx-auto w-full">
-                  {/* Neural Hub section label — centered, muted */}
+                  {/* Atlas Interface section label — centered, muted */}
                   <p
-                    className="text-center mb-5 select-none"
-                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.45)" }}
+                    className="text-center mb-6 select-none"
+                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.20em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
                   >
-                    Neural Hub
+                    Atlas Interface
                   </p>
 
-                  {/* AI heading — left-aligned, very large, dominant focal point */}
-                  <h2
-                    className="font-bold text-foreground tracking-tight leading-[1.06]"
-                    style={{ fontSize: "clamp(2.2rem, 5.5vw, 3.6rem)" }}
+                  {/* Atlas conversational message — left-aligned, large, editorial */}
+                  <motion.p
+                    key={atlasMessage}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.75, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+                    className="font-semibold text-foreground tracking-tight leading-[1.18] select-none"
+                    style={{ fontSize: "clamp(1.6rem, 4vw, 2.75rem)" }}
                     onPointerEnter={triggerCorePulse}
                   >
-                    {displayProgramSource === "live"
-                      ? (getFocusModeConfig(focusMode).emptyStateSubline ?? "Vibe Code Your Training")
-                      : "Vibe Code Your Training"}
-                  </h2>
+                    {atlasMessage}
+                  </motion.p>
 
                   {/* Status — dot + name, only when a system is active */}
                   {displayProgramSource !== "none" && (
-                    <div className="flex items-center gap-2 mt-3">
+                    <div className="flex items-center gap-2 mt-4">
                       <span
                         className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${displayProgramSource === "live" ? "bg-green-400" : "bg-primary/60"}`}
                         style={{ animation: "system-core-pulse 3s ease-in-out infinite" }}
