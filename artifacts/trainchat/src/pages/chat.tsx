@@ -23,6 +23,7 @@ import {
   getListMessagesQueryKey,
 } from "@workspace/api-client-react";
 import { customFetch } from "@workspace/api-client-react";
+import { addRipple } from "../components/laser-skill/rippleQueue";
 import TopNav from "@/components/layout/TopNav";
 import MobileSlideLayout, { type SlidePanel } from "@/components/layout/MobileSlideLayout";
 import MessageBubble from "@/components/chat/MessageBubble";
@@ -3642,6 +3643,21 @@ export default function Chat() {
               <div
                 className="relative flex flex-col animate-in fade-in duration-700 min-h-[78dvh]"
                 style={{ paddingTop: "clamp(28px, 5dvh, 52px)" }}
+                onPointerDown={(e) => {
+                  // Only trigger for background taps — ignore chips, input, buttons
+                  const tgt = e.target as HTMLElement;
+                  if (
+                    tgt.closest("button") ||
+                    tgt.closest("input") ||
+                    tgt.closest("textarea") ||
+                    tgt.closest("a")
+                  ) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  addRipple(
+                    (e.clientX - rect.left) / rect.width,
+                    (e.clientY - rect.top)  / rect.height,
+                  );
+                }}
               >
                 <IdleIntelligenceField isTyping={inputText.trim().length > 0} isThinking={stream.isActive} />
 
