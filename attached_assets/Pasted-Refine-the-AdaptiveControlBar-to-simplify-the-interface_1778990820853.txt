@@ -1,0 +1,120 @@
+Refine the AdaptiveControlBar to simplify the interface down to ONLY two operating modes:
+
+1. Atlas
+2. Check-In
+
+Remove:
+- Program
+- Readiness
+
+from the top-level control bar entirely.
+
+-----------------------------------
+PRODUCT REASONING
+-----------------------------------
+
+The current 4-pill version is becoming too dashboard-like and creates unnecessary cognitive load on mobile.
+
+TrainChat works best when the experience feels like:
+- an intelligent adaptive coach
+- a cinematic coaching OS
+- a focused neural interface
+
+NOT:
+- a SaaS toolbar
+- a utility dashboard
+- a multi-module admin panel
+
+The ideal mental model is:
+
+Atlas = talk to the system / coaching intelligence / adaptive programming
+Check-In = tell the system how you're feeling today
+
+That’s it.
+
+Program access already exists through the Live Program Panel.
+Readiness already exists through the existing modals/check-in flow.
+
+Those do NOT need to be persistent top-level controls.
+
+-----------------------------------
+UI CHANGES
+-----------------------------------
+
+Update AdaptiveControlBar.tsx:
+
+- Reduce MODES array to:
+  - atlas
+  - checkin
+
+Keep:
+- existing premium glassmorphism styling
+- neural glow effects
+- spring motion
+- active indicator animation
+- hover bloom
+- magnetic tap feel
+
+-----------------------------------
+LAYOUT REQUIREMENTS
+-----------------------------------
+
+The 2-pill layout should feel:
+- balanced
+- intentional
+- premium
+- calm
+
+NOT stretched awkwardly.
+
+Mobile:
+- pills should sit comfortably above composer
+- maintain strong thumb reach
+- preserve breathing room
+- no cramped spacing
+
+Desktop:
+- compact centered layout
+- visually integrated into composer region
+
+-----------------------------------
+FUNCTIONAL BEHAVIOR
+-----------------------------------
+
+Atlas:
+- remains default active mode
+- restores main adaptive coaching flow
+
+Check-In:
+- prefill composer with:
+  "I want to check in — here's how I'm feeling today:"
+- focus the input immediately
+- preserve existing check-in modal logic
+
+-----------------------------------
+VISUAL DIRECTION
+-----------------------------------
+
+The simplified 2-mode interface should feel more cinematic and emotionally intelligent.
+
+Think:
+- focused AI system
+- adaptive coaching companion
+- neural command layer
+
+NOT:
+- feature navigation
+
+The reduction from 4 → 2 controls should increase:
+- clarity
+- elegance
+- emotional identity
+- premium feel
+- mobile usability
+
+Final target:
+A minimal adaptive coaching control layer:
+
+[ Atlas ]   [ Check-In ]
+
+with smooth neural motion and premium depth.

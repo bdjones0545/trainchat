@@ -3,12 +3,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Bot,
   ClipboardCheck,
-  LayoutDashboard,
-  Activity,
   type LucideProps,
 } from "lucide-react";
 
-export type AdaptiveMode = "atlas" | "checkin" | "program" | "readiness";
+export type AdaptiveMode = "atlas" | "checkin";
 
 interface ModeConfig {
   id: AdaptiveMode;
@@ -29,18 +27,6 @@ const MODES: ModeConfig[] = [
     label: "Check-In",
     icon: ClipboardCheck,
     description: "Readiness & recovery",
-  },
-  {
-    id: "program",
-    label: "Program",
-    icon: LayoutDashboard,
-    description: "Live training system",
-  },
-  {
-    id: "readiness",
-    label: "Readiness",
-    icon: Activity,
-    description: "CNS & performance metrics",
   },
 ];
 

@@ -1556,12 +1556,7 @@ export default function Chat() {
 
   function handleAdaptiveModeChange(mode: AdaptiveMode) {
     setAdaptiveMode(mode);
-    if (mode === "program") {
-      setRightPanelOpen(true);
-      setMobilePanel("right");
-    } else if (mode === "readiness") {
-      setShowReadiness(true);
-    } else if (mode === "checkin") {
+    if (mode === "checkin") {
       const prompt = "I want to check in — here's how I'm feeling today:";
       setInputText(prompt);
       setTimeout(() => {
