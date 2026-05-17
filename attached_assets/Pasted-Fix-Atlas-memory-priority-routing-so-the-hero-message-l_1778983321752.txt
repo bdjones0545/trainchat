@@ -1,0 +1,87 @@
+Fix Atlas memory-priority routing so the hero message leads with athlete identity, not operational constraints.
+
+CURRENT ISSUE:
+Atlas is showing:
+
+“I have your schedule constraint in mind. What do you want to train?”
+
+This proves memory retrieval is working, but the priority is wrong.
+
+A schedule constraint should influence programming silently. It should not usually become the primary Atlas hero message.
+
+GOAL:
+Atlas should lead with:
+- sport identity
+- active training goal
+- current program/block
+- current phase
+- performance objective
+
+Then use schedule/equipment/preferences as supporting context for chips or programming decisions.
+
+====================================================
+NEW MEMORY PRIORITY ORDER
+====================================================
+
+Update AtlasGlobalContextResolver memory routing priority:
+
+1. sport_context
+2. goal / active_goal
+3. active live system / program name
+4. current phase/block
+5. recent meaningful refinement
+6. injury / pain constraint
+7. fatigue / readiness
+8. equipment limitation
+9. schedule limitation
+10. generic preference
+
+Schedule should only become the hero if:
+- there is no sport, goal, program, phase, injury, or fatigue context
+OR
+- schedule importance is critical
+OR
+- the user explicitly selected a schedule-related chip/action
+
+====================================================
+COPY RULES
+====================================================
+
+Avoid hero copy like:
+“I have your schedule constraint in mind.”
+
+Better:
+“Your soccer work is loaded. What are we refining today?”
+
+“We’re building around your soccer block. What needs adjusting?”
+
+“I have your current structure loaded. What are we pushing today?”
+
+“I’m still accounting for your schedule, but what are we building today?”
+
+If schedule must appear, make it secondary:
+“I’ll keep your schedule in mind. What are we building today?”
+
+====================================================
+CHIP RULES
+====================================================
+
+Schedule constraints should surface as chips, not the main hero.
+
+Examples:
+- Respect my schedule
+- Keep sessions efficient
+- Shorten today’s work
+- Build around limited time
+
+Do not let schedule dominate the Atlas identity unless it is the only meaningful signal.
+
+====================================================
+EXPERIENCE GOAL
+====================================================
+
+Atlas should feel like:
+“I remember who you are as an athlete.”
+
+Not:
+“I remember your limitations.”

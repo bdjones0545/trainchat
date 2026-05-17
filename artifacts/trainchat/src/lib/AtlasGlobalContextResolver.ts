@@ -68,24 +68,36 @@ export interface UserGlobalContext {
 }
 
 // ── Memory: priority category weights ──────────────────────────────────────────
+//
+// Atlas leads with athlete identity (sport, goal, refinement history) not
+// operational constraints. Schedule/equipment/preference influence programming
+// silently and surface as chips rather than the hero message.
 
 const CATEGORY_PRIORITY: Record<string, number> = {
-  injury: 10,
-  constraint: 8,
-  equipment: 7,
-  schedule: 6,
-  goal: 5,
-  sport_context: 4,
-  preference: 3,
+  sport_context: 10,
+  goal: 9,
+  successful_refinement: 6,
+  injury: 5,
+  recovery_pattern: 4,
+  recurring_request: 3,
   disliked_exercise: 2,
-  recovery_pattern: 1,
-  successful_refinement: 1,
-  recurring_request: 1,
+  equipment: 1,
+  constraint: 1,
+  schedule: 1,
+  preference: 1,
 };
+
+// Support categories only become the hero message if their importance is
+// explicitly high (≥ 4) — meaning the athlete flagged it as critical.
+// Otherwise they are used as chip suggestions and silent programming context.
+const SUPPORT_CATEGORIES = new Set(["schedule", "equipment", "constraint", "preference"]);
+const SUPPORT_HERO_THRESHOLD = 4;
 
 /**
  * Selects the single most impactful qualifying memory.
- * Priority: category weight → importance × confidence.
+ * Identity categories (sport, goal, refinement) take hero by default.
+ * Support categories (schedule, equipment, constraint, preference) only surface
+ * as hero if their importance meets the elevated threshold.
  */
 function selectTopMemory(memories: AtlasCoachingMemory[]): AtlasCoachingMemory | null {
   const qualifying = memories.filter((m) => m.importance >= 3 && m.confidence >= 2);
@@ -95,12 +107,20 @@ function selectTopMemory(memories: AtlasCoachingMemory[]): AtlasCoachingMemory |
 
   if (pool.length === 0) return null;
 
-  return [...pool].sort((a, b) => {
+  const sorted = [...pool].sort((a, b) => {
     const ap = CATEGORY_PRIORITY[a.category] ?? 0;
     const bp = CATEGORY_PRIORITY[b.category] ?? 0;
     if (bp !== ap) return bp - ap;
     return b.importance * b.confidence - a.importance * a.confidence;
-  })[0] ?? null;
+  });
+
+  // Prefer an identity-category memory; only fall back to a support category
+  // if it carries high importance (athlete explicitly flagged it) or no
+  // identity memories exist at all.
+  const identityFirst = sorted.find(
+    (m) => !SUPPORT_CATEGORIES.has(m.category) || m.importance >= SUPPORT_HERO_THRESHOLD,
+  );
+  return identityFirst ?? sorted[0] ?? null;
 }
 
 // ── Memory: key signal extraction ──────────────────────────────────────────────
@@ -147,28 +167,31 @@ function buildMemoryHeroMessage(memory: AtlasCoachingMemory): string {
   const signal = extractSignalLabel(memory.normalizedKey, memory.category);
 
   switch (memory.category) {
-    case "injury":
-      return `I'm still accounting for your ${signal}. How is movement quality feeling?`;
-    case "constraint":
-      return `I have your ${signal} loaded. What are we building today?`;
-    case "equipment":
-      return `I have your ${signal} loaded. What are we building today?`;
-    case "schedule":
-      return `I have your ${signal} in mind. What do you want to train?`;
-    case "preference":
-      return `You've been leaning toward ${signal}. What do we push today?`;
-    case "sport_context":
-      return `I've been building around your ${signal}. What needs adjusting?`;
+    case "sport_context": {
+      const sportLabel = signal.replace(" context", "");
+      return `Your ${sportLabel} work is loaded. What are we refining today?`;
+    }
     case "goal":
-      return `You've been working toward your ${signal}. Keep progressing or shift focus?`;
-    case "disliked_exercise":
-      return "I know what movements you want to avoid. What are we building today?";
-    case "recovery_pattern":
-      return "I'm tracking your recovery patterns. What are we targeting?";
+      return `You've been building toward ${signal}. What do we push today?`;
     case "successful_refinement":
       return "I remember what's worked for you. What do we push next?";
+    case "injury":
+      return `I'm still accounting for your ${signal}. How is movement quality feeling?`;
+    case "recovery_pattern":
+      return "I'm tracking your recovery patterns. What are we targeting?";
     case "recurring_request":
       return "I know what you keep coming back to. What are we building today?";
+    case "disliked_exercise":
+      return "I know what movements you want to avoid. What are we building today?";
+    case "equipment":
+      return "I have your setup loaded. What are we building today?";
+    case "constraint":
+      return "I have your current constraints loaded. What are we building today?";
+    case "schedule":
+      // Only reaches here if importance >= SUPPORT_HERO_THRESHOLD (athlete flagged as critical)
+      return "I'll keep your schedule in mind. What are we building today?";
+    case "preference":
+      return `You've been leaning toward ${signal}. What do we push today?`;
     default:
       return "I have your training history loaded. What are we building today?";
   }
@@ -194,7 +217,7 @@ function memoryToChip(memory: AtlasCoachingMemory): AtlasChip | null {
       };
     case "schedule":
       return {
-        label: "Respect my schedule",
+        label: "Keep sessions efficient",
         prompt: `Build my program within my schedule constraints: ${memory.summary}`,
         highlight: false,
       };
