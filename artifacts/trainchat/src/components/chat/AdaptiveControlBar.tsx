@@ -33,15 +33,28 @@ const MODES: ModeConfig[] = [
 interface AdaptiveControlBarProps {
   activeMode: AdaptiveMode;
   onModeChange: (mode: AdaptiveMode) => void;
+  onOpenAtlasModal: () => void;
+  onOpenCheckInModal: () => void;
   className?: string;
 }
 
 export default function AdaptiveControlBar({
   activeMode,
   onModeChange,
+  onOpenAtlasModal,
+  onOpenCheckInModal,
   className = "",
 }: AdaptiveControlBarProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  function handlePillClick(modeId: AdaptiveMode) {
+    onModeChange(modeId);
+    if (modeId === "atlas") {
+      onOpenAtlasModal();
+    } else if (modeId === "checkin") {
+      onOpenCheckInModal();
+    }
+  }
 
   return (
     <div
@@ -63,7 +76,7 @@ export default function AdaptiveControlBar({
                 role="tab"
                 aria-selected={isActive}
                 aria-label={mode.description}
-                onClick={() => onModeChange(mode.id)}
+                onClick={() => handlePillClick(mode.id)}
                 className={`adaptive-pill ${isActive ? "adaptive-pill--active" : "adaptive-pill--idle"}`}
                 whileTap={{ scale: 0.96 }}
                 transition={{ type: "spring", stiffness: 500, damping: 30 }}

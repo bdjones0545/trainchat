@@ -1556,19 +1556,6 @@ export default function Chat() {
 
   function handleAdaptiveModeChange(mode: AdaptiveMode) {
     setAdaptiveMode(mode);
-    if (mode === "checkin") {
-      const prompt = "I want to check in — here's how I'm feeling today:";
-      setInputText(prompt);
-      setTimeout(() => {
-        inputRef.current?.focus();
-        const el = inputRef.current;
-        if (el) {
-          el.style.height = "auto";
-          el.style.height = `${el.scrollHeight}px`;
-          el.setSelectionRange(el.value.length, el.value.length);
-        }
-      }, 80);
-    }
   }
 
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
@@ -4314,6 +4301,8 @@ export default function Chat() {
               <AdaptiveControlBar
                 activeMode={adaptiveMode}
                 onModeChange={handleAdaptiveModeChange}
+                onOpenAtlasModal={() => setShowAthleteProfile(true)}
+                onOpenCheckInModal={() => setShowReadiness(true)}
               />
               {/* Voice status strip — zero height when idle, no layout shift */}
               <AnimatePresence>

@@ -1,0 +1,47 @@
+Fix AdaptiveControlBar behavior. The two pills should not only change visual active state — they must open their correct existing modals/flows.
+
+Current issue:
+- Atlas pill only becomes active visually.
+- Check-In pill only prefills the composer.
+- Neither reliably opens the existing appropriate modal/flow.
+
+Required behavior:
+
+1. Atlas pill
+- On tap/click, open the existing Atlas identity/onboarding/profile modal.
+- This is where users tell the app who they are, goals, sport, training background, equipment, limitations, etc.
+- Do not create a new modal.
+- Reuse the existing Atlas modal/onboarding/profile component and its existing state/store handlers.
+- Atlas should remain the default selected mode after closing.
+
+2. Check-In pill
+- On tap/click, open the existing Check-In modal/flow.
+- This is the daily readiness/state/fatigue/soreness/recovery flow.
+- Do not only prefill the input.
+- Do not create a duplicate modal.
+- Reuse the existing check-in modal component and existing open/close state.
+
+3. Composer behavior
+- Remove the automatic check-in prefill unless the existing check-in flow explicitly requires it.
+- The primary action for Check-In should be opening the modal, not filling the input.
+- Composer should remain available for normal Atlas commands.
+
+4. Implementation requirements
+- Trace the existing modal state handlers already used elsewhere in chat.tsx or related components.
+- Wire AdaptiveControlBar props to those existing handlers:
+  - onOpenAtlasModal
+  - onOpenCheckInModal
+- Avoid creating duplicate local modal state inside AdaptiveControlBar.
+- AdaptiveControlBar should remain a presentational/control component.
+- Parent chat component should own modal state and pass handlers down.
+
+5. Expected final behavior
+- Tap Atlas → existing Atlas user/profile/onboarding modal opens.
+- Tap Check-In → existing Check-In/readiness modal opens.
+- Active pill visual state updates correctly.
+- No duplicate modals.
+- No dead visual-only buttons.
+- No composer prefill unless already part of existing modal flow.
+
+Keep the two-pill premium neural styling exactly as-is.
+Only fix behavior and state wiring.
