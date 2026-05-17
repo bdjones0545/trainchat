@@ -66,6 +66,7 @@ import { buildShareMoment, type ShareMoment } from "@/types/share-moments";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
 import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
+import { buildAtlasContext, deriveAtlasSeed } from "@/lib/AtlasContextBuilder";
 import type { FocusMode } from "@/lib/focusMode";
 import { analytics } from "@/lib/analytics";
 import { FirstValueOverlay, EditReinforcementToast, SavePromptCard, UpgradeHint, ReturnSessionHook } from "@/components/conversion/ConversionEngine";
@@ -801,13 +802,22 @@ export default function Chat() {
     sessionDraftMsgId: sessionDraftMsgIdRef.current,
   });
 
-  // Atlas message — pick once per [focusMode, systemStatus] combination, stable across renders
-  const atlasMessage = useMemo(() => {
-    const cfg = getFocusModeConfig(focusMode);
-    const pool = displayProgramSource === "live" ? cfg.atlasMessages.withSystem : cfg.atlasMessages.noSystem;
-    return pool[Math.floor(Math.random() * pool.length)];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusMode, displayProgramSource]);
+  // Atlas context — derived once per [focusMode, systemStatus, systemId] combination.
+  // Provides a context-aware hero message + chips for the empty state.
+  const atlasContext = useMemo(() => {
+    const seed = deriveAtlasSeed(activeSystem?.id, focusMode);
+    return buildAtlasContext({
+      focusMode,
+      displayProgramSource,
+      program: displayProgram,
+      systemName: activeSystem?.name ?? null,
+      hasConversationHistory: conversations.length > 0,
+      seed,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusMode, displayProgramSource, activeSystem?.id, displayProgram?.programName,
+      displayProgram?.intelligenceStatus?.periodizationPhase,
+      displayProgram?.whatChanged]);
 
   // The program is "in system" if explicitly saved this session OR if we're showing the
   // DB-backed live program (displayProgramSource !== "draft").
@@ -3692,7 +3702,7 @@ export default function Chat() {
 
                   {/* Atlas conversational message — left-aligned, large, editorial */}
                   <motion.p
-                    key={atlasMessage}
+                    key={atlasContext.heroMessage}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.75, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
@@ -3700,7 +3710,7 @@ export default function Chat() {
                     style={{ fontSize: "clamp(1.6rem, 4vw, 2.75rem)" }}
                     onPointerEnter={triggerCorePulse}
                   >
-                    {atlasMessage}
+                    {atlasContext.heroMessage}
                   </motion.p>
 
                   {/* Status — dot + name, only when a system is active */}
@@ -3753,9 +3763,9 @@ export default function Chat() {
                     Adaptive Command
                   </p>
 
-                  {/* Chips — vertical stack, full-width pill buttons like reference */}
+                  {/* Chips — context-aware quick actions from AtlasContextBuilder */}
                   <div className="flex flex-col gap-3 w-full max-w-sm">
-                    {getFocusModeConfig(focusMode).suggestionChips.slice(0, 3).map((chip, i) => (
+                    {atlasContext.chips.slice(0, 3).map((chip, i) => (
                       <motion.button
                         key={chip.label}
                         initial={{ opacity: 0, y: 12 }}

@@ -1,0 +1,227 @@
+Build persistent contextual awareness into the Atlas empty-state experience.
+
+GOAL:
+When a returning user opens a NEW chat, Atlas should feel aware of:
+- previous conversations
+- current training system
+- active phase/block
+- recent refinements
+- readiness/fatigue
+- injuries/constraints
+- performance focus
+- recent adaptations
+
+Atlas should NEVER feel reset.
+
+The experience should feel:
+“This system remembers my training.”
+
+====================================================
+CORE UX PRINCIPLE
+====================================================
+
+DO NOT show generic onboarding text for returning users.
+
+BAD:
+“How can I help you today?”
+“Describe your goals.”
+
+GOOD:
+“We’ve been emphasizing lower-body force production. What are we adjusting today?”
+
+“I’m still accounting for your knee restriction. How has movement quality felt?”
+
+“Your power phase is active. Ready to progress intensity or shift emphasis?”
+
+====================================================
+NEW MODULE
+====================================================
+
+Create:
+AtlasContextBuilder.ts
+
+Purpose:
+Generate contextual Atlas awareness for the empty-state screen.
+
+====================================================
+INPUTS
+====================================================
+
+Use existing cached system + memory data:
+- active training system
+- current phase/block
+- recent conversations
+- recent mutations/refinements
+- readiness/fatigue
+- injuries/constraints
+- sport
+- focus mode
+- compliance/adherence signals
+- equipment profile
+
+====================================================
+OUTPUT
+====================================================
+
+Return:
+{
+  heroLabel,
+  heroMessage,
+  contextualChips[],
+  terrainMode,
+  emotionalTone
+}
+
+====================================================
+ATLAS HERO STATES
+====================================================
+
+1. NEW USER
+No memory/system exists.
+
+Examples:
+“I’m Atlas. Tell me what we’re building for.”
+“Your system starts here.”
+
+2. RETURNING USER
+Atlas subtly references existing work.
+
+Examples:
+“We’ve been building lower-body output. What are we pushing today?”
+
+“I’m tracking your current workload. Are we progressing or recovering?”
+
+“We’ve accumulated significant fatigue. Continue pushing or pivot?”
+
+3. HIGH CONTEXT USER
+Long-term system awareness.
+
+Examples:
+“I’m still accounting for your shoulder limitation. How has movement quality felt?”
+
+“Your acceleration work improved last week. Ready to progress intensity?”
+
+“We’ve shifted well into power emphasis. What needs refining?”
+
+IMPORTANT:
+Atlas should sound:
+- calm
+- observant
+- elite
+- concise
+- collaborative
+- performance-focused
+
+DO NOT:
+- sound robotic
+- sound creepy
+- mention timestamps
+- dump memory details
+- sound like ChatGPT
+
+====================================================
+CONTEXTUAL CHIP SYSTEM
+====================================================
+
+Replace generic chips for returning users.
+
+OLD:
+- Build a 3-day strength program
+- Build a muscle program
+
+NEW:
+- Increase posterior-chain output
+- Reduce lower-body fatigue
+- Build around knee irritation
+- Improve sprint mechanics
+- Shift toward power emphasis
+- Optimize recovery
+- Increase acceleration focus
+- Improve movement efficiency
+- Adjust around travel fatigue
+- Reduce CNS load
+
+Generate chips from:
+- current phase
+- recent chats
+- readiness
+- injuries
+- focus mode
+- recent edits
+
+====================================================
+FOCUS MODE INTELLIGENCE
+====================================================
+
+Strength mode:
+language around:
+- force
+- output
+- progression
+- loading
+- intensity
+
+Speed/Footwork:
+language around:
+- acceleration
+- movement quality
+- elastic output
+- reaction
+- mechanics
+
+Mobility:
+language around:
+- restrictions
+- stiffness
+- recovery
+- control
+- movement quality
+
+====================================================
+TERRAIN REACTIVITY
+====================================================
+
+Terrain subtly adapts based on context.
+
+Strength:
+- slower heavier oscillations
+- deeper blue glow
+
+Speed:
+- faster tighter wave movement
+- brighter cyan sweeps
+
+Mobility:
+- smoother flowing waves
+- softer gradients
+
+====================================================
+IMPLEMENTATION REQUIREMENTS
+====================================================
+
+DO NOT:
+- use heavy React state
+- cause rerender loops
+- block empty-state rendering
+
+DO:
+- memoize context summaries
+- hydrate instantly from cached system state
+- keep transitions smooth/subtle
+
+Leverage existing:
+- training system memory
+- conversation summaries
+- mutation logs
+- readiness architecture
+- phase/block structure
+
+====================================================
+IMPORTANT EXPERIENCE GOAL
+====================================================
+
+The user should feel:
+“Atlas remembers my training history.”
+
+NOT:
+“I’m starting over with another chatbot.”
