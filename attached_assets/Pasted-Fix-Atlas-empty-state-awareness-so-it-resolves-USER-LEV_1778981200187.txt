@@ -1,0 +1,89 @@
+Fix Atlas empty-state awareness so it resolves USER-LEVEL training context, not only current conversation context.
+
+CURRENT BUG:
+I am a returning user with multiple prior conversations, but when I start a new chat Atlas still shows new-user copy like:
+“I’m Atlas. Tell me what you’re training for...”
+
+That means AtlasContextBuilder is only detecting:
+- current conversation state
+- current displayProgramSource
+- current loaded system
+
+But Atlas needs to recognize the user globally.
+
+GOAL:
+When a user creates a new chat, Atlas should still know their training history.
+
+Create a user-scoped Atlas Global Context Resolver.
+
+NEW MODULE:
+AtlasGlobalContextResolver.ts
+
+Purpose:
+Before rendering empty-state copy, resolve the user’s broader training identity from available cached/user data.
+
+It should look across:
+- all training systems for the user
+- most recent active/live system
+- last modified system
+- recent conversation summaries
+- recent mutations/refinements
+- recurring constraints/injuries
+- current phase/block
+- dominant training focus
+- recent readiness/fatigue indicators
+- equipment/preferences if available
+
+IMPORTANT:
+Do not rely only on the current conversation ID.
+
+RESOLUTION PRIORITY:
+1. Current active live training system
+2. Most recently modified saved training system
+3. Most recent system-linked conversation
+4. Recent conversation summaries
+5. Stored constraints/preferences
+6. New-user fallback only if no meaningful user-level context exists
+
+EXPECTED BEHAVIOR:
+If the user has previous systems/conversations, Atlas should NOT show generic onboarding.
+
+Instead show context-aware copy like:
+
+“I have your strength progression loaded. What are we adjusting today?”
+
+“We’ve been building lower-body output. Continue progressing or shift focus?”
+
+“I’m still accounting for your knee limitation. How is movement quality feeling?”
+
+“Your current phase is active. Tell me what needs refining.”
+
+CONTEXTUAL CHIPS:
+For returning users, replace generic build chips with adjustment chips:
+
+- Increase intensity
+- Add a deload week
+- Shift toward power
+- Adjust around fatigue
+- Build around knee irritation
+- Refine lower-body output
+- Improve movement quality
+- Modify this week
+
+Do not show “Build a 3-day program” as the primary action if the user already has a live/saved system.
+
+IMPLEMENTATION REQUIREMENTS:
+- Keep AtlasContextBuilder pure and memoized
+- Add user-level context as an input or wrapper layer
+- Do not create rerender loops
+- Do not block UI unnecessarily
+- Use cached query data where possible
+- If async fetch is required, show a graceful Atlas loading/presence state first
+- Avoid creepy memory language or exact timestamps
+
+UX RULE:
+Atlas should feel like:
+“This system remembers my training.”
+
+Not:
+“I’m starting over.”

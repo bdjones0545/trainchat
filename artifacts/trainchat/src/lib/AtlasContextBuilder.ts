@@ -11,6 +11,7 @@
 import type { FocusMode } from "./focusMode";
 import type { ProgramStructure } from "../components/chat/ChatOutput";
 import { getFocusModeConfig } from "./focusModeConfig";
+import type { UserGlobalContext } from "./AtlasGlobalContextResolver";
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -30,6 +31,11 @@ export interface AtlasContextInput {
   systemName: string | null;
   /** Whether the user has any prior conversation history */
   hasConversationHistory: boolean;
+  /**
+   * User-level context resolved from programLibrary — provides returning-user
+   * awareness when displayProgramSource === "none" (new conversation, no linked system yet).
+   */
+  userGlobalContext?: UserGlobalContext | null;
   /**
    * Stable seed for message pool selection — use a value that doesn't change
    * on every render (e.g. derived from system ID or fixed to 0 for sessions).
@@ -231,12 +237,21 @@ function buildLiveHeroMessage(
 // ── Main builder ───────────────────────────────────────────────────────────────
 
 export function buildAtlasContext(input: AtlasContextInput): AtlasContextOutput {
-  const { focusMode, displayProgramSource, program, systemName, seed = 0 } = input;
+  const { focusMode, displayProgramSource, program, systemName, userGlobalContext, seed = 0 } = input;
 
-  // ── No system ──
+  // ── No conversation-linked system ──
+  // This fires for new chats even when the user has a full training history, because
+  // the by-conversation endpoint never auto-links to a global system.
+  // Use userGlobalContext to show returning-user awareness instead of generic onboarding.
   if (displayProgramSource === "none") {
+    if (userGlobalContext?.isReturningUser) {
+      return {
+        heroMessage: userGlobalContext.heroMessage,
+        chips: userGlobalContext.chips,
+      };
+    }
+    // Genuinely new user
     const messages = NO_SYSTEM_MESSAGES[focusMode];
-    // Defer to focusModeConfig chips via the pre-built NO_SYSTEM_CHIPS pool
     return {
       heroMessage: pick(messages, seed),
       chips: NO_SYSTEM_CHIPS[focusMode],

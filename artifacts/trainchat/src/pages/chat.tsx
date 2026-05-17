@@ -67,6 +67,8 @@ import { useFocusMode } from "@/hooks/useFocusMode";
 import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
 import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 import { buildAtlasContext, deriveAtlasSeed } from "@/lib/AtlasContextBuilder";
+import { resolveUserGlobalContext } from "@/lib/AtlasGlobalContextResolver";
+import type { ProgramLibraryItem } from "@/lib/AtlasGlobalContextResolver";
 import type { FocusMode } from "@/lib/focusMode";
 import { analytics } from "@/lib/analytics";
 import { FirstValueOverlay, EditReinforcementToast, SavePromptCard, UpgradeHint, ReturnSessionHook } from "@/components/conversion/ConversionEngine";
@@ -696,6 +698,15 @@ export default function Chat() {
     staleTime: 30000,
   });
 
+  // User-global training identity — resolved from programLibrary (user-wide, not conversation-scoped).
+  // Allows Atlas to recognize returning users even when a new chat has no linked system yet.
+  const userGlobalContext = useMemo(
+    () => resolveUserGlobalContext(programLibrary as ProgramLibraryItem[], conversations.length, focusMode),
+    // Re-resolve when the library changes, conversation list grows, or focus mode switches.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [programLibrary.length, conversations.length, focusMode],
+  );
+
   useEffect(() => {
     if (!me) return;
     if (import.meta.env.DEV) {
@@ -812,12 +823,13 @@ export default function Chat() {
       program: displayProgram,
       systemName: activeSystem?.name ?? null,
       hasConversationHistory: conversations.length > 0,
+      userGlobalContext,
       seed,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusMode, displayProgramSource, activeSystem?.id, displayProgram?.programName,
-      displayProgram?.intelligenceStatus?.periodizationPhase,
-      displayProgram?.whatChanged]);
+      displayProgram?.intelligenceStatus?.periodizationPhase, displayProgram?.whatChanged,
+      userGlobalContext]);
 
   // The program is "in system" if explicitly saved this session OR if we're showing the
   // DB-backed live program (displayProgramSource !== "draft").
