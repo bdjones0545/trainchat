@@ -3742,7 +3742,7 @@ export default function Chat() {
                       />
                     </span>
                     <p
-                      style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.20em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
+                      style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.20em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.62)", textShadow: "0 0 14px rgba(56,189,248,0.15)" }}
                     >
                       Atlas Interface
                     </p>

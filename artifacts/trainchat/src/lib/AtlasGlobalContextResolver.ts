@@ -290,45 +290,69 @@ function memoryToChip(memory: AtlasCoachingMemory): AtlasChip | null {
 
 const RETURNING_CHIPS: Record<FocusMode, AtlasChip[]> = {
   strength: [
-    { label: "Increase intensity", prompt: "Increase the intensity and loading in my program this week", highlight: true },
-    { label: "Add a deload week", prompt: "Add a deload week to my current program", highlight: false },
-    { label: "Adjust around fatigue", prompt: "Adjust my program to account for accumulated fatigue", highlight: false },
-    { label: "Shift toward power", prompt: "Shift my program toward power and neural output", highlight: false },
+    { label: "Increase intensity", prompt: "Increase the intensity and loading demand in my program this week", highlight: true },
+    { label: "Add strength volume", prompt: "Add more volume to my strength program this week", highlight: false },
+    { label: "Manage fatigue", prompt: "Adjust my program to reduce accumulated fatigue", highlight: false },
+    { label: "Push lower-body output", prompt: "Increase lower-body strength output and intensity in my program", highlight: false },
+    { label: "Rebuild weekly split", prompt: "Rebuild the weekly split structure of my strength program", highlight: false },
   ],
   speed: [
-    { label: "Increase acceleration work", prompt: "Increase the acceleration and drive phase work in my program", highlight: true },
-    { label: "Add reactive drills", prompt: "Add more reactive and change-of-direction work to my program", highlight: false },
-    { label: "Adjust around fatigue", prompt: "Adjust my speed program to account for accumulated fatigue", highlight: false },
-    { label: "Improve movement quality", prompt: "Add work to improve my movement quality and mechanics", highlight: false },
+    { label: "Improve first-step acceleration", prompt: "Add more first-step acceleration and drive phase work to my program", highlight: true },
+    { label: "Add reactive drills", prompt: "Add more reactive and change-of-direction drills to my program", highlight: false },
+    { label: "Increase elastic work", prompt: "Increase plyometric and elastic strength work in my program", highlight: false },
+    { label: "Sharpen change of direction", prompt: "Improve change of direction and agility in my program", highlight: false },
+    { label: "Build game-speed conditioning", prompt: "Add game-speed conditioning and repeat sprint capacity to my program", highlight: false },
   ],
   mobility: [
-    { label: "Progress range work", prompt: "Progress the range of motion work in my mobility program", highlight: true },
-    { label: "Shift to restoration", prompt: "Shift my program toward restoration and recovery focus", highlight: false },
-    { label: "Adjust around fatigue", prompt: "Adjust my program around current fatigue and recovery state", highlight: false },
-    { label: "Add joint preparation", prompt: "Add more joint preparation and tissue tolerance work", highlight: false },
+    { label: "Progress range work", prompt: "Progress the range of motion and end-range control work in my mobility program", highlight: true },
+    { label: "Reduce stiffness", prompt: "Add tissue quality and stiffness reduction work to my program", highlight: false },
+    { label: "Open hip mobility", prompt: "Add more hip range of motion and end-range control work to my program", highlight: false },
+    { label: "Improve ankle range", prompt: "Add ankle mobility and dorsiflexion range work to my program", highlight: false },
+    { label: "Restore movement quality", prompt: "Focus on restoring overall movement quality and tissue health in my program", highlight: false },
   ],
 };
 
-// ── Memory: combined chip set (memory-first + context fill) ────────────────────
+// ── Memory: combined chip set (mode-first + memory fill) ───────────────────────
+//
+// Priority order:
+// 1. First 2 slots always go to mode-specific chips — ensures Strength/Speed/Mobility
+//    each feel distinct regardless of what memories exist
+// 2. Slot 3 goes to the top memory chip if one is available (personalizes the set)
+// 3. If no qualifying memory chip, slot 3 gets the next mode chip
+//
+// Support chips (schedule/equipment) from memory can only appear in slot 3,
+// and only if they pass the importance threshold.
 
 function buildMemoryChips(
   memories: AtlasCoachingMemory[],
   focusMode: FocusMode,
 ): AtlasChip[] {
-  const topMemories = memories
+  const modePool = RETURNING_CHIPS[focusMode];
+
+  // Always guarantee first 2 slots are mode-specific
+  const guaranteed = modePool.slice(0, 2);
+
+  // Single memory chip for slot 3 — must be high quality, no label collision
+  const topMemory = memories
     .filter((m) => m.importance >= 3 && m.confidence >= 2)
-    .slice(0, 2);
+    .sort((a, b) => {
+      const ap = CATEGORY_PRIORITY[a.category] ?? 0;
+      const bp = CATEGORY_PRIORITY[b.category] ?? 0;
+      return bp !== ap ? bp - ap : b.importance * b.confidence - a.importance * a.confidence;
+    })
+    .find((m) => {
+      const chip = memoryToChip(m);
+      return chip !== null && !guaranteed.some((g) => g.label === chip.label);
+    });
 
-  const memChips = topMemories
-    .map(memoryToChip)
-    .filter((c): c is AtlasChip => c !== null);
+  const memChip = topMemory ? memoryToChip(topMemory) : null;
 
-  // Fill remaining slots with context chips (no duplicates)
-  const contextFill = RETURNING_CHIPS[focusMode].filter(
-    (c) => !memChips.some((mc) => mc.label === c.label),
-  );
+  // Fill slot 3: memory chip if available, otherwise next mode chip
+  const slot3 = memChip
+    ?? modePool.slice(2).find((c) => !guaranteed.some((g) => g.label === c.label))
+    ?? null;
 
-  return [...memChips, ...contextFill].slice(0, 4);
+  return slot3 ? [...guaranteed, slot3] : [...guaranteed];
 }
 
 // ── Utility ─────────────────────────────────────────────────────────────────────

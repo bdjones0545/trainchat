@@ -1,0 +1,79 @@
+Fix two issues in the Atlas empty-state UI.
+
+Do not redesign the layout.
+Do not change memory extraction.
+Do not change terrain geometry.
+
+ISSUE 1 — “ATLAS INTERFACE” IS TOO HARD TO SEE
+
+Current problem:
+The small “ATLAS INTERFACE” label is too low contrast and nearly disappears.
+
+Fix:
+- Increase label opacity slightly
+- Increase letter visibility without making it loud
+- Keep the premium/subtle feel
+- Make the pulsing dot remain visible
+- Add a very soft glow or text-shadow if needed
+
+Target:
+The label should be readable, but still secondary to the main Atlas message.
+
+Suggested styling:
+- opacity: 0.55–0.7
+- text color: muted blue-gray / slate-cyan
+- subtle text-shadow: 0 0 12px rgba(56,189,248,0.12)
+
+ISSUE 2 — RETURNING USER CHIPS ARE TOO GENERIC ACROSS MODES
+
+Current problem:
+For users with previous programs, the chips stay mostly the same across Strength, Speed, and Mobility:
+- Keep sessions efficient
+- Build for my sport
+
+These are useful supporting chips, but they should not dominate every mode.
+
+Fix:
+Mode-specific chips must always be prioritized first, then memory/support chips fill remaining slots.
+
+Priority order for chips:
+1. Active focus mode chips
+2. Current program/phase chips
+3. High-priority memory chips
+4. Support chips like schedule/equipment
+5. Generic fallback chips
+
+Strength chips:
+- Increase intensity
+- Add strength volume
+- Manage fatigue
+- Push lower-body output
+- Rebuild weekly split
+
+Speed / Footwork chips:
+- Improve first-step acceleration
+- Add reactive drills
+- Increase elastic work
+- Sharpen change of direction
+- Build game-speed conditioning
+
+Mobility chips:
+- Progress range work
+- Reduce stiffness
+- Open hip mobility
+- Improve ankle range
+- Restore movement quality
+
+Support chips like:
+- Keep sessions efficient
+- Build for my sport
+- Work within my equipment
+
+should appear only after at least 2 mode-specific chips are included.
+
+Final behavior:
+When switching modes, both the Atlas hero message and the chips should clearly change coaching intent.
+
+Strength should feel like strength.
+Speed should feel like speed.
+Mobility should feel like mobility.
