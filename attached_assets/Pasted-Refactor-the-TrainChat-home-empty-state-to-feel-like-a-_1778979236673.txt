@@ -1,0 +1,105 @@
+Refactor the TrainChat home/empty state to feel like a live interaction with Atlas instead of a static SaaS landing page.
+
+DO NOT redesign the entire layout.
+Keep:
+- current terrain system
+- current glassmorphism
+- current spacing hierarchy
+- current command chips
+- current input bar
+- current overall composition
+
+GOAL:
+The interface should feel like Atlas — the AI performance CEO/coach — is already present and aware of the user.
+
+The experience should feel:
+- intelligent
+- calm
+- premium
+- adaptive
+- conversational
+- emotionally engaging
+
+NOT:
+- generic SaaS
+- dashboard-like
+- marketing page
+- static onboarding
+
+REMOVE:
+The generic hero/title treatment:
+“Vibe Code Your Training”
+
+REPLACE IT WITH:
+A dynamic conversational Atlas presence.
+
+LAYOUT DIRECTION:
+
+Top area:
+- small subtle label:
+“Neural Hub”
+or
+“Atlas Interface”
+
+Primary content:
+A large conversational message from Atlas.
+
+Example tone:
+“I’m Atlas. I’ve analyzed your movement patterns and recovery trends. Ready to refine today’s session?”
+
+OR
+
+“You trained hard yesterday. Want me to adjust today’s workload for recovery?”
+
+OR
+
+“You’ve been consistent this week. Let’s build momentum.”
+
+The message should:
+- feel adaptive
+- feel human
+- feel aware
+- feel contextual
+- feel intelligent
+
+IMPORTANT:
+The message system should support rotation/context later.
+Architect it so these messages can become dynamic.
+
+VISUAL STYLE:
+- left-aligned conversational typography
+- strong readability
+- breathing room
+- subtle fade-in motion
+- premium editorial spacing
+
+DO NOT:
+- make it look like a chatbot transcript
+- use chat bubbles
+- add avatar circles everywhere
+- clutter the UI
+
+The terrain should remain visible beneath the interaction area.
+
+COMMAND CHIPS:
+Refactor chips to feel like contextual responses to Atlas.
+
+Examples:
+- “Increase intensity”
+- “Focus on recovery”
+- “Adjust for knee pain”
+- “Build today’s session”
+- “Optimize for speed”
+
+These should feel like intelligent quick-actions, not generic prompts.
+
+MOTION:
+When the screen loads:
+- subtle text fade
+- slight terrain response
+- soft atmospheric bloom
+
+The screen should feel alive but calm.
+
+REFERENCE EMOTION:
+“An intelligent AI performance system already thinking about the athlete before they type.”
