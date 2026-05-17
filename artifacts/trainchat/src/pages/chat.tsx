@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useNoIndex } from "@/hooks/useNoIndex";
 import {
   SendHorizontal, Zap, PanelLeftClose, PanelLeft, Activity,
-  Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus,
+  Menu, Target, CreditCard, LogOut, Dumbbell, UserPlus, Key,
   MessageSquare, Plus, RotateCcw, Brain, ChevronDown, ChevronRight,
   CheckCircle2, Library, Trash2, AlertTriangle, Info, Leaf, X, Sparkles, Loader2, Check, Mic, MicOff,
 } from "lucide-react";
@@ -3128,6 +3128,15 @@ export default function Chat() {
           >
             <CreditCard className="w-4 h-4 text-muted-foreground flex-shrink-0" />
             <span>Settings</span>
+          </button>
+        )}
+        {!isAnonymousUser && (
+          <button
+            onClick={() => { setMobilePanel(null); setLocation("/settings/api-keys"); }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium text-foreground hover:bg-muted/60 active:bg-muted/80 active:scale-[0.98] transition-all text-left"
+          >
+            <Key className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            <span>API Keys</span>
           </button>
         )}
         {!isPremium && (
