@@ -34,6 +34,7 @@ import GuestStart from "@/pages/guest-start";
 // ─── Lazy-loaded: authenticated app pages ─────────────────────────────────────
 // Never needed on first load — only authenticated users reach these routes.
 const AdminDashboard = lazy(() => import("@/pages/admin"));
+const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
 const SystemPage = lazy(() => import("@/pages/system"));
 const BillingPage = lazy(() => import("@/pages/billing"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
@@ -412,6 +413,13 @@ function Router() {
           {() => (
             <AuthGuard>
               <AdminDashboard />
+            </AuthGuard>
+          )}
+        </Route>
+        <Route path="/settings/api-keys">
+          {() => (
+            <AuthGuard>
+              <ApiKeysPage />
             </AuthGuard>
           )}
         </Route>
