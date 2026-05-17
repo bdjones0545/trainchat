@@ -3793,8 +3793,10 @@ export default function Chat() {
                     </p>
                   </div>
 
-                  {/* Atlas conversational message — sync crossfade, old exits absolute so new enters without layout jump */}
-                  <div style={{ position: "relative" }}>
+                  {/* Atlas conversational message — sync crossfade, old exits absolute so new enters without layout jump.
+                      min-height is locked to 3 lines of the clamped font-size (fontSize × lineHeight × 3) so that
+                      switching focus modes never resizes the container and shifts the chips / composer below. */}
+                  <div style={{ position: "relative", minHeight: "clamp(5.6rem, 15vw, 10rem)", overflow: "hidden" }}>
                     <AnimatePresence mode="sync">
                       <motion.p
                         key={atlasContext.heroMessage}
