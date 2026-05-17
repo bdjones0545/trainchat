@@ -145,16 +145,16 @@ const STRENGTH_CONFIG: FocusModeConfig = {
   keywords: ["squat", "deadlift", "bench", "barbell", "dumbbell", "hypertrophy", "lift", "1rm", "strength", "powerlifting", "bodybuilding", "muscle"],
   atlasMessages: {
     noSystem: [
-      "I'm Atlas. Tell me your goal — I'll architect the system around you.",
-      "No training system yet. Describe your sport, schedule, or starting point and I'll build it.",
-      "Ready to build your foundation. What are we training for?",
-      "Every system starts with a conversation. Tell me what you want to achieve.",
+      "I'm Atlas. Tell me what you're training for and I'll build around it.",
+      "Tell me your objective. I'll engineer the progression.",
+      "I'm Atlas. Describe your goals, constraints, or sport.",
+      "Your system starts here. Tell me what we're optimizing for.",
     ],
     withSystem: [
-      "Your strength system is live. Want to push harder, load differently, or adapt for today?",
-      "I've been looking at your program. Ready to refine, intensify, or adjust the week?",
-      "System active. Tell me what you want to change, add, or challenge.",
-      "Your foundation is built. Where do we take it from here?",
+      "Your strength system is running. Tell me what you want to adjust.",
+      "I'm tracking your load structure. What do you want to push or change?",
+      "System active. Tell me where you want to take the next block.",
+      "I have your program. Tell me what needs to shift.",
     ],
   },
   suggestionChips: [
@@ -223,16 +223,16 @@ const SPEED_CONFIG: FocusModeConfig = {
   keywords: ["sprint", "speed", "agility", "footwork", "acceleration", "deceleration", "change of direction", "reactive", "ladder", "cone", "fast feet"],
   atlasMessages: {
     noSystem: [
-      "I'm Atlas. Speed is built in layers. Tell me your sport or movement goal.",
-      "Acceleration starts with a system. What position, sport, or output are we optimizing?",
-      "Fast athletes aren't born — they're engineered. Tell me what you're chasing.",
-      "Let's build your speed foundation. What sport or performance target are we working toward?",
+      "I'm Atlas. Tell me your sport, position, or movement priority.",
+      "Tell me what fast means for your performance. I'll build the system.",
+      "I'm Atlas. Describe your speed goal or training phase.",
+      "Let's build around how you accelerate, decelerate, and react.",
     ],
     withSystem: [
-      "Your speed system is running. Want to push the acceleration ceiling or refine footwork quality?",
-      "I've reviewed your program. Ready to dial in intensity, add reactive work, or adjust the load?",
-      "You're building real speed. Tell me what you want to sharpen next.",
-      "System active. Where do we push today — output, rhythm, or recovery?",
+      "Your speed system is live. Tell me what to sharpen.",
+      "I'm tracking your output structure. What do you want to dial in?",
+      "System active. Tell me what quality we're targeting next.",
+      "I have your program. Tell me what to adjust.",
     ],
   },
   suggestionChips: [
@@ -300,16 +300,16 @@ const MOBILITY_CONFIG: FocusModeConfig = {
   keywords: ["mobility", "flexibility", "range of motion", "hip", "shoulder mobility", "joint", "stretch", "restore", "recovery", "fascia", "tissue", "stiffness", "yoga"],
   atlasMessages: {
     noSystem: [
-      "I'm Atlas. Your body has a story. Tell me what needs unlocking or restoring.",
-      "Mobility work begins with honest assessment. What's tight, restricted, or holding you back?",
-      "Recovery and range work is precise work. Tell me where you want to start.",
-      "Let's build your mobility system. What are we restoring — hips, shoulders, or something deeper?",
+      "I'm Atlas. Tell me what's restricted, tight, or needs unlocking.",
+      "Tell me what you want to restore or protect. I'll build the system.",
+      "I'm Atlas. Describe where your movement breaks down.",
+      "Let's build around how you move, recover, and restore.",
     ],
     withSystem: [
-      "Your mobility system is active. Want to deepen range, shift recovery focus, or address something specific?",
-      "I've been tracking your program. Ready to progress the work or add a new target area?",
-      "Restoration is a process. Tell me what's improved and where we go next.",
-      "System active. Want to layer in more range work, or adjust today's focus?",
+      "Your mobility system is active. Tell me what to progress.",
+      "I'm tracking your restoration work. What do you want to address?",
+      "System active. Tell me what area we focus on next.",
+      "I have your program. Tell me what needs more depth.",
     ],
   },
   suggestionChips: [

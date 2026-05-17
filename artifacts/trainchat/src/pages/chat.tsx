@@ -3671,13 +3671,24 @@ export default function Chat() {
 
                 {/* ── Zone 1: Upper — Atlas Interface label + conversational message ── */}
                 <div className="flex-none px-6 md:px-10 max-w-2xl mx-auto w-full">
-                  {/* Atlas Interface section label — centered, muted */}
-                  <p
-                    className="text-center mb-6 select-none"
-                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.20em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
-                  >
-                    Atlas Interface
-                  </p>
+                  {/* Atlas Interface section label — centered, muted, with presence indicator */}
+                  <div className="flex items-center justify-center gap-2 mb-6 select-none">
+                    <span className="relative flex h-[7px] w-[7px] flex-shrink-0">
+                      <span
+                        className="animate-ping absolute inline-flex h-full w-full rounded-full"
+                        style={{ backgroundColor: "hsl(var(--primary) / 0.55)", animationDuration: "2.4s" }}
+                      />
+                      <span
+                        className="relative inline-flex rounded-full h-[7px] w-[7px]"
+                        style={{ backgroundColor: "hsl(var(--primary) / 0.70)" }}
+                      />
+                    </span>
+                    <p
+                      style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.20em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
+                    >
+                      Atlas Interface
+                    </p>
+                  </div>
 
                   {/* Atlas conversational message — left-aligned, large, editorial */}
                   <motion.p

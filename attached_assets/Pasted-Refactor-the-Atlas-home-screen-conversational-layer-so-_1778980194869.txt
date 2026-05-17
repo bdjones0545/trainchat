@@ -1,0 +1,102 @@
+Refactor the Atlas home-screen conversational layer so it feels like a REAL interaction with Atlas — not generic onboarding copy.
+
+CURRENT PROBLEM:
+The current text:
+“Every system starts with a conversation. Tell me what you want to achieve.”
+
+Feels:
+- corporate
+- generic
+- passive
+- SaaS-like
+- emotionally flat
+
+GOAL:
+Atlas should feel:
+- intelligent
+- observant
+- adaptive
+- calm
+- performance-focused
+- human-like
+- already engaged with the athlete
+
+REFERENCE FEELING:
+“I am Atlas. I’ve analyzed your recent load data and biomechanical constraints.”
+
+The user should feel:
+“This AI already understands training.”
+
+IMPORTANT:
+DO NOT make Atlas overly robotic or sci-fi.
+DO NOT make Atlas sound like ChatGPT.
+DO NOT use cringe AI language.
+DO NOT use motivational coach clichés.
+
+Atlas should sound:
+- concise
+- high-level
+- performance-oriented
+- emotionally controlled
+- premium
+- trustworthy
+
+NEW STRUCTURE:
+
+Small label above:
+“Atlas Interface”
+or
+“Neural Hub”
+
+Then:
+A direct first-person Atlas message.
+
+Examples of correct tone:
+
+“I’m Atlas. Tell me what you’re training for and I’ll build around it.”
+
+“I’m Atlas. Let’s build a system that adapts to your performance.”
+
+“I’m Atlas. Describe your goals, constraints, or sport.”
+
+“Tell me how you want to perform. I’ll handle the structure.”
+
+“Your system starts here. Tell me what we’re optimizing for.”
+
+“Let’s build around how you move, recover, and perform.”
+
+“Tell me your objective. I’ll engineer the progression.”
+
+IMPORTANT:
+The wording should imply:
+- personalization
+- intelligence
+- adaptive programming
+- performance science
+- collaboration
+
+NOT:
+- generic productivity AI
+- life coaching
+- chatbot onboarding
+
+VISUAL EXECUTION:
+- preserve current layout
+- preserve current terrain
+- preserve glass styling
+- preserve spacing
+
+But:
+- tighten typography rhythm
+- reduce empty dead space
+- make the message feel like a live interaction
+- subtle fade-in on message mount
+- subtle terrain response behind text
+
+OPTIONAL ENHANCEMENT:
+Add a tiny pulsing indicator beside “Atlas Interface”
+to imply Atlas is active/present.
+
+EXPERIENCE GOAL:
+The user should feel:
+“Atlas is already thinking.”
