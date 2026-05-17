@@ -877,7 +877,7 @@ export default function Chat() {
     if (atlasTransitionRef.current) clearTimeout(atlasTransitionRef.current);
     atlasTransitionRef.current = setTimeout(() => {
       setDisplayedAtlasContext(atlasContext);
-    }, 150);
+    }, 70);
     return () => {
       if (atlasTransitionRef.current) clearTimeout(atlasTransitionRef.current);
     };
@@ -3770,8 +3770,8 @@ export default function Chat() {
                       key={displayedAtlasContext.heroMessage}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -5, transition: { duration: 0.22, ease: [0.4, 0, 1, 1] } }}
-                      transition={{ duration: 0.65, delay: 0.05, ease: [0.22, 1, 0.36, 1] }}
+                      exit={{ opacity: 0, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
+                      transition={{ duration: 0.55, delay: 0.02, ease: [0.22, 1, 0.36, 1] }}
                       className="font-semibold text-foreground tracking-tight leading-[1.18] select-none"
                       style={{ fontSize: "clamp(1.6rem, 4vw, 2.75rem)" }}
                       onPointerEnter={triggerCorePulse}
@@ -3835,8 +3835,8 @@ export default function Chat() {
                     <motion.div
                       key={displayedAtlasContext.chips.slice(0, 3).map(c => c.label).join(";")}
                       initial={{ opacity: 0 }}
-                      animate={{ opacity: 1, transition: { duration: 0.30, delay: 0.12 } }}
-                      exit={{ opacity: 0, transition: { duration: 0.18, ease: "easeIn" } }}
+                      animate={{ opacity: 1, transition: { duration: 0.30, delay: 0.18 } }}
+                      exit={{ opacity: 0, transition: { duration: 0.14, ease: "easeIn" } }}
                       className="flex flex-col gap-3 w-full max-w-sm"
                     >
                       {displayedAtlasContext.chips.slice(0, 3).map((chip, i) => (
