@@ -1,0 +1,52 @@
+Fix the TrainChat right sidebar program hydration bug across new chats.
+
+Problem:
+When a user creates a new chat, then asks Atlas to edit or adapt their previous/live program, the chat confirms the program was updated, but the right sidebar in the new chat still shows the empty "Ready to build" state. The program exists and was edited, but the sidebar is scoped only to the current conversationId, so it cannot see the previous active training system.
+
+Expected behavior:
+If the user has an existing live training system and starts a new chat, Atlas should be able to edit that live system. After the edit succeeds, the right sidebar in the new chat should immediately show the updated live program, not the empty build state.
+
+Audit and fix:
+1. Find the query/hooks responsible for loading the Live Program Panel / right sidebar training system.
+   Likely keys/endpoints include:
+   - ["training-system-conv", conversationId]
+   - /api/training-system/current
+   - /api/training-system/by-conversation/:conversationId
+   - activeSystemId
+   - displayProgramSource
+   - isSaved gating
+
+2. Add a fallback hydration rule:
+   - First try conversation-scoped system for the current conversation.
+   - If none exists, load the user’s latest active/live training system.
+   - If Atlas edits an existing system from a new chat, bind or reference that system into the current chat context.
+
+3. On successful edit/mutation:
+   - Return the updated trainingSystemId from the backend.
+   - Set activeSystemId on the frontend.
+   - Invalidate/refetch all relevant query keys:
+     - current conversation training system
+     - active/latest training system
+     - right sidebar live program panel
+     - changes/history tabs
+   - Do not rely only on conversationId-scoped cache.
+
+4. If the edit target belongs to a previous conversation:
+   - Do not duplicate the program.
+   - Do not create a blank system.
+   - Update the existing live system.
+   - Ensure the new conversation knows that this is the active displayed system.
+
+5. Add a UI guard:
+   - If an edit response says "PROGRAM UPDATED", the sidebar must not remain in "Ready to build".
+   - If no program is visible after update, force a refetch using the returned trainingSystemId.
+
+Acceptance test:
+- User has an existing soccer strength program in Chat A.
+- User opens Chat B.
+- User says: "Increase the intensity and loading demand in my program this week."
+- Atlas updates the existing program.
+- The success card appears.
+- Opening the right sidebar in Chat B shows the updated live soccer strength program.
+- Program tab, Changes tab, Adapted tab, and History tab all reflect the update.
+- Refreshing the page keeps the correct program visible in Chat B.
