@@ -68,7 +68,7 @@ import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper
 import { getFocusModeConfig, detectFocusMismatch, FOCUS_MODE_CONFIGS } from "@/lib/focusModeConfig";
 import { buildAtlasContext, deriveAtlasSeed } from "@/lib/AtlasContextBuilder";
 import { resolveUserGlobalContext } from "@/lib/AtlasGlobalContextResolver";
-import type { ProgramLibraryItem } from "@/lib/AtlasGlobalContextResolver";
+import type { ProgramLibraryItem, AtlasCoachingMemory } from "@/lib/AtlasGlobalContextResolver";
 import type { FocusMode } from "@/lib/focusMode";
 import { analytics } from "@/lib/analytics";
 import { FirstValueOverlay, EditReinforcementToast, SavePromptCard, UpgradeHint, ReturnSessionHook } from "@/components/conversion/ConversionEngine";
@@ -182,6 +182,14 @@ async function fetchCurrentWeek(focusMode?: string) {
 async function fetchProgramLibrary() {
   try {
     return await customFetch<any[]>("/api/training-system/library");
+  } catch {
+    return [];
+  }
+}
+
+async function fetchAtlasMemories(): Promise<AtlasCoachingMemory[]> {
+  try {
+    return await customFetch<AtlasCoachingMemory[]>("/api/atlas/memories");
   } catch {
     return [];
   }
@@ -698,13 +706,40 @@ export default function Chat() {
     staleTime: 30000,
   });
 
+  // Atlas coaching memories — extracted asynchronously from conversation history.
+  // Stale-time 5 min: memories don't change frequently; refreshed after extraction completes.
+  const { data: atlasMemories = [] } = useQuery({
+    queryKey: ["atlas-memories"],
+    queryFn: fetchAtlasMemories,
+    enabled: !!me,
+    staleTime: 300_000,
+  });
+
+  // Fire-and-forget extraction for the 3 most recent conversations.
+  // Responds immediately on the server (setImmediate); never blocks chat load.
+  // Idempotent — server skips if conversation was extracted within 7 days.
+  useEffect(() => {
+    if (!me || conversations.length === 0) return;
+    conversations.slice(0, 3).forEach((conv: any) => {
+      customFetch(`/api/atlas/memories/extract/${conv.id}`, { method: "POST" }).catch(() => {
+        // Intentionally fire-and-forget — failures are silent
+      });
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [me?.id, conversations.length]);
+
   // User-global training identity — resolved from programLibrary (user-wide, not conversation-scoped).
-  // Allows Atlas to recognize returning users even when a new chat has no linked system yet.
+  // Memories are layered on top: a returning user sees memory-enriched hero copy when Atlas
+  // has extracted durable coaching signals (injuries, preferences, goals, equipment, etc.).
   const userGlobalContext = useMemo(
-    () => resolveUserGlobalContext(programLibrary as ProgramLibraryItem[], conversations.length, focusMode),
-    // Re-resolve when the library changes, conversation list grows, or focus mode switches.
+    () => resolveUserGlobalContext(
+      programLibrary as ProgramLibraryItem[],
+      conversations.length,
+      focusMode,
+      atlasMemories as AtlasCoachingMemory[],
+    ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [programLibrary.length, conversations.length, focusMode],
+    [programLibrary.length, conversations.length, focusMode, atlasMemories],
   );
 
   useEffect(() => {

@@ -1,0 +1,233 @@
+Build a true conversational memory layer for Atlas.
+
+CURRENT STATE:
+AtlasGlobalContextResolver now resolves user-level training identity from programLibrary, active systems, archived systems, phases, and recent adjustments.
+
+That is good, but Atlas is still not truly reading or learning from previous conversation content.
+
+GOAL:
+Atlas should extract durable coaching memory from previous conversations and use it to personalize new chats.
+
+Atlas should remember:
+- goals
+- constraints
+- injuries/pain mentions
+- disliked exercises
+- preferred training styles
+- equipment access
+- sport context
+- schedule limitations
+- fatigue/recovery patterns
+- recent concerns
+- successful refinements
+- recurring requests
+
+IMPORTANT:
+Do NOT stuff raw old conversations into the prompt.
+Do NOT replay full chat history.
+Do NOT make Atlas creepy or overly specific.
+
+Instead:
+create structured memory signals.
+
+====================================================
+NEW ARCHITECTURE
+====================================================
+
+Conversation Messages
+→ AtlasMemoryExtractor
+→ Structured Memory Store
+→ AtlasGlobalContextResolver
+→ AtlasContextBuilder
+→ Hero copy + contextual chips
+
+====================================================
+NEW MODULES
+====================================================
+
+1. AtlasMemoryExtractor.ts
+
+Purpose:
+Extract durable coaching signals from completed conversations.
+
+Memory categories:
+- goal
+- constraint
+- injury
+- preference
+- disliked_exercise
+- equipment
+- schedule
+- sport_context
+- recovery_pattern
+- readiness_signal
+- successful_refinement
+- recurring_request
+
+Each memory should include:
+{
+  userId,
+  category,
+  summary,
+  confidence,
+  sourceConversationId,
+  sourceMessageIds,
+  importance,
+  lastSeenAt,
+  createdAt,
+  updatedAt
+}
+
+2. AtlasMemoryStore
+
+Purpose:
+Persist and retrieve structured coaching memories.
+
+Needs:
+- create/update memory
+- deduplicate similar memories
+- increase confidence when repeated
+- decay stale memories over time
+- allow memories to be superseded
+
+====================================================
+DATABASE
+====================================================
+
+Add table:
+atlas_memories
+
+Suggested columns:
+- id
+- user_id
+- category
+- summary
+- normalized_key
+- confidence
+- importance
+- source_conversation_id
+- source_message_ids jsonb
+- metadata jsonb
+- status active/superseded/archived
+- last_seen_at
+- created_at
+- updated_at
+
+Indexes:
+- user_id + status
+- user_id + category
+- normalized_key
+- last_seen_at
+
+====================================================
+EXTRACTION RULES
+====================================================
+
+Only store durable useful training information.
+
+Store:
+- “User reports knee discomfort during deep squats.”
+- “User prefers athletic performance training over bodybuilding.”
+- “User has access to dumbbells but not a barbell.”
+- “User wants to improve acceleration.”
+- “User dislikes burpees.”
+- “User trains best with 3-day programs.”
+
+Do NOT store:
+- one-off casual comments
+- temporary mood unless training-relevant
+- exact timestamps
+- overly personal details
+- sensitive personal data unless directly training-relevant and necessary
+
+====================================================
+RESOLVER INTEGRATION
+====================================================
+
+Update AtlasGlobalContextResolver to include memories.
+
+Resolution priority should include:
+1. Active live system
+2. Recent system adjustments
+3. High-confidence active memories
+4. Recent conversation-derived constraints
+5. Archived systems
+6. Conversation existence
+7. New-user fallback
+
+Hero examples:
+
+“I’m still accounting for your knee limitation. How has movement quality felt?”
+
+“You’ve been leaning toward athletic performance work. What are we building today?”
+
+“I have your 3-day strength structure and equipment limits loaded. What needs refining?”
+
+“You’ve been emphasizing acceleration. Continue progressing or shift focus?”
+
+====================================================
+CONTEXTUAL CHIPS FROM MEMORY
+====================================================
+
+Generate chips from memory signals.
+
+Examples:
+- Build around knee irritation
+- Keep it dumbbell-only
+- Improve acceleration
+- Reduce lower-body fatigue
+- Avoid deep knee flexion
+- Shift toward athletic power
+- Keep sessions under 45 minutes
+- Replace disliked movements
+
+====================================================
+IMPORTANT UX RULES
+====================================================
+
+Atlas should feel aware but not creepy.
+
+GOOD:
+“I’m still accounting for your knee limitation.”
+
+BAD:
+“On May 14 at 8:42 PM you said your knee hurt doing split squats.”
+
+GOOD:
+“You’ve been emphasizing acceleration lately.”
+
+BAD:
+“I read your previous conversations and know you asked about sprinting three times.”
+
+====================================================
+PERFORMANCE REQUIREMENTS
+====================================================
+
+- Do not block chat load on memory extraction.
+- Run extraction after conversations complete or asynchronously after meaningful messages.
+- Use cached memories for empty-state rendering.
+- Keep AtlasContextBuilder pure/memoized.
+- Do not create render loops.
+
+====================================================
+ADMIN/DEBUG
+====================================================
+
+Add a simple debug view or console helper during development showing:
+- active memories loaded
+- category
+- confidence
+- source conversation
+- whether memory influenced hero/chips
+
+====================================================
+EXPERIENCE GOAL
+====================================================
+
+When a user starts a new chat, Atlas should feel like:
+
+“This system remembers how I train.”
+
+Not:
+
+“This chatbot forgot everything.”

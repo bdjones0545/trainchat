@@ -33,6 +33,7 @@ import mutationAuditReceiptsRouter from "./mutation-audit-receipts";
 import trainingSystemMutateRouter from "./training-system-mutate";
 import billingRouter from "./billing";
 import intelligenceStatusRouter from "./intelligence-status";
+import atlasMemoriesRouter from "./atlas-memories";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -80,5 +81,6 @@ router.use(mutationAuditReceiptsRouter);
 router.use(trainingSystemMutateRouter);
 router.use(billingRouter);
 router.use(intelligenceStatusRouter);
+router.use(atlasMemoriesRouter);
 
 export default router;

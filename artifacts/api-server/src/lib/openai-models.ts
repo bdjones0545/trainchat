@@ -84,6 +84,13 @@ export const OPENAI_MODELS = {
    * Uses gpt-4.1-mini for speed (target ≤ 800 ms p50) and low cost.
    */
   INTENT_INTERPRETER: "gpt-4.1-mini",
+
+  /**
+   * Background extraction of durable coaching memories from conversation transcripts.
+   * Uses mini — this runs asynchronously, never on the hot path, and the task
+   * is well-scoped enough that the smaller model performs reliably.
+   */
+  MEMORY_EXTRACTOR: "gpt-4.1-mini",
 } as const;
 
 export type OpenAIModelKey = keyof typeof OPENAI_MODELS;
