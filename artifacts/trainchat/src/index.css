@@ -580,12 +580,6 @@
   gap: 6px;
 }
 
-/* Optical balance spacer — same width as the system access button */
-.composer-shell__tab-spacer {
-  width: 34px;
-  flex-shrink: 0;
-}
-
 /* ─── System Access Button (Live Program trigger) ─────────────────────── */
 
 .system-access-btn {

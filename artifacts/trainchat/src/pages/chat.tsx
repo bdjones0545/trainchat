@@ -4361,11 +4361,11 @@ export default function Chat() {
 
                 {/* Mode tabs + system access — top header of the shell */}
                 <div className="composer-shell__tabs">
-                  {/* Left optical spacer — balances the right icon for pill centering */}
-                  <div className="composer-shell__tab-spacer" aria-hidden="true" />
+                  {/* Left zone — balances right zone for true pill centering */}
+                  <div className="flex-1" aria-hidden="true" />
 
-                  {/* Mode pills — centered */}
-                  <div className="flex-1 flex justify-center min-w-0">
+                  {/* Center zone — mode pills, natural width, truly centered */}
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     <AdaptiveControlBar
                       activeMode={adaptiveMode}
                       onModeChange={handleAdaptiveModeChange}
@@ -4374,28 +4374,30 @@ export default function Chat() {
                     />
                   </div>
 
-                  {/* System access — Live Program Panel trigger */}
-                  <motion.button
-                    type="button"
-                    aria-label="Open Live Program"
-                    title="Open Live Program"
-                    onClick={() => {
-                      setRightPanelOpen(true);
-                      setMobilePanel("right");
-                    }}
-                    className={`system-access-btn flex-shrink-0 ${hasActiveSystem ? "system-access-btn--live" : ""}`}
-                    whileTap={{ scale: 0.91 }}
-                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                  >
-                    <Dumbbell className="w-[15px] h-[15px]" />
-                    {hasActiveSystem && (
-                      <motion.span
-                        className="system-access-btn__dot"
-                        animate={{ opacity: stream.isActive ? [1, 0.3, 1] : 1 }}
-                        transition={stream.isActive ? { repeat: Infinity, duration: 1.1, ease: "easeInOut" } : {}}
-                      />
-                    )}
-                  </motion.button>
+                  {/* Right zone — system button anchored to far right */}
+                  <div className="flex-1 flex justify-end">
+                    <motion.button
+                      type="button"
+                      aria-label="Open Live Program"
+                      title="Open Live Program"
+                      onClick={() => {
+                        setRightPanelOpen(true);
+                        setMobilePanel("right");
+                      }}
+                      className={`system-access-btn ${hasActiveSystem ? "system-access-btn--live" : ""}`}
+                      whileTap={{ scale: 0.91 }}
+                      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                    >
+                      <Dumbbell className="w-[15px] h-[15px]" />
+                      {hasActiveSystem && (
+                        <motion.span
+                          className="system-access-btn__dot"
+                          animate={{ opacity: stream.isActive ? [1, 0.3, 1] : 1 }}
+                          transition={stream.isActive ? { repeat: Infinity, duration: 1.1, ease: "easeInOut" } : {}}
+                        />
+                      )}
+                    </motion.button>
+                  </div>
                 </div>
 
                 {/* Separator */}
