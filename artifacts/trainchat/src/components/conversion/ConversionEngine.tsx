@@ -18,30 +18,30 @@ const FIRST_VALUE_ACTIONS = [
 
 export function FirstValueOverlay({ onAction, onDismiss }: FirstValueOverlayProps) {
   return (
-    <div className="flex items-start gap-3 mb-5 animate-in fade-in slide-in-from-bottom-3 duration-300" style={{ animationDelay: "150ms", animationFillMode: "both" }}>
-      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center mt-0.5">
-        <Zap className="w-3.5 h-3.5 text-primary" />
+    <div className="flex items-start gap-2 mb-2 md:mb-4 animate-in fade-in slide-in-from-bottom-3 duration-300" style={{ animationDelay: "150ms", animationFillMode: "both" }}>
+      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mt-0.5">
+        <Zap className="w-3 h-3 text-primary" />
       </div>
-      <div className="flex-1 min-w-0 bg-card border border-primary/25 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-        <div className="flex items-start justify-between gap-2 mb-3">
+      <div className="flex-1 min-w-0 bg-card border border-primary/15 rounded-xl rounded-tl-sm px-3 py-2 md:px-4 md:py-2.5">
+        <div className="flex items-start justify-between gap-2 mb-1.5 md:mb-2">
           <div>
-            <p className="text-[13px] font-semibold text-foreground">Your training system is ready</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">You can now edit anything in real time</p>
+            <p className="text-[12px] font-semibold text-foreground leading-snug">Your training system is ready</p>
+            <p className="text-[10px] text-muted-foreground/70 mt-0.5 leading-snug">Edit anything in real time</p>
           </div>
           <button
             onClick={onDismiss}
-            className="text-muted-foreground/40 hover:text-muted-foreground transition-colors flex-shrink-0 p-0.5 mt-0.5"
+            className="text-muted-foreground/35 hover:text-muted-foreground transition-colors flex-shrink-0 p-0.5 mt-0.5"
             aria-label="Dismiss"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3 h-3" />
           </button>
         </div>
-        <div className="flex flex-col gap-1.5">
-          {FIRST_VALUE_ACTIONS.map((action) => (
+        <div className="flex flex-col gap-1">
+          {FIRST_VALUE_ACTIONS.map((action, idx) => (
             <button
               key={action}
               onClick={() => onAction(action)}
-              className="text-left text-[12px] font-medium text-primary px-3 py-2 rounded-lg bg-primary/8 border border-primary/15 hover:bg-primary/14 hover:border-primary/30 active:scale-[0.98] transition-all duration-150"
+              className={`text-left text-[11px] font-medium text-primary/90 px-2.5 py-1.5 rounded-lg bg-primary/6 border border-primary/12 hover:bg-primary/12 hover:border-primary/25 hover:text-primary active:scale-[0.98] transition-all duration-150${idx === 2 ? " hidden sm:block" : ""}`}
             >
               → {action}
             </button>
