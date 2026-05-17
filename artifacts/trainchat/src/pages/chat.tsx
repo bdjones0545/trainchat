@@ -4546,24 +4546,26 @@ export default function Chat() {
               {/* ── end composer-shell */}
               {/* "Try saying" guidance strip — hidden when post-build chips or first-value overlay is active */}
               {hasActiveSystem && !stream.isActive && !postBuildChips && !convShowFirstValue && (
-                <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[9px] text-muted-foreground/35 flex-shrink-0 flex items-center gap-1 uppercase tracking-widest font-semibold">
+                <div className="mt-2 flex items-center gap-1.5 min-h-[36px] max-h-[36px] md:min-h-0 md:max-h-none md:flex-wrap overflow-hidden">
+                  <span className="flex-shrink-0 flex items-center gap-0.5 text-muted-foreground/30">
                     <Sparkles className="w-2.5 h-2.5" />
-                    Try
+                    <span className="hidden sm:inline text-[9px] uppercase tracking-widest font-semibold">Try</span>
                   </span>
-                  {(TRY_SAYING_PROMPTS[focusMode] ?? TRY_SAYING_PROMPTS.strength)
-                    .slice(trySayingIndex, trySayingIndex + 4)
-                    .map((prompt) => (
-                      <button
-                        key={prompt}
-                        onClick={() => handleSend(prompt, {
-                          buttonPayload: makeTrySayingPayload(prompt, activeSystem?.id ?? null),
-                        })}
-                        className="text-[10px] text-muted-foreground/50 hover:text-primary/80 adaptive-chip px-2.5 py-1 rounded-full transition-all duration-150 active:scale-95"
-                      >
-                        {prompt}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-1.5 overflow-x-auto overflow-y-hidden flex-nowrap md:flex-wrap scrollbar-none" style={{ scrollbarWidth: "none" }}>
+                    {(TRY_SAYING_PROMPTS[focusMode] ?? TRY_SAYING_PROMPTS.strength)
+                      .slice(trySayingIndex, trySayingIndex + 4)
+                      .map((prompt) => (
+                        <button
+                          key={prompt}
+                          onClick={() => handleSend(prompt, {
+                            buttonPayload: makeTrySayingPayload(prompt, activeSystem?.id ?? null),
+                          })}
+                          className="flex-shrink-0 whitespace-nowrap text-[9px] md:text-[10px] text-muted-foreground/45 hover:text-primary/80 adaptive-chip px-2 py-1 rounded-full transition-all duration-150 active:scale-95"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                  </div>
                 </div>
               )}
               <p className="hidden md:block text-[10px] text-muted-foreground/40 text-center mt-2">
