@@ -163,34 +163,64 @@ function extractSignalLabel(normalizedKey: string, category: string): string {
 
 // ── Memory: hero message generation ────────────────────────────────────────────
 
-function buildMemoryHeroMessage(memory: AtlasCoachingMemory): string {
+function buildMemoryHeroMessage(memory: AtlasCoachingMemory, focusMode: FocusMode): string {
   const signal = extractSignalLabel(memory.normalizedKey, memory.category);
 
   switch (memory.category) {
     case "sport_context": {
       const sportLabel = signal.replace(" context", "");
-      return `Your ${sportLabel} work is loaded. What are we refining today?`;
+      if (focusMode === "speed")
+        return `I have your ${sportLabel} speed work loaded. What are we sharpening today?`;
+      if (focusMode === "mobility")
+        return `I'm tracking your ${sportLabel} movement work. What feels restricted today?`;
+      return `I have your ${sportLabel} strength work loaded. Are we pushing force or managing fatigue today?`;
     }
     case "goal":
+      if (focusMode === "speed")
+        return `You've been building toward ${signal}. What do we sharpen today?`;
+      if (focusMode === "mobility")
+        return `You've been working on ${signal}. What do we restore or progress today?`;
       return `You've been building toward ${signal}. What do we push today?`;
     case "successful_refinement":
+      if (focusMode === "speed")
+        return "I remember what's moved the needle. What do we accelerate next?";
+      if (focusMode === "mobility")
+        return "I remember what's opened things up. What do we restore next?";
       return "I remember what's worked for you. What do we push next?";
     case "injury":
+      if (focusMode === "mobility")
+        return `I'm still accounting for your ${signal}. What do we restore around it today?`;
       return `I'm still accounting for your ${signal}. How is movement quality feeling?`;
     case "recovery_pattern":
+      if (focusMode === "speed")
+        return "I'm tracking your movement load. Do we sharpen or restore today?";
+      if (focusMode === "mobility")
+        return "I'm tracking your recovery patterns. What do we open up or restore?";
       return "I'm tracking your recovery patterns. What are we targeting?";
     case "recurring_request":
+      if (focusMode === "speed")
+        return "I know what keeps coming up. What do we accelerate today?";
+      if (focusMode === "mobility")
+        return "I know what keeps coming up. What do we restore or open up today?";
       return "I know what you keep coming back to. What are we building today?";
     case "disliked_exercise":
       return "I know what movements you want to avoid. What are we building today?";
     case "equipment":
-      return "I have your setup loaded. What are we building today?";
+      if (focusMode === "speed")
+        return "I have your setup in mind. What field-speed work are we doing today?";
+      if (focusMode === "mobility")
+        return "I have your setup loaded. What do we open up today?";
+      return "I have your setup loaded. What do we push today?";
     case "constraint":
       return "I have your current constraints loaded. What are we building today?";
     case "schedule":
       // Only reaches here if importance >= SUPPORT_HERO_THRESHOLD (athlete flagged as critical)
       return "I'll keep your schedule in mind. What are we building today?";
     case "preference":
+      if (focusMode === "speed")
+        return `You've been leaning toward ${signal}. What do we sharpen today?`;
+      if (focusMode === "mobility")
+        return `You've been leaning toward ${signal}. What do we restore or progress today?`;
       return `You've been leaning toward ${signal}. What do we push today?`;
     default:
       return "I have your training history loaded. What are we building today?";
@@ -377,7 +407,7 @@ export function resolveUserGlobalContext(
       }
       return {
         isReturningUser: true,
-        heroMessage: buildMemoryHeroMessage(topMemory),
+        heroMessage: buildMemoryHeroMessage(topMemory, focusMode),
         chips: buildMemoryChips(atlasMemories, focusMode),
         _debug: {
           memoriesLoaded: atlasMemories.length,

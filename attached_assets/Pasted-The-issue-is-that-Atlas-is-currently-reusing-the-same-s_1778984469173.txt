@@ -1,0 +1,170 @@
+The issue is that Atlas is currently reusing the same semantic message structure across all focus modes and only swapping nouns ("strength", "speed", "mobility"). This makes the interface feel templated instead of intelligent.
+
+We need to refactor Atlas hero messaging + adaptive chips so each focus mode has its own coaching personality, vocabulary, and intent.
+
+GOAL:
+Strength, Speed/Footwork, and Mobility must feel like distinct coaching modes — not the same sentence with substituted words.
+
+-----------------------------------
+ARCHITECTURE CHANGE
+-----------------------------------
+
+Refactor AtlasContextBuilder.ts and AtlasGlobalContextResolver.ts so hero copy + chip generation are mode-specific.
+
+Do NOT use generic templates like:
+
+"Your [sport] [mode] work is loaded. What are we refining today?"
+
+Instead create separate copy pools and chip pools per focus mode.
+
+Create a config-driven structure:
+
+const MODE_TONE_CONFIG = {
+  strength: { ... },
+  speed: { ... },
+  mobility: { ... }
+}
+
+Each mode gets:
+- heroTemplates
+- chipTemplates
+- vocabulary
+- coachingTone
+
+-----------------------------------
+STRENGTH MODE TONE
+-----------------------------------
+
+Theme:
+- force production
+- progression
+- load management
+- intensity
+- structure
+- hypertrophy
+- strength adaptation
+
+Vocabulary:
+push, load, intensity, volume, progression, strength block, output, fatigue, adaptation
+
+Examples:
+
+"I have your soccer strength block loaded. Are we pushing force or managing fatigue today?"
+
+"We're tracking your lower-body strength progression. What needs adjusting?"
+
+"Your strength structure is loaded. Do we increase output or clean up recovery?"
+
+Adaptive chips:
+- Increase intensity
+- Add strength volume
+- Reduce fatigue
+- Rebuild weekly split
+- Push lower-body output
+- Add explosive strength
+
+-----------------------------------
+SPEED / FOOTWORK MODE TONE
+-----------------------------------
+
+Theme:
+- acceleration
+- elasticity
+- explosiveness
+- reactivity
+- first-step speed
+- field movement
+- agility
+- sharpness
+
+Vocabulary:
+sharpness, acceleration, elastic, reactive, first-step, game-speed, explosive, movement quality
+
+Examples:
+
+"I have your field-speed work loaded. What are we sharpening today?"
+
+"Your acceleration work is active. Are we building explosiveness or reactive movement?"
+
+"I'm tracking your speed progression. What needs to feel faster or sharper?"
+
+Adaptive chips:
+- Improve first-step acceleration
+- Add reactive drills
+- Increase elastic work
+- Build game-speed conditioning
+- Improve change of direction
+- Increase foot speed
+
+-----------------------------------
+MOBILITY MODE TONE
+-----------------------------------
+
+Theme:
+- recovery
+- movement quality
+- restoration
+- range of motion
+- restrictions
+- tissue quality
+- stiffness reduction
+
+Vocabulary:
+restore, open up, recover, restriction, movement quality, stiffness, range, recovery load
+
+Examples:
+
+"I'm tracking your movement quality work. What needs restoring today?"
+
+"I have your mobility work loaded. What feels restricted or stiff?"
+
+"Your recovery structure is active. What are we opening up today?"
+
+Adaptive chips:
+- Open hip mobility
+- Improve ankle range
+- Reduce stiffness
+- Shift toward recovery
+- Improve thoracic rotation
+- Restore movement quality
+
+-----------------------------------
+IMPORTANT BEHAVIOR RULES
+-----------------------------------
+
+1. DO NOT simply interpolate nouns into a shared sentence template.
+Each mode must have independent sentence structures.
+
+2. Hero messaging should combine:
+- user memory
+- program context
+- active focus mode tone
+
+3. Chips should be semantically aligned to the active mode.
+
+4. Keep deterministic seeded variation behavior so users get stable messaging instead of random copy every load.
+
+5. Preserve all existing memory priority logic.
+We are only improving expression/personality layer.
+
+6. Existing memory hierarchy stays:
+sport_context > goal > refinement > injury > schedule > preferences
+
+-----------------------------------
+UX GOAL
+-----------------------------------
+
+The user should feel like:
+
+- Atlas changes mindset depending on the mode
+- Strength Atlas feels performance-oriented
+- Speed Atlas feels explosive/reactive
+- Mobility Atlas feels restorative/intelligent
+
+The interface should feel like interacting with different coaching dimensions of the same AI system.
+
+No generic wording.
+No repeated structure.
+No noun substitution templates.
+
+Atlas should sound intentional and mode-aware.
