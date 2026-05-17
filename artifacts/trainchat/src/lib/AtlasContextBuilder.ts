@@ -87,16 +87,16 @@ const NO_SYSTEM_MESSAGES: Record<FocusMode, string[]> = {
 
 const DRAFT_MESSAGES: Record<FocusMode, string[]> = {
   strength: [
-    "Your program is built. Tell me what to adjust before we lock it in.",
-    "I've assembled your structure. Tell me what to change or refine.",
+    "Program's built. What do we adjust before locking it in?",
+    "Structure is assembled. What do we change or refine?",
   ],
   speed: [
-    "Your speed program is ready. Tell me what to refine before we save it.",
-    "I've designed your system. Tell me what to adjust.",
+    "Speed program's ready. What do we refine before saving?",
+    "System's designed. What do we adjust?",
   ],
   mobility: [
-    "Your mobility program is built. Tell me what to change before we finalize.",
-    "I've designed your system. Tell me what to refine.",
+    "Mobility program's built. What do we change before finalizing?",
+    "System's designed. What do we refine?",
   ],
 };
 
@@ -104,19 +104,19 @@ const DRAFT_MESSAGES: Record<FocusMode, string[]> = {
 
 const LIVE_FALLBACK_MESSAGES: Record<FocusMode, string[]> = {
   strength: [
-    "I have your program loaded. Tell me what to push or change.",
-    "Your strength system is running. Tell me what to adjust or progress.",
-    "System active. Tell me what we're targeting today.",
+    "I have your program loaded. What do we push or change?",
+    "Strength system's running. What do we push or adjust?",
+    "System active. What are we targeting?",
   ],
   speed: [
-    "Your speed system is live. Tell me what to sharpen.",
-    "System active. Tell me what output we're targeting.",
-    "I have your program loaded. Tell me what to adjust.",
+    "Speed system's live. What do we sharpen?",
+    "System active. What output are we targeting?",
+    "I have your program loaded. What do we adjust?",
   ],
   mobility: [
-    "Your mobility system is running. Tell me what to progress.",
-    "System active. Tell me what restriction we're addressing.",
-    "I have your program loaded. Tell me what to refine.",
+    "Mobility system's running. What do we progress?",
+    "System active. What restriction are we addressing?",
+    "I have your program loaded. What do we refine?",
   ],
 };
 
@@ -208,20 +208,20 @@ function buildLiveHeroMessage(
 
   // Priority 2: Phase alone
   if (phase) {
-    return `We're building through your ${phase}. Tell me what to push or change.`;
+    return `We're in your ${phase}. What do we push or change?`;
   }
 
   // Priority 3: Recovery/fatigue signal
   if (recovery) {
     const lower = recovery.toLowerCase();
     if (lower.includes("fatigue") || lower.includes("recovery") || lower.includes("deload")) {
-      return "I'm tracking your recovery load. Pushing forward or pulling back today?";
+      return "I'm tracking your workload. Do we push or pull back today?";
     }
   }
 
   // Priority 4: Recent refinement
   if (hasRecentChange) {
-    return "We recently refined your program. Tell me what to target next.";
+    return "We recently refined your structure. What needs the next adjustment?";
   }
 
   // Priority 5: Program name

@@ -1,0 +1,119 @@
+Fix the Atlas empty-state focus transition and refine the contextual copy tone.
+
+Do not redesign the UI.
+Do not change the terrain structure.
+Do not change backend memory architecture.
+
+====================================================
+ISSUE 1 — TRANSITION FLASH / HARD FADE
+====================================================
+
+Current issue:
+When switching focus modes, there is a brief moment where the top/hero area hard-switches before the fade animation resolves.
+
+This breaks the premium Atlas experience.
+
+Goal:
+The transition should feel intentional and cinematic.
+
+Desired behavior:
+1. User taps focus mode
+2. Focus pill glow activates
+3. Terrain hue begins shifting
+4. Existing Atlas message softly fades out
+5. New contextual Atlas message fades in
+6. Chips update smoothly after the hero message transition
+
+Implementation:
+- Keep previous Atlas message mounted during transition
+- Crossfade old/new hero text
+- Delay message swap by ~120–180ms after focus-mode selection
+- Animate chip updates separately with slight stagger
+- Avoid layout jump
+- Avoid opacity flash
+- Avoid immediate text replacement
+
+The transition should feel like Atlas is recalibrating, not rerendering.
+
+====================================================
+ISSUE 2 — COPY TONE REFINEMENT
+====================================================
+
+Current copy is contextual but still slightly system-generated.
+
+Example:
+“I have your Soccer Strength Block — 3 Day on record. What are we building in speed today?”
+
+Better tone:
+“I have your Soccer Strength Block loaded. What are we pushing in speed today?”
+
+Refine Atlas copy to feel:
+- shorter
+- more coach-like
+- more conversational
+- more direct
+- less generated
+- less formal
+- more like Atlas already knows the athlete
+
+Avoid phrases like:
+- “on record”
+- “building in [mode] today” when it feels awkward
+- overly explanatory memory references
+
+Prefer:
+- “loaded”
+- “tracking”
+- “refining”
+- “pushing”
+- “adjusting”
+- “progressing”
+- “pulling back”
+- “shifting focus”
+
+====================================================
+COPY EXAMPLES
+====================================================
+
+Strength:
+“I have your Soccer Strength Block loaded. What are we pushing today?”
+
+Speed / Footwork:
+“I have your Soccer Strength Block loaded. What are we pushing in speed today?”
+
+Mobility:
+“I have your Soccer Strength Block loaded. What needs more range today?”
+
+Fatigue context:
+“I’m tracking your workload. Do we push or pull back today?”
+
+Recent edit:
+“We recently refined your structure. What needs the next adjustment?”
+
+Injury/constraint:
+“I’m still accounting for your knee. How is movement quality feeling?”
+
+Archived system:
+“I have your previous block saved. Continue it or build something new?”
+
+====================================================
+CHIP TRANSITION
+====================================================
+
+When focus mode changes:
+- fade old chips out
+- update chips
+- fade new chips in with subtle stagger
+- keep terrain and input stable
+
+Do not make chips jump.
+
+====================================================
+FINAL EXPERIENCE GOAL
+====================================================
+
+Atlas should feel like:
+a calm performance coach recalibrating context.
+
+Not:
+a React component rerendering text.

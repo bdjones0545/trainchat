@@ -148,29 +148,29 @@ function buildMemoryHeroMessage(memory: AtlasCoachingMemory): string {
 
   switch (memory.category) {
     case "injury":
-      return `I'm still accounting for your ${signal}. How has movement quality felt?`;
+      return `I'm still accounting for your ${signal}. How is movement quality feeling?`;
     case "constraint":
-      return `I have your ${signal} on record. What are we building today?`;
+      return `I have your ${signal} loaded. What are we building today?`;
     case "equipment":
-      return `I have your ${signal} on record. What are we building today?`;
+      return `I have your ${signal} loaded. What are we building today?`;
     case "schedule":
-      return `I have your ${signal} in mind. Tell me what you want to train.`;
+      return `I have your ${signal} in mind. What do you want to train?`;
     case "preference":
-      return `You've been leaning toward ${signal}. What are we building today?`;
+      return `You've been leaning toward ${signal}. What do we push today?`;
     case "sport_context":
       return `I've been building around your ${signal}. What needs adjusting?`;
     case "goal":
-      return `You've been working toward your ${signal}. Continue progressing or shift focus?`;
+      return `You've been working toward your ${signal}. Keep progressing or shift focus?`;
     case "disliked_exercise":
       return "I know what movements you want to avoid. What are we building today?";
     case "recovery_pattern":
-      return "I've been tracking your recovery patterns. What are we targeting today?";
+      return "I'm tracking your recovery patterns. What are we targeting?";
     case "successful_refinement":
-      return "I remember what's worked for you. What do you want to push next?";
+      return "I remember what's worked for you. What do we push next?";
     case "recurring_request":
       return "I know what you keep coming back to. What are we building today?";
     default:
-      return "I have your training history on record. What are we building today?";
+      return "I have your training history loaded. What are we building today?";
   }
 }
 
@@ -297,22 +297,26 @@ function buildSystemMessage(system: ProgramLibraryItem, currentFocusMode: FocusM
   if (matchesFocus && isActive) {
     if (phaseName) {
       return hasRecentAdjustment
-        ? `We're in your ${phaseName} and I've been tracking recent adjustments. What are we refining today?`
-        : `We're in your ${phaseName}. What do you want to push or change?`;
+        ? `We're in your ${phaseName}. I've been tracking recent adjustments. What needs refining?`
+        : `We're in your ${phaseName}. What do we push or change?`;
     }
-    if (systemName) return `I have your ${systemName} loaded. Tell me what to adjust or progress.`;
-    return "Your system is active. Tell me what to push or change.";
+    if (systemName) return `I have your ${systemName} loaded. What do we push or adjust?`;
+    return "System active. Tell me what to push.";
   }
 
   if (!matchesFocus && isActive) {
-    if (systemName)
-      return `I have your ${systemName} on record. What are we building in ${currentFocusMode} today?`;
-    return `I have your ${system.focusMode} system on record. What are we working on today?`;
+    const cta = currentFocusMode === "speed"
+      ? "What are we pushing in speed today?"
+      : currentFocusMode === "mobility"
+      ? "What needs more range today?"
+      : "What are we pushing today?";
+    if (systemName) return `I have your ${systemName} loaded. ${cta}`;
+    return `I have your ${system.focusMode} system loaded. ${cta}`;
   }
 
   if (systemName)
-    return `I have your previous work on ${systemName}. Ready to continue or build something new?`;
-  return "I have your training history on record. What are we building today?";
+    return `I have your previous ${systemName} saved. Continue it or build something new?`;
+  return "I have your training history loaded. What are we building today?";
 }
 
 // ── Main resolver ───────────────────────────────────────────────────────────────
