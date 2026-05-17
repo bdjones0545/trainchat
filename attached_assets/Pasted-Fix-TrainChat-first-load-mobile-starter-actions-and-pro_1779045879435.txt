@@ -1,0 +1,46 @@
+Fix TrainChat first-load mobile starter actions and prompt logic.
+
+Current issues:
+1. On initial page load, the Atlas hero + adaptive command buttons exceed the mobile viewport, so users must scroll to see all starter buttons.
+2. Users with no active training system are seeing “adjust/edit” suggestions like “Adjust for fat loss.” That should only appear when a program exists.
+
+Expected behavior:
+- No-program state = build/create prompts only.
+- Active-program state = edit/adjust prompts.
+- First-load mobile view should fit cleanly without requiring scroll just to see the main actions.
+
+Fixes:
+1. Add prompt-state branching:
+   - If !activeSystem:
+     Show only build prompts:
+       - Build a 3-day strength program
+       - Build a 4-day muscle program
+       - Build a speed and strength plan
+   - If activeSystem:
+     Show edit/adapt prompts:
+       - Make this more athletic
+       - Make Day 1 harder
+       - Replace squats with knee-friendly options
+       - Add more explosive work
+
+2. Compress first-load mobile hero:
+   - Reduce vertical spacing between headline, terrain graphic, and buttons.
+   - Reduce adaptive command button height on mobile.
+   - Limit visible starter buttons to 2 on mobile.
+   - Put additional starter prompts in horizontal scroll or hide behind “More ideas.”
+   - Composer must remain visible without scrolling.
+
+3. Mobile viewport rule:
+   - On screens under 768px, the full first-load state should fit:
+     header + focus tabs + Atlas headline + 2 starter buttons + composer.
+   - No required scroll to reach the composer or primary starter buttons.
+
+4. Prevent mixed states:
+   - Do not show “adjust,” “replace,” “make harder,” or “progress this” prompts unless activeSystem exists.
+   - Do not show “build a new program” prompts as the main suggestions when the user already has an active system, unless they explicitly choose new build mode.
+
+Acceptance test:
+- Brand-new user opens TrainChat on iPhone: sees build-only prompts and composer without needing to scroll.
+- User with active program opens TrainChat: sees edit/adapt prompts.
+- Starter actions do not push composer below the fold.
+- No desktop regression.
