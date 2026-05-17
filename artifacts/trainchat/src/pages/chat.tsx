@@ -866,22 +866,6 @@ export default function Chat() {
       displayProgram?.intelligenceStatus?.periodizationPhase, displayProgram?.whatChanged,
       userGlobalContext]);
 
-  // Delayed display context — decouples the text swap from the React render cycle.
-  // When focus mode changes, the terrain hue and focus pill begin their CSS transitions
-  // immediately. The Atlas message + chips crossfade ~150ms later so it reads as
-  // Atlas recalibrating, not a component re-render.
-  const [displayedAtlasContext, setDisplayedAtlasContext] = useState(atlasContext);
-  const atlasTransitionRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (atlasTransitionRef.current) clearTimeout(atlasTransitionRef.current);
-    atlasTransitionRef.current = setTimeout(() => {
-      setDisplayedAtlasContext(atlasContext);
-    }, 70);
-    return () => {
-      if (atlasTransitionRef.current) clearTimeout(atlasTransitionRef.current);
-    };
-  }, [atlasContext]);
 
   // The program is "in system" if explicitly saved this session OR if we're showing the
   // DB-backed live program (displayProgramSource !== "draft").
@@ -3764,21 +3748,23 @@ export default function Chat() {
                     </p>
                   </div>
 
-                  {/* Atlas conversational message — crossfades on focus switch, never hard-swaps */}
-                  <AnimatePresence mode="wait">
-                    <motion.p
-                      key={displayedAtlasContext.heroMessage}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } }}
-                      transition={{ duration: 0.55, delay: 0.02, ease: [0.22, 1, 0.36, 1] }}
-                      className="font-semibold text-foreground tracking-tight leading-[1.18] select-none"
-                      style={{ fontSize: "clamp(1.6rem, 4vw, 2.75rem)" }}
-                      onPointerEnter={triggerCorePulse}
-                    >
-                      {displayedAtlasContext.heroMessage}
-                    </motion.p>
-                  </AnimatePresence>
+                  {/* Atlas conversational message — sync crossfade, old exits absolute so new enters without layout jump */}
+                  <div style={{ position: "relative" }}>
+                    <AnimatePresence mode="sync">
+                      <motion.p
+                        key={atlasContext.heroMessage}
+                        initial={{ opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -3, position: "absolute" as const, top: 0, left: 0, right: 0, transition: { duration: 0.18, ease: [0.4, 0, 1, 1] } }}
+                        transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+                        className="font-semibold text-foreground tracking-tight leading-[1.18] select-none"
+                        style={{ fontSize: "clamp(1.6rem, 4vw, 2.75rem)" }}
+                        onPointerEnter={triggerCorePulse}
+                      >
+                        {atlasContext.heroMessage}
+                      </motion.p>
+                    </AnimatePresence>
+                  </div>
 
                   {/* Status — dot + name, only when a system is active */}
                   {displayProgramSource !== "none" && (
@@ -3830,36 +3816,39 @@ export default function Chat() {
                     Adaptive Command
                   </p>
 
-                  {/* Chips — fade as a group on focus switch, staggered entrance */}
-                  <AnimatePresence mode="wait">
-                    <motion.div
-                      key={displayedAtlasContext.chips.slice(0, 3).map(c => c.label).join(";")}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1, transition: { duration: 0.30, delay: 0.18 } }}
-                      exit={{ opacity: 0, transition: { duration: 0.14, ease: "easeIn" } }}
-                      className="flex flex-col gap-3 w-full max-w-sm"
-                    >
-                      {displayedAtlasContext.chips.slice(0, 3).map((chip, i) => (
-                        <motion.button
-                          key={chip.label}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ duration: 0.45, delay: 0.06 + i * 0.08, ease: [0.22, 1, 0.36, 1] }}
-                          whileHover={{ scale: 1.016, y: -2, transition: { duration: 0.18, ease: "easeOut" } }}
-                          whileTap={{ scale: 0.97, transition: { duration: 0.08 } }}
-                          onClick={() => {
-                            triggerCorePulse();
-                            handleSend(chip.prompt, {
-                              buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
-                            });
-                          }}
-                          className="w-full px-6 py-4 text-[14px] font-medium rounded-[20px] text-center select-none adaptive-chip text-foreground/80"
-                        >
-                          {chip.label}
-                        </motion.button>
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
+                  {/* Chips — buttons stay mounted (no blink), only label text crossfades inside each slot */}
+                  <div className="flex flex-col gap-3 w-full max-w-sm">
+                    {atlasContext.chips.slice(0, 3).map((chip, i) => (
+                      <motion.button
+                        key={`chip-slot-${i}`}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.45, delay: 0.06 + i * 0.08, ease: [0.22, 1, 0.36, 1] }}
+                        whileHover={{ scale: 1.016, y: -2, transition: { duration: 0.18, ease: "easeOut" } }}
+                        whileTap={{ scale: 0.97, transition: { duration: 0.08 } }}
+                        onClick={() => {
+                          triggerCorePulse();
+                          handleSend(chip.prompt, {
+                            buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
+                          });
+                        }}
+                        className="w-full text-[14px] font-medium rounded-[20px] text-center select-none adaptive-chip text-foreground/80 relative"
+                        style={{ minHeight: "56px" }}
+                      >
+                        <AnimatePresence mode="sync" initial={false}>
+                          <motion.span
+                            key={chip.label}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1, transition: { duration: 0.22, delay: 0.08 + i * 0.06 } }}
+                            exit={{ opacity: 0, transition: { duration: 0.15, ease: "easeIn" } }}
+                            style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 1.5rem" }}
+                          >
+                            {chip.label}
+                          </motion.span>
+                        </AnimatePresence>
+                      </motion.button>
+                    ))}
+                  </div>
                 </div>
               </div>
             ) : (
