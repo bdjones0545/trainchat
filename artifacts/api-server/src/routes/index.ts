@@ -34,6 +34,7 @@ import trainingSystemMutateRouter from "./training-system-mutate";
 import billingRouter from "./billing";
 import intelligenceStatusRouter from "./intelligence-status";
 import atlasMemoriesRouter from "./atlas-memories";
+import externalRouter from "./external";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -82,5 +83,6 @@ router.use(trainingSystemMutateRouter);
 router.use(billingRouter);
 router.use(intelligenceStatusRouter);
 router.use(atlasMemoriesRouter);
+router.use(externalRouter);
 
 export default router;

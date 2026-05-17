@@ -30,6 +30,10 @@
 
 ## Where things live
 - **API Server Routes**: `artifacts/api-server/src/routes/`
+- **External API Routes**: `artifacts/api-server/src/routes/external/` (isolated namespace, API key auth)
+- **External API Auth Middleware**: `artifacts/api-server/src/middlewares/external-api-auth.ts`
+- **External API Rate Limiter**: `artifacts/api-server/src/lib/external-api-rate-limiter.ts`
+- **External API DB Tables**: `lib/db/src/schema/external-api.ts` (external_api_keys, external_api_logs, external_programs)
 - **Billing Routes**: `artifacts/api-server/src/routes/billing.ts`
 - **Stripe Webhook Handler**: `webhookHandlers.ts`
 - **Mutation Ontology Registry**: `artifacts/api-server/src/lib/mutation-ontology.ts`
@@ -59,6 +63,16 @@ TrainChat is an agent-first AI training platform that provides personalized, ada
 - When a user has an active training system, the input placeholder changes to "Ask me to adjust your program…" and a green "System active" indicator shows.
 - Users get 5 free chat messages before seeing a paywall/signup prompt.
 - Mobile: left slide panel for sidebar, right slide panel for Live Program (labeled "Live Program" in header).
+
+## External API
+- **Base path**: `/api/external/*`
+- **Auth**: `Authorization: Bearer tc_<64-char-hex>` on all endpoints except `/api/external/docs`
+- **Key management**: `POST /api/external/keys` requires TrainChat user session (login); raw key shown once only
+- **Permissions**: `generate_program | edit_program | generate_session | exercise_swap | explain_program | retrieve_program | list_exercises | manage_keys`
+- **Rate limit**: 60 requests/minute per key (in-memory sliding window; headers: `X-RateLimit-*`)
+- **Streaming**: `POST /api/external/program/generate/stream` — SSE with `stage`, `complete`, `error` events
+- **Program storage**: External programs are stored in `external_programs` table (not `training_systems`) — use `programId` to retrieve/edit
+- **Response format**: `{ success, data, meta, error }` on all endpoints
 
 ## Gotchas
 - **Stripe Price Lookup Keys**: Stripe pricing relies on `lookup_key` values (e.g., `trainchat_pro_monthly`). Ensure these are consistent across environments and the setup script.
