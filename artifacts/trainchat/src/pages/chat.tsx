@@ -3656,33 +3656,6 @@ export default function Chat() {
                   const nx = (e.clientX - rect.left) / rect.width;
                   const ny = (e.clientY - rect.top)  / rect.height;
 
-                  // DEBUG: log + fading cyan dot so we can confirm event fires — remove after confirmed
-                  console.log("[Terrain Tap] container onPointerDown | nx:", nx.toFixed(2), "ny:", ny.toFixed(2));
-                  const dot = document.createElement("div");
-                  Object.assign(dot.style, {
-                    position:     "absolute",
-                    left:         `${nx * 100}%`,
-                    top:          `${ny * 100}%`,
-                    width:        "22px",
-                    height:       "22px",
-                    borderRadius: "50%",
-                    border:       "1.5px solid rgba(102,227,255,0.85)",
-                    background:   "rgba(102,227,255,0.08)",
-                    transform:    "translate(-50%,-50%)",
-                    pointerEvents:"none",
-                    zIndex:       "200",
-                    opacity:      "1",
-                    transition:   "opacity 0.7s ease-out, transform 0.7s ease-out",
-                  });
-                  e.currentTarget.appendChild(dot);
-                  // Double rAF so initial paint happens before transition kicks in
-                  requestAnimationFrame(() => requestAnimationFrame(() => {
-                    dot.style.opacity   = "0";
-                    dot.style.transform = "translate(-50%,-50%) scale(2.2)";
-                  }));
-                  setTimeout(() => dot.remove(), 800);
-                  // END DEBUG
-
                   addRipple(nx, ny);
                 }}
               >

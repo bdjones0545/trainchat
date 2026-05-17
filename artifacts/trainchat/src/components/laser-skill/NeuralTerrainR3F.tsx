@@ -56,9 +56,6 @@ const W_SPD_D    = 0.13;
 const MAX_RIPPLE_R = 11;   // terrain units — max expansion radius
 const RIPPLE_BAND  = 2.8;  // terrain units — ring width (wider = more vertices affected)
 
-// DEBUG: frame counter for log throttling — remove with other debug code
-let _dbgFrame = 0;
-
 // Color palette — [r, g, b] in 0-1 linear range (pre-divided from hex)
 const C_ELEC  = [79 / 255,  125 / 255, 255 / 255] as const; // #4f7dff electric blue
 const C_CYAN  = [102 / 255, 227 / 255, 255 / 255] as const; // #66e3ff cyan
@@ -152,9 +149,6 @@ function NeuralMesh({ isThinking }: NeuralMeshProps) {
       const r = rippleQueue.shift()!;
       r.startTime = t;
       activeRipples.current.push(r);
-      // DEBUG — remove after confirmed
-      console.log("[Ripple] R3F drained | terrain (x,y):", r.x.toFixed(1), r.y.toFixed(1),
-        "| startTime:", t.toFixed(2), "| duration:", r.duration.toFixed(2));
     }
 
     // ── Expire finished ripples ───────────────────────────────────────────
@@ -164,20 +158,6 @@ function NeuralMesh({ isThinking }: NeuralMeshProps) {
       }
     }
     const hasRipples = activeRipples.current.length > 0;
-
-    // DEBUG: throttled active-ripple diagnostics — remove after confirmed
-    _dbgFrame++;
-    if (hasRipples && _dbgFrame % 20 === 0) {
-      const rip0 = activeRipples.current[0];
-      const age  = t - rip0.startTime;
-      const prog = age / rip0.duration;
-      // Compute peak rippleZ for vertex at ripple origin (worst-case check)
-      const env  = Math.min(1, prog * 5) * (1 - prog) * rip0.intensity;
-      const centreAtOrigin = Math.max(0, 1 - prog * 2.0);
-      const peakZ = centreAtOrigin * 0.90 * env * 0.90;
-      console.log("[Ripple] active:", activeRipples.current.length,
-        "| progress:", prog.toFixed(2), "| peakZ@origin:", peakZ.toFixed(3));
-    }
 
     // ── prefers-reduced-motion: gentle opacity swell only ─────────────────
     if (REDUCED) {
@@ -247,9 +227,8 @@ function NeuralMesh({ isThinking }: NeuralMeshProps) {
           const centre = Math.max(0, 1 - dist / 4.0) *
                          Math.max(0, 1 - progress * 2.0);
 
-          // Z deformation — DEBUG: 3× multiplier (0.90) so ripple is unambiguous.
-          // Tune to ~0.55 after confirming visible. Ring contribution 65%, centre 90%.
-          rippleZ       += (ring * 0.65 + centre * 0.90) * env * 0.90;
+          // Z deformation: ring 65%, centre 90% contribution
+          rippleZ       += (ring * 0.65 + centre * 0.90) * env * 0.55;
 
           // Color: max of all ripple influences (prevents overexposure with many ripples)
           const c        = (ring * 0.75 + centre) * env;
