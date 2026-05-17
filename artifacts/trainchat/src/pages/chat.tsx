@@ -30,6 +30,7 @@ import MessageBubble from "@/components/chat/MessageBubble";
 import { VirtualMessageList, VIRTUALIZE_THRESHOLD } from "@/components/chat/VirtualMessageList";
 import AgentThinking from "@/components/chat/AgentThinking";
 import AgentStatusBar from "@/components/chat/AgentStatusBar";
+import AdaptiveControlBar, { type AdaptiveMode } from "@/components/chat/AdaptiveControlBar";
 import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
 import { type ProgramStructure } from "@/components/chat/ChatOutput";
 import ReadinessModal from "@/components/chat/ReadinessModal";
@@ -281,6 +282,7 @@ export default function Chat() {
   const [messagesUsed, setMessagesUsed] = useState(0);
   const [mobilePanel, setMobilePanel] = useState<SlidePanel>(null);
   const [showCalibration, setShowCalibration] = useState(false);
+  const [adaptiveMode, setAdaptiveMode] = useState<AdaptiveMode>("atlas");
   const [showAthleteProfile, setShowAthleteProfile] = useState(false);
   const wasLiveProgramOpenBeforeBrainRef = useRef(false);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
@@ -1550,6 +1552,28 @@ export default function Chat() {
     // source is passed through extraContext so the backend send payload log
     // can differentiate typed vs voice without affecting any routing logic.
     handleSend(message, source ? { source } : undefined);
+  }
+
+  function handleAdaptiveModeChange(mode: AdaptiveMode) {
+    setAdaptiveMode(mode);
+    if (mode === "program") {
+      setRightPanelOpen(true);
+      setMobilePanel("right");
+    } else if (mode === "readiness") {
+      setShowReadiness(true);
+    } else if (mode === "checkin") {
+      const prompt = "I want to check in — here's how I'm feeling today:";
+      setInputText(prompt);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        const el = inputRef.current;
+        if (el) {
+          el.style.height = "auto";
+          el.style.height = `${el.scrollHeight}px`;
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
+      }, 80);
+    }
   }
 
   async function handleSend(text?: string, extraContext?: Record<string, unknown>) {
@@ -4291,7 +4315,11 @@ export default function Chat() {
             style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
           >
             <div className="max-w-2xl mx-auto">
-              {/* Toolbar intentionally removed — Check-In and Calibration accessible via /system */}
+              {/* Adaptive control bar — operating mode selector */}
+              <AdaptiveControlBar
+                activeMode={adaptiveMode}
+                onModeChange={handleAdaptiveModeChange}
+              />
               {/* Voice status strip — zero height when idle, no layout shift */}
               <AnimatePresence>
                 {(voice.isListening || voice.error || pttNoSpeechError) && (
