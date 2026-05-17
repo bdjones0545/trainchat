@@ -3753,7 +3753,7 @@ export default function Chat() {
               /* ─── Empty state — three-zone cinematic layout ─── */
               <div
                 className="relative flex flex-col animate-in fade-in duration-700 min-h-[78dvh]"
-                style={{ paddingTop: "clamp(28px, 5dvh, 52px)" }}
+                style={{ paddingTop: "clamp(14px, 3dvh, 52px)" }}
                 onPointerDown={(e) => {
                   // Only trigger for background taps — ignore chips, input, buttons
                   const tgt = e.target as HTMLElement;
@@ -3775,7 +3775,7 @@ export default function Chat() {
                 {/* ── Zone 1: Upper — Atlas Interface label + conversational message ── */}
                 <div className="flex-none px-6 md:px-10 max-w-2xl mx-auto w-full">
                   {/* Atlas Interface section label — centered, muted, with presence indicator */}
-                  <div className="flex items-center justify-center gap-2 mb-6 select-none">
+                  <div className="flex items-center justify-center gap-2 mb-3 md:mb-6 select-none">
                     <span className="relative flex h-[7px] w-[7px] flex-shrink-0">
                       <span
                         className="animate-ping absolute inline-flex h-full w-full rounded-full"
@@ -3849,20 +3849,22 @@ export default function Chat() {
                 </div>
 
                 {/* ── Zone 2: Middle — breathing space, neural grid shows through ── */}
-                <div className="flex-1" style={{ minHeight: "clamp(56px, 10dvh, 140px)" }} />
+                {/* On mobile: fixed height so composer stays in view; on desktop: grows to fill */}
+                <div className="md:flex-1" style={{ height: "clamp(16px, 3dvh, 60px)" }} />
 
                 {/* ── Zone 3: Lower — Adaptive Command + vertical chips ── */}
                 <div className="flex-none px-6 md:px-10 pb-6 max-w-2xl mx-auto w-full flex flex-col items-center">
                   {/* Section label */}
                   <p
-                    className="text-center mb-4 select-none"
+                    className="text-center mb-2 md:mb-4 select-none"
                     style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
                   >
                     Adaptive Command
                   </p>
 
                   {/* Chips — buttons stay mounted (no blink), only label text crossfades inside each slot */}
-                  <div className="flex flex-col gap-3 w-full max-w-sm">
+                  {/* On mobile: only 2 chips visible to keep composer above the fold */}
+                  <div className="flex flex-col gap-2 md:gap-3 w-full max-w-sm">
                     {atlasContext.chips.slice(0, 3).map((chip, i) => (
                       <motion.button
                         key={`chip-slot-${i}`}
@@ -3877,8 +3879,8 @@ export default function Chat() {
                             buttonPayload: makeStarterChipPayload(chip.label, chip.prompt),
                           });
                         }}
-                        className="w-full text-[14px] font-medium rounded-[20px] text-center select-none adaptive-chip text-foreground/80 relative"
-                        style={{ minHeight: "56px" }}
+                        className={`w-full text-[14px] font-medium rounded-[20px] text-center select-none adaptive-chip text-foreground/80 relative${i === 2 ? " hidden md:flex" : ""}`}
+                        style={{ minHeight: "clamp(42px, 6dvh, 56px)" }}
                       >
                         <AnimatePresence mode="sync" initial={false}>
                           <motion.span

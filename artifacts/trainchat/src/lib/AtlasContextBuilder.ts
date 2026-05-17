@@ -207,7 +207,7 @@ const NO_SYSTEM_CHIPS: Record<FocusMode, AtlasChip[]> = {
   strength: [
     { label: "Build a 3-day strength program", prompt: "Build me a 3-day strength program", highlight: true },
     { label: "Build a 4-day muscle program", prompt: "Build a 4-day muscle building program", highlight: true },
-    { label: "Adjust for fat loss", prompt: "Build a fat-loss training plan for me", highlight: false },
+    { label: "Build a speed and strength plan", prompt: "Build a speed and strength training plan for me", highlight: false },
   ],
   speed: [
     { label: "Build a football speed program", prompt: "Build a football speed program", highlight: true },
