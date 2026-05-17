@@ -1,0 +1,364 @@
+Build the external TrainChat API layer so TrainEfficiency can connect to TrainChat as the AI programming engine.
+
+GOAL:
+Expose TrainChat’s workout/program generation system through a secure external API that can later power:
+- TrainEfficiency Workout Builder
+- Team programming
+- Athlete programming
+- Session generation
+- Program edits/refinements
+- Exercise swaps
+- AI coaching workflows
+
+IMPORTANT:
+Do NOT rebuild TrainChat logic.
+This is an orchestration/API layer exposing existing TrainChat intelligence safely.
+
+ARCHITECTURE GOAL:
+
+TrainEfficiency
+→ sends athlete/team/program context
+→ TrainChat API
+→ TrainChat generates/refines programming
+→ TrainEfficiency stores/assigns/displays results
+
+TrainChat remains:
+- the intelligence engine
+- programming engine
+- exercise reasoning engine
+- periodization engine
+
+TrainEfficiency remains:
+- org/team management
+- scheduling
+- athlete portal
+- reporting
+- billing
+- assignment/delivery layer
+
+====================================================
+1. CREATE EXTERNAL API NAMESPACE
+====================================================
+
+Create:
+
+/api/external/*
+or
+/api/v1/external/*
+
+This API layer should be isolated from the normal TrainChat frontend routes.
+
+====================================================
+2. API AUTHENTICATION
+====================================================
+
+Create organization API keys.
+
+Database table:
+
+external_api_keys
+- id
+- orgId nullable
+- name
+- keyHash
+- prefix
+- permissions jsonb
+- isActive
+- lastUsedAt nullable
+- createdBy
+- createdAt
+- expiresAt nullable
+
+Requirements:
+- NEVER store raw keys
+- Show raw key only once on creation
+- Hash keys using SHA-256 or bcrypt
+- Support revocation
+- Middleware:
+  validateExternalApiKey()
+
+Headers:
+Authorization: Bearer tc_xxxxx
+
+====================================================
+3. PERMISSIONS SYSTEM
+====================================================
+
+API keys should support permissions:
+
+- generate_program
+- edit_program
+- generate_session
+- exercise_swap
+- explain_program
+- retrieve_program
+- list_exercises
+
+Middleware should enforce permissions.
+
+====================================================
+4. CORE ENDPOINTS
+====================================================
+
+A. Generate Program
+
+POST /api/external/program/generate
+
+Purpose:
+Generate a new full program.
+
+Input example:
+{
+  "goal": "strength and speed",
+  "sport": "football",
+  "schedule": "4 days/week",
+  "experienceLevel": "intermediate",
+  "equipment": ["barbell", "rack", "dumbbells"],
+  "athletes": [],
+  "constraints": [],
+  "notes": [],
+  "durationWeeks": 8,
+  "teamContext": {},
+  "orgContext": {}
+}
+
+Response:
+{
+  "programId": "...",
+  "summary": "...",
+  "weeks": [],
+  "sessions": [],
+  "coachRationale": "...",
+  "generatedAt": "..."
+}
+
+====================================================
+B. Edit Program
+====================================================
+
+POST /api/external/program/edit
+
+Purpose:
+Refine or modify an existing program.
+
+Input:
+{
+  "programId": "...",
+  "instruction": "reduce lower body volume",
+  "scope": "week_2"
+}
+
+Response:
+{
+  "updatedProgram": {},
+  "changes": [],
+  "coachSummary": "..."
+}
+
+====================================================
+C. Generate Session
+====================================================
+
+POST /api/external/program/session
+
+Purpose:
+Generate one training session only.
+
+====================================================
+D. Exercise Swap
+====================================================
+
+POST /api/external/program/exercise-swap
+
+Input:
+{
+  "programId": "...",
+  "exerciseId": "...",
+  "reason": "knee pain"
+}
+
+Response:
+{
+  "replacement": {},
+  "rationale": "...",
+  "stimulusPreserved": true
+}
+
+====================================================
+E. Explain Program
+====================================================
+
+POST /api/external/program/explain
+
+Purpose:
+Return TrainChat reasoning/explanation.
+
+====================================================
+F. Retrieve Program
+====================================================
+
+GET /api/external/program/:id
+
+====================================================
+G. List Exercises
+====================================================
+
+GET /api/external/exercises
+
+Support:
+- pagination
+- search
+- tags
+- movement filters
+- equipment filters
+
+====================================================
+5. REQUEST VALIDATION
+====================================================
+
+Use Zod validation for:
+- every request body
+- query params
+- auth layer
+
+Return:
+- clean structured API errors
+- validation messages
+- rate limit messages
+
+====================================================
+6. RATE LIMITING
+====================================================
+
+Add:
+- API rate limiting
+- request logging
+- abuse protection
+
+Suggested:
+- requests/minute per key
+- payload size limits
+- timeout protection
+
+====================================================
+7. EXTERNAL API LOGGING
+====================================================
+
+Create table:
+
+external_api_logs
+- id
+- apiKeyId
+- endpoint
+- method
+- statusCode
+- latencyMs
+- requestSize
+- responseSize
+- createdAt
+
+====================================================
+8. RESPONSE STANDARDIZATION
+====================================================
+
+All responses should follow:
+
+{
+  "success": true,
+  "data": {},
+  "meta": {},
+  "error": null
+}
+
+Errors:
+{
+  "success": false,
+  "error": {
+    "code": "...",
+    "message": "..."
+  }
+}
+
+====================================================
+9. SECURITY
+====================================================
+
+Requirements:
+- Never expose internal prompts
+- Never expose system instructions
+- Never expose hidden reasoning chains
+- Never expose raw embeddings/memory
+- Never expose private user data
+
+Only return:
+- generated programming outputs
+- coach-facing rationale
+- safe metadata
+
+====================================================
+10. STREAMING SUPPORT
+====================================================
+
+Support SSE or chunked streaming for:
+- program generation
+- long edits
+
+Optional endpoint:
+POST /api/external/program/generate/stream
+
+Reuse existing TrainChat streaming architecture if possible.
+
+====================================================
+11. FUTURE-READY DESIGN
+====================================================
+
+Structure this API so future systems can plug in:
+- TrainEfficiency
+- mobile apps
+- white-label platforms
+- enterprise clients
+- wearable systems
+- future public SDK
+
+DO NOT build SDK yet.
+
+====================================================
+12. API DOCUMENTATION
+====================================================
+
+Create:
+- internal API documentation page
+- endpoint examples
+- auth examples
+- sample payloads
+- response schemas
+
+Optional:
+- Swagger/OpenAPI later
+
+====================================================
+13. TRAINCHAT-SPECIFIC CONTEXT
+====================================================
+
+Reuse existing:
+- orchestration engine
+- periodization logic
+- constraint system
+- exercise library
+- refinement engine
+- SSE streaming
+- swap logic
+- stimulus redistribution
+- reasoning layers
+
+Do NOT duplicate logic.
+
+====================================================
+14. IMPORTANT
+====================================================
+
+This API layer should make TrainChat function like:
+
+“AI infrastructure for performance programming.”
+
+TrainEfficiency should later consume this API rather than rebuilding programming intelligence.
