@@ -54,6 +54,10 @@ export function addRipple(nx: number, ny: number): void {
   const x = (nx - 0.5) * 22;
   const y = Math.max(-10, Math.min(10, (0.62 - ny) * 30));
 
+  // DEBUG — remove after ripple confirmed working
+  console.log("[Ripple] addRipple fired | screen (nx,ny):", nx.toFixed(2), ny.toFixed(2),
+    "→ terrain (x,y):", x.toFixed(1), y.toFixed(1));
+
   rippleQueue.push({
     x,
     y,
