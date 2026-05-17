@@ -674,9 +674,9 @@ export default function Chat() {
 
   // ── Conversation-scoped program restore ─────────────────────────────────────
   // Fetches the training system linked to the active conversation specifically.
-  // This is the single source of truth for the Live Program sidebar when a
-  // conversation is open. Returns null — never falls back — if the chat has no
-  // linked program, so the sidebar shows the correct empty state.
+  // Primary source of truth for the Live Program sidebar per chat.
+  // Returns null (never falls back internally) when no system is directly linked
+  // to this conversation — the global-active fallback below handles that case.
   const { data: conversationSystem, isLoading: conversationSystemLoading } = useQuery({
     queryKey: ["training-system-conv", activeConvoId],
     queryFn: () => activeConvoId ? fetchSystemByConversation(activeConvoId) : Promise.resolve(null),
@@ -685,21 +685,60 @@ export default function Chat() {
     refetchOnMount: "always",
   });
 
-  // The active system for display is always conversation-scoped — no global fallback.
-  // When no conversation is open, or the conversation has no linked program, activeSystem is null.
-  const activeSystem = activeConvoId !== null ? (conversationSystem ?? null) : null;
+  // ── Global active system — fallback for new chats ────────────────────────────
+  // When a user opens Chat B and edits their existing program (originally built in
+  // Chat A), `conversationSystem` is null for Chat B because the training system's
+  // `conversationId` column still points to Chat A. Without this fallback the
+  // sidebar shows "Ready to build" even though the program was just updated.
+  //
+  // This query is ALWAYS fetched (not only when conversationSystem is null) so that:
+  //  a) The mutation helper's refetchQueries(["training-system-active"]) updates it.
+  //  b) On page refresh the sidebar hydrates immediately without an extra round-trip.
+  const { data: globalActiveSystem } = useQuery({
+    queryKey: ["training-system-active", focusMode],
+    queryFn: () => fetchActiveSystem(focusMode),
+    enabled: !!me,
+    staleTime: 30_000,
+    refetchOnMount: "always",
+  });
+
+  // ── Unsaved-draft flag (early) — needed to gate the global-active fallback ──
+  // Computed here rather than at line ~838 so `activeSystem` can reference it.
+  // Reading sessionDraftMsgIdRef.current is safe here: refs don't trigger renders.
+  const _earlyHasUnsavedDraft = sessionDraftMsgIdRef.current !== null && !isSaved;
+
+  // ── Active system resolution ──────────────────────────────────────────────────
+  // Priority:
+  //   1. Conversation-scoped: program directly linked to this conversation (Chat A path)
+  //   2. Global active fallback: user's latest active system across all conversations
+  //      (Chat B path — editing an existing program from a new chat)
+  //   3. null: explicit new-build session, mid-draft generation, or no program yet
+  //
+  // The fallback is suppressed when:
+  //   • isNewBuildSession — user explicitly clicked "New Program"; blank slate desired
+  //   • _earlyHasUnsavedDraft — a new program was just generated but not yet saved;
+  //     the draft must win over any pre-existing DB program
+  const activeSystem = (() => {
+    if (activeConvoId === null) return null;
+    if (conversationSystem) return conversationSystem;
+    if (isNewBuildSession || _earlyHasUnsavedDraft) return null;
+    return globalActiveSystem ?? null;
+  })();
 
   // Dev audit log for Live Program Restore
   useEffect(() => {
     if (!import.meta.env.DEV) return;
+    const fallbackUsed = !conversationSystem && !!globalActiveSystem && !isNewBuildSession && !_earlyHasUnsavedDraft;
     console.log("[Live Program Restore]", {
       conversationId: activeConvoId,
       conversationLinkedTrainingSystemId: conversationSystem?.id ?? null,
+      globalActiveSystemId: globalActiveSystem?.id ?? null,
       loadedTrainingSystemId: activeSystem?.id ?? null,
       loadedProgramTitle: activeSystem?.name ?? null,
-      fallbackUsed: false,
+      fallbackUsed,
     });
-  }, [activeConvoId, conversationSystem, activeSystem]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvoId, conversationSystem, globalActiveSystem, activeSystem]);
 
   const { data: programLibrary = [] } = useQuery({
     queryKey: ["training-system-library"],
