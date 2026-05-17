@@ -1,0 +1,63 @@
+Restore the Live Program / right-sidebar trigger that was accidentally removed during the new composer + Atlas/Check-In tab integration.
+
+Current issue:
+The new integrated composer looks good, but the dumbbell/sidebar trigger disappeared. This weakens the UX because users lose visible access to the live training system.
+
+Goal:
+Bring back the right-sidebar / Live Program Panel trigger as a premium “System Access” control.
+
+Do NOT undo the new composer design.
+Do NOT remove the Atlas / Check-In tabs.
+Do NOT create a new panel.
+Reuse the existing sidebar / Live Program Panel open handler.
+
+Required behavior:
+- On desktop: clicking the control opens/focuses the existing right sidebar / Live Program Panel.
+- On mobile: clicking the control opens the existing mobile slide-over panel.
+- It should use the same behavior the old dumbbell icon used.
+- It must remain visible even after messages are sent, while loading, and after program updates.
+
+Placement:
+Place the control inside the composer header area, aligned with the Atlas / Check-In tabs.
+
+Preferred layout:
+- Atlas and Check-In centered or slightly left-centered.
+- System Access icon on the right side of the same header row.
+- Keep the input below.
+
+Example structure:
+[ Atlas ] [ Check-In ]                    [ dumbbell/system icon ]
+
+Visual style:
+- Use the existing premium glass/neural aesthetic.
+- The icon should feel like part of the command module, not a floating random button.
+- Soft blue glow when a live program exists.
+- Subtle pulse when the system is loading/updating.
+- Optional small green dot after a successful program update.
+- Avoid clutter.
+
+Naming:
+Internally this can be called:
+- SystemAccessButton
+- LiveProgramTrigger
+- ProgramPanelTrigger
+
+User-facing tooltip/aria-label:
+"Open Live Program"
+
+Implementation requirements:
+- Trace the previous dumbbell/sidebar trigger behavior before the composer refactor.
+- Reuse the existing state setter / handler that opens the Live Program Panel.
+- Do not duplicate sidebar state.
+- Do not create a new modal or new panel.
+- Keep the component safe on mobile Safari.
+- Preserve safe-area spacing.
+- Ensure it does not overlap the send button or input field.
+
+Final UX target:
+The composer should feel like one unified adaptive command module:
+- Atlas / Check-In tabs = interaction mode
+- Dumbbell/System icon = access to the live training system
+- Input = command entry
+
+This restores the sense that there is a real structured training system behind the conversation.

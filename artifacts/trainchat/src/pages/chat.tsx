@@ -4359,14 +4359,43 @@ export default function Chat() {
                         : "chat-input-glass"
               }`}>
 
-                {/* Mode tabs — top header of the shell */}
+                {/* Mode tabs + system access — top header of the shell */}
                 <div className="composer-shell__tabs">
-                  <AdaptiveControlBar
-                    activeMode={adaptiveMode}
-                    onModeChange={handleAdaptiveModeChange}
-                    onOpenAtlasModal={() => setShowAthleteProfile(true)}
-                    onOpenCheckInModal={() => setShowReadiness(true)}
-                  />
+                  {/* Left optical spacer — balances the right icon for pill centering */}
+                  <div className="composer-shell__tab-spacer" aria-hidden="true" />
+
+                  {/* Mode pills — centered */}
+                  <div className="flex-1 flex justify-center min-w-0">
+                    <AdaptiveControlBar
+                      activeMode={adaptiveMode}
+                      onModeChange={handleAdaptiveModeChange}
+                      onOpenAtlasModal={() => setShowAthleteProfile(true)}
+                      onOpenCheckInModal={() => setShowReadiness(true)}
+                    />
+                  </div>
+
+                  {/* System access — Live Program Panel trigger */}
+                  <motion.button
+                    type="button"
+                    aria-label="Open Live Program"
+                    title="Open Live Program"
+                    onClick={() => {
+                      setRightPanelOpen(true);
+                      setMobilePanel("right");
+                    }}
+                    className={`system-access-btn flex-shrink-0 ${hasActiveSystem ? "system-access-btn--live" : ""}`}
+                    whileTap={{ scale: 0.91 }}
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  >
+                    <Dumbbell className="w-[15px] h-[15px]" />
+                    {hasActiveSystem && (
+                      <motion.span
+                        className="system-access-btn__dot"
+                        animate={{ opacity: stream.isActive ? [1, 0.3, 1] : 1 }}
+                        transition={stream.isActive ? { repeat: Infinity, duration: 1.1, ease: "easeInOut" } : {}}
+                      />
+                    )}
+                  </motion.button>
                 </div>
 
                 {/* Separator */}
