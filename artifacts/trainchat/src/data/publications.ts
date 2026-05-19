@@ -46,6 +46,7 @@ export const publications: Publication[] = [
     abbr: "CACS",
     description: "Defines the taxonomy of training constraints, the constraint registry architecture, and the principle that constraint-awareness is the structural minimum for AI coaching systems that can make safe, defensible programming decisions.",
     path: "/whitepapers/constraint-aware-coaching-systems",
+    pdfPath: "/whitepapers/cacs-pdf",
     year: "2026",
     pages: "~11 pages"
   },
@@ -55,6 +56,7 @@ export const publications: Publication[] = [
     abbr: "CP",
     description: "A model where the training plan is not fixed but mutable — evolving through coaching dialogue while preserving longitudinal coherence. Covers dynamic block mutation, training-state continuity, adaptive sequencing, and conversational refinement loops.",
     path: "/whitepapers/conversational-periodization",
+    pdfPath: "/whitepapers/cp-pdf",
     year: "2026",
     pages: "~11 pages"
   },
@@ -64,6 +66,7 @@ export const publications: Publication[] = [
     abbr: "DGH",
     description: "Defines the hybrid architecture combining deterministic structural logic with generative language intelligence. The generative layer interprets; the deterministic layer decides. Covers mutation ontologies, validation gates, and coaching-state persistence.",
     path: "/whitepapers/deterministic-generative-hybrid-model",
+    pdfPath: "/whitepapers/dgh-pdf",
     year: "2026",
     pages: "~11 pages"
   }

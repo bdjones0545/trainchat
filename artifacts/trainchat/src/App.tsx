@@ -149,6 +149,15 @@ const MfpPrintPage = lazy(
 const LsmPrintPage = lazy(
   () => import("@/pages/aeo/whitepapers/LsmPrintPage"),
 );
+const CacsPrintPage = lazy(
+  () => import("@/pages/aeo/whitepapers/CacsPrintPage"),
+);
+const CpPrintPage = lazy(
+  () => import("@/pages/aeo/whitepapers/CpPrintPage"),
+);
+const DghPrintPage = lazy(
+  () => import("@/pages/aeo/whitepapers/DghPrintPage"),
+);
 const ConstraintAwareWhitepaper = lazy(
   () => import("@/pages/aeo/whitepapers/ConstraintAwareWhitepaper"),
 );
@@ -564,6 +573,9 @@ function Router() {
         <Route path="/whitepapers/aca-pdf" component={AcaPrintPage} />
         <Route path="/whitepapers/mfp-pdf" component={MfpPrintPage} />
         <Route path="/whitepapers/lsm-pdf" component={LsmPrintPage} />
+        <Route path="/whitepapers/cacs-pdf" component={CacsPrintPage} />
+        <Route path="/whitepapers/cp-pdf" component={CpPrintPage} />
+        <Route path="/whitepapers/dgh-pdf" component={DghPrintPage} />
 
         <Route component={NotFound} />
       </Switch>

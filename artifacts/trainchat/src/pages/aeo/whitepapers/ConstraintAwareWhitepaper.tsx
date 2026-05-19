@@ -133,6 +133,14 @@ export default function ConstraintAwareWhitepaper() {
           ))}
         </div>
 
+        <div className="flex items-center gap-3 py-2 border-y border-border">
+          <button onClick={() => navigate("/whitepapers/cacs-pdf")} className="text-xs font-semibold text-primary hover:underline">
+            Save as PDF →
+          </button>
+          <span className="text-muted-foreground/30 text-xs">·</span>
+          <span className="text-xs text-muted-foreground">Publication-formatted version for download and sharing</span>
+        </div>
+
         {sections.map((section) => (
           <section key={section.heading}>
             <h2 className={`font-bold tracking-tight mb-3 ${section.heading === "Abstract" || section.heading === "Citation" ? "text-base" : "text-lg"}`}>
