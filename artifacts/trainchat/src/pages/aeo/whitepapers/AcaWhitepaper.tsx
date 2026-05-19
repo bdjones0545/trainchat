@@ -1,5 +1,7 @@
 import AeoLayout from "@/components/aeo/AeoLayout";
 import { useLocation } from "wouter";
+import WhitepaperActions from "@/components/aeo/WhitepaperActions";
+import { getWhitepaperPdfRoute } from "@/data/whitepapers";
 
 const schema = {
   "@context": "https://schema.org",
@@ -138,13 +140,7 @@ export default function AcaWhitepaper() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3 py-2 border-y border-border">
-          <button onClick={() => navigate("/whitepapers/aca-pdf")} className="text-xs font-semibold text-primary hover:underline">
-            Save as PDF →
-          </button>
-          <span className="text-muted-foreground/30 text-xs">·</span>
-          <span className="text-xs text-muted-foreground">Publication-formatted version for download and sharing</span>
-        </div>
+        <WhitepaperActions slug="adaptive-coaching-architecture" variant="detail" />
 
         {sections.map((section) => (
           <section key={section.heading}>
@@ -180,7 +176,7 @@ export default function AcaWhitepaper() {
             <p className="text-xs font-semibold text-foreground mb-3">More on ACA</p>
             <div className="space-y-2">
               {[
-                { label: "Save as PDF — publication-formatted version", path: "/whitepapers/aca-pdf" },
+                { label: "Save as PDF — publication-formatted version", path: getWhitepaperPdfRoute("adaptive-coaching-architecture") },
                 { label: "Framework Diagrams — The ACA Stack visual", path: "/diagrams#aca" },
                 { label: "Curriculum — where ACA fits in the learning sequence", path: "/curriculum#tier-02" },
               ].map((item) => (

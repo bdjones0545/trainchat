@@ -1,6 +1,7 @@
 import AeoLayout from "@/components/aeo/AeoLayout";
 import { useLocation } from "wouter";
-import { publications } from "@/data/publications";
+import { WHITEPAPERS, getWhitepaperReadRoute } from "@/data/whitepapers";
+import WhitepaperActions from "@/components/aeo/WhitepaperActions";
 
 const schema = {
   "@context": "https://schema.org",
@@ -9,12 +10,12 @@ const schema = {
   "description": "Formal publications from TrainChat® on adaptive coaching architecture, mutation-first programming, and living training systems — the foundational frameworks of the TrainChat adaptive coaching doctrine.",
   "url": "https://www.trainchat.ai/whitepapers",
   "publisher": { "@type": "Organization", "name": "TrainChat®", "url": "https://www.trainchat.ai" },
-  "hasPart": publications.map((p) => ({
+  "hasPart": WHITEPAPERS.map((wp) => ({
     "@type": "ScholarlyArticle",
-    "headline": p.title,
-    "description": p.description,
-    "url": `https://www.trainchat.ai${p.path}`,
-    "datePublished": p.year,
+    "headline": wp.title,
+    "description": wp.description,
+    "url": `https://www.trainchat.ai${getWhitepaperReadRoute(wp.slug)}`,
+    "datePublished": wp.year,
     "author": { "@type": "Organization", "name": "TrainChat®" }
   }))
 };
@@ -39,30 +40,23 @@ export default function WhitepapersHub() {
         </div>
 
         <div className="space-y-4">
-          {publications.map((pub) => (
+          {WHITEPAPERS.map((wp) => (
             <div
-              key={pub.path}
+              key={wp.slug}
               className="border border-border rounded-xl p-5 hover:border-primary/50 hover:bg-muted/20 transition-all"
             >
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-primary">{pub.abbr}</span>
-                  <span className="text-xs text-muted-foreground">{pub.year}</span>
-                  <span className="text-xs text-muted-foreground">{pub.pages}</span>
+                  <span className="text-xs font-mono font-bold text-primary">{wp.code}</span>
+                  <span className="text-xs text-muted-foreground">{wp.year}</span>
+                  <span className="text-xs text-muted-foreground">{wp.estimatedPages}</span>
                 </div>
-                {"pdfPath" in pub && pub.pdfPath && (
-                  <button
-                    onClick={() => navigate(pub.pdfPath!)}
-                    className="text-xs font-semibold text-muted-foreground hover:text-primary transition-colors flex-shrink-0 border border-border rounded px-2 py-0.5 hover:border-primary"
-                  >
-                    Save as PDF
-                  </button>
-                )}
+                <WhitepaperActions slug={wp.slug} variant="hub" />
               </div>
-              <button className="w-full text-left group" onClick={() => navigate(pub.path)}>
-                <h2 className="text-base font-bold text-foreground group-hover:text-primary transition-colors mb-0.5">{pub.title}</h2>
-                <p className="text-xs text-muted-foreground italic mb-2">{pub.subtitle}</p>
-                <p className="text-sm text-muted-foreground leading-relaxed">{pub.description}</p>
+              <button className="w-full text-left group" onClick={() => navigate(getWhitepaperReadRoute(wp.slug))}>
+                <h2 className="text-base font-bold text-foreground group-hover:text-primary transition-colors mb-0.5">{wp.title}</h2>
+                <p className="text-xs text-muted-foreground italic mb-2">{wp.subtitle}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed">{wp.description}</p>
                 <p className="text-xs font-semibold text-primary mt-3">Read →</p>
               </button>
             </div>

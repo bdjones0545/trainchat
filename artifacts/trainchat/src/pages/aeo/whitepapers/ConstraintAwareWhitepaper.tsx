@@ -1,5 +1,6 @@
 import AeoLayout from "@/components/aeo/AeoLayout";
 import { useLocation } from "wouter";
+import WhitepaperActions from "@/components/aeo/WhitepaperActions";
 
 const schema = {
   "@context": "https://schema.org",
@@ -133,13 +134,7 @@ export default function ConstraintAwareWhitepaper() {
           ))}
         </div>
 
-        <div className="flex items-center gap-3 py-2 border-y border-border">
-          <button onClick={() => navigate("/whitepapers/cacs-pdf")} className="text-xs font-semibold text-primary hover:underline">
-            Save as PDF →
-          </button>
-          <span className="text-muted-foreground/30 text-xs">·</span>
-          <span className="text-xs text-muted-foreground">Publication-formatted version for download and sharing</span>
-        </div>
+        <WhitepaperActions slug="constraint-aware-coaching-systems" variant="detail" />
 
         {sections.map((section) => (
           <section key={section.heading}>

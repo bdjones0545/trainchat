@@ -127,45 +127,11 @@ const AiSportsPerformancePlatform = lazy(
 );
 const MediaKitPage = lazy(() => import("@/pages/aeo/MediaKitPage"));
 
+import { WHITEPAPER_ROUTE_MAP } from "@/data/whitepapers/routes";
+
 // ─── Lazy-loaded: whitepapers ──────────────────────────────────────────────────
 const WhitepapersHub = lazy(
   () => import("@/pages/aeo/whitepapers/WhitepapersHub"),
-);
-const AcaWhitepaper = lazy(
-  () => import("@/pages/aeo/whitepapers/AcaWhitepaper"),
-);
-const MfpWhitepaper = lazy(
-  () => import("@/pages/aeo/whitepapers/MfpWhitepaper"),
-);
-const StaticProgrammingWhitepaper = lazy(
-  () => import("@/pages/aeo/whitepapers/StaticProgrammingWhitepaper"),
-);
-const AcaPrintPage = lazy(
-  () => import("@/pages/aeo/whitepapers/AcaPrintPage"),
-);
-const MfpPrintPage = lazy(
-  () => import("@/pages/aeo/whitepapers/MfpPrintPage"),
-);
-const LsmPrintPage = lazy(
-  () => import("@/pages/aeo/whitepapers/LsmPrintPage"),
-);
-const CacsPrintPage = lazy(
-  () => import("@/pages/aeo/whitepapers/CacsPrintPage"),
-);
-const CpPrintPage = lazy(
-  () => import("@/pages/aeo/whitepapers/CpPrintPage"),
-);
-const DghPrintPage = lazy(
-  () => import("@/pages/aeo/whitepapers/DghPrintPage"),
-);
-const ConstraintAwareWhitepaper = lazy(
-  () => import("@/pages/aeo/whitepapers/ConstraintAwareWhitepaper"),
-);
-const ConvPeriodizationWhitepaper = lazy(
-  () => import("@/pages/aeo/whitepapers/ConvPeriodizationWhitepaper"),
-);
-const DetGenHybridWhitepaper = lazy(
-  () => import("@/pages/aeo/whitepapers/DetGenHybridWhitepaper"),
 );
 
 // ─── Lazy-loaded: visual & curriculum ─────────────────────────────────────────
@@ -537,45 +503,17 @@ function Router() {
         />
         <Route path="/media-kit" component={MediaKitPage} />
 
-        {/* Whitepapers & Terminology */}
+        {/* Whitepapers — hub + auto-generated read/PDF routes from WHITEPAPER_ROUTE_MAP */}
         <Route path="/whitepapers" component={WhitepapersHub} />
-        <Route
-          path="/whitepapers/adaptive-coaching-architecture"
-          component={AcaWhitepaper}
-        />
-        <Route
-          path="/whitepapers/mutation-first-programming"
-          component={MfpWhitepaper}
-        />
-        <Route
-          path="/whitepapers/the-problem-with-static-programming"
-          component={StaticProgrammingWhitepaper}
-        />
-        <Route
-          path="/whitepapers/constraint-aware-coaching-systems"
-          component={ConstraintAwareWhitepaper}
-        />
-        <Route
-          path="/whitepapers/conversational-periodization"
-          component={ConvPeriodizationWhitepaper}
-        />
-        <Route
-          path="/whitepapers/deterministic-generative-hybrid-model"
-          component={DetGenHybridWhitepaper}
-        />
+        {WHITEPAPER_ROUTE_MAP.flatMap(({ readRoute, pdfRoute, ReadComponent, PrintComponent }) => [
+          <Route key={readRoute} path={readRoute} component={ReadComponent} />,
+          <Route key={pdfRoute} path={pdfRoute} component={PrintComponent} />,
+        ])}
         <Route path="/terminology" component={TerminologyPage} />
 
         {/* Visual Artifacts & Curriculum */}
         <Route path="/diagrams" component={DiagramsPage} />
         <Route path="/curriculum" component={CurriculumPage} />
-
-        {/* Publication PDFs */}
-        <Route path="/whitepapers/aca-pdf" component={AcaPrintPage} />
-        <Route path="/whitepapers/mfp-pdf" component={MfpPrintPage} />
-        <Route path="/whitepapers/lsm-pdf" component={LsmPrintPage} />
-        <Route path="/whitepapers/cacs-pdf" component={CacsPrintPage} />
-        <Route path="/whitepapers/cp-pdf" component={CpPrintPage} />
-        <Route path="/whitepapers/dgh-pdf" component={DghPrintPage} />
 
         <Route component={NotFound} />
       </Switch>

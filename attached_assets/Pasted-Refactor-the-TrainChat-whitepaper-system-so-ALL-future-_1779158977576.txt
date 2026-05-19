@@ -1,0 +1,103 @@
+Refactor the TrainChat whitepaper system so ALL future whitepapers automatically inherit PDF export functionality without requiring manual wiring.
+
+Current problem:
+New whitepapers are being added without “Download PDF” support because the export actions are not centralized.
+
+Goal:
+Make PDF export part of the core whitepaper schema and rendering pipeline.
+
+Architecture requirements:
+
+1. Create a single canonical WhitepaperDefinition type/interface.
+
+Every whitepaper must define:
+- slug
+- code
+- title
+- subtitle
+- description
+- year
+- estimatedPages
+- component
+- printComponent OR pdfRoute
+- category/tags (optional)
+- featuredImage (optional)
+
+2. Create one centralized whitepaper registry:
+Example:
+whitepapers/index.ts
+
+Export a typed array/map:
+export const WHITEPAPERS = [...]
+
+The UI should render from this registry only.
+
+3. Auto-generate actions from schema.
+
+If a whitepaper exists in the registry:
+- “Read” is automatically generated
+- “Download PDF” is automatically generated
+- Print routes are automatically generated
+
+No manually coded buttons per paper.
+
+4. Add a shared utility:
+getWhitepaperPdfRoute(slug)
+
+Used everywhere:
+- library cards
+- detail pages
+- future search/index pages
+- social share cards
+- sitemap generation
+
+5. Add validation protection:
+During development, log warnings/errors if:
+- pdf route missing
+- print component missing
+- duplicate slug
+- missing title/code
+
+6. Build a shared WhitepaperActions component:
+<WhitepaperActions whitepaper={paper} />
+
+Contains:
+- Read →
+- Download PDF ↓
+
+This prevents future UI drift.
+
+7. Make PDF export impossible to forget.
+
+If a new whitepaper is added to the registry without a PDF/print route:
+- show dev warning
+- fail gracefully in UI
+- optionally block build in strict mode
+
+8. Ensure future scalability:
+The architecture should support:
+- 10 whitepapers
+- 100 whitepapers
+- categorized libraries
+- featured papers
+- search/filter
+- AI indexing pages
+- sitemap generation
+- SEO/AEO expansion
+
+9. Preserve existing styling:
+Keep the TrainChat publication aesthetic:
+- dark academic UI
+- glass cards
+- typography hierarchy
+- mobile-first spacing
+
+Goal:
+Whitepapers become a true publication system where every future paper automatically inherits:
+- reading page
+- PDF export
+- print layout
+- metadata
+- SEO structure
+- library rendering
+without requiring manual implementation each time.
