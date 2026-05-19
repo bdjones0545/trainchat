@@ -1,0 +1,96 @@
+Create a TrainChat Whitepaper Automation System that can generate and publish one new whitepaper per day without manual prompting.
+
+Goal:
+TrainChat should automatically create a new whitepaper draft daily from an approved topic queue.
+
+Core requirements:
+
+1. Add a whitepaper_topic_queue table:
+- id
+- title
+- slug
+- code
+- subtitle
+- thesis
+- targetAudience
+- status: queued | drafting | needs_review | approved | published | rejected
+- scheduledFor
+- createdAt
+- updatedAt
+
+2. Add a whitepaper_publications table:
+- id
+- topicId
+- title
+- slug
+- code
+- subtitle
+- abstract
+- bodyJson
+- citationsJson
+- seoMetadataJson
+- status
+- publishedAt
+- createdAt
+- updatedAt
+
+3. Create an admin page:
+Admin → Whitepapers → Pipeline
+
+Features:
+- Add future topic ideas
+- Reorder queue
+- Approve/reject drafts
+- Edit generated drafts
+- Publish manually
+- Toggle auto-generation on/off
+
+4. Create a daily cron job:
+Run once per day.
+
+Flow:
+- Find next queued topic scheduled for today or earlier
+- Generate whitepaper draft
+- Save as needs_review
+- Do NOT publish automatically unless autoPublish is enabled
+- Notify admin that a new draft is ready
+
+5. Use the existing shared whitepaper renderer:
+Every generated whitepaper must automatically inherit:
+- Read page
+- Download PDF
+- Print route
+- SEO metadata
+- library card
+- sitemap entry
+
+6. Add a strict schema validator:
+Generated whitepaper must include:
+- title
+- subtitle
+- abstract
+- sections
+- conclusion
+- keywords
+- citation block
+- related frameworks
+- PDF/print compatibility
+
+7. Add safety/quality rules:
+- No fake citations
+- No invented studies
+- Clearly label TrainChat-original frameworks
+- Require review before public publishing by default
+- Preserve TrainChat academic tone
+
+8. Suggested first topic queue:
+- Constraint Stacking in AI Coaching Systems
+- Mutable Training Architecture
+- Coaching Memory as a Programming Layer
+- Agentic Feedback Loops in Strength Training
+- The Live Program Panel as a Coaching Interface
+- Human-in-the-Loop Periodization
+- Training Systems as Living Documents
+
+Goal:
+After this is complete, I should only need to add topic ideas to the queue. TrainChat should generate one polished whitepaper draft per day, ready for review, with PDF download support automatically included.

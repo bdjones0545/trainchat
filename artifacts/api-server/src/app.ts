@@ -7,6 +7,7 @@ import { sessionMiddleware } from "./lib/session";
 import { WebhookHandlers } from "./lib/webhookHandlers";
 import { db, usersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
+import { startWhitepaperCron } from "./lib/whitepaper-cron";
 
 const app: Express = express();
 
@@ -101,5 +102,7 @@ app.use(async (req: Request, _res: Response, next: NextFunction): Promise<void> 
 });
 
 app.use("/api", router);
+
+startWhitepaperCron();
 
 export default app;

@@ -85,10 +85,8 @@ export function getWhitepaperReadRoute(slug: string): string {
 export function getWhitepaperPdfRoute(slug: string): string {
   const wp = WHITEPAPERS.find((w) => w.slug === slug);
   if (!wp) {
-    if (import.meta.env.DEV) {
-      console.warn(`[Whitepapers] getWhitepaperPdfRoute: no whitepaper found for slug "${slug}". Falling back.`);
-    }
-    return `/whitepapers/${slug}-pdf`;
+    // Dynamic (DB-generated) whitepapers use the /whitepapers/:slug/pdf route
+    return `/whitepapers/${slug}/pdf`;
   }
   return `/whitepapers/${wp.code.toLowerCase()}-pdf`;
 }

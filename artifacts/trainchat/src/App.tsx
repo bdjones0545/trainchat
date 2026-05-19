@@ -34,6 +34,7 @@ import GuestStart from "@/pages/guest-start";
 // ─── Lazy-loaded: authenticated app pages ─────────────────────────────────────
 // Never needed on first load — only authenticated users reach these routes.
 const AdminDashboard = lazy(() => import("@/pages/admin"));
+const WhitepaperPipelinePage = lazy(() => import("@/pages/admin/WhitepaperPipelinePage"));
 const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
 const SystemPage = lazy(() => import("@/pages/system"));
 const BillingPage = lazy(() => import("@/pages/billing"));
@@ -132,6 +133,12 @@ import { WHITEPAPER_ROUTE_MAP } from "@/data/whitepapers/routes";
 // ─── Lazy-loaded: whitepapers ──────────────────────────────────────────────────
 const WhitepapersHub = lazy(
   () => import("@/pages/aeo/whitepapers/WhitepapersHub"),
+);
+const DynamicWhitepaperPage = lazy(
+  () => import("@/pages/aeo/whitepapers/DynamicWhitepaperPage"),
+);
+const DynamicPrintPage = lazy(
+  () => import("@/pages/aeo/whitepapers/DynamicPrintPage"),
 );
 
 // ─── Lazy-loaded: visual & curriculum ─────────────────────────────────────────
@@ -391,6 +398,13 @@ function Router() {
             </AuthGuard>
           )}
         </Route>
+        <Route path="/admin/whitepapers">
+          {() => (
+            <AuthGuard>
+              <WhitepaperPipelinePage />
+            </AuthGuard>
+          )}
+        </Route>
         <Route path="/settings/api-keys">
           {() => (
             <AuthGuard>
@@ -503,12 +517,15 @@ function Router() {
         />
         <Route path="/media-kit" component={MediaKitPage} />
 
-        {/* Whitepapers — hub + auto-generated read/PDF routes from WHITEPAPER_ROUTE_MAP */}
+        {/* Whitepapers — hub + static read/PDF routes, then dynamic catch-alls for DB publications */}
         <Route path="/whitepapers" component={WhitepapersHub} />
         {WHITEPAPER_ROUTE_MAP.flatMap(({ readRoute, pdfRoute, ReadComponent, PrintComponent }) => [
           <Route key={readRoute} path={readRoute} component={ReadComponent} />,
           <Route key={pdfRoute} path={pdfRoute} component={PrintComponent} />,
         ])}
+        {/* Dynamic routes must come after static ones — wouter matches first-wins */}
+        <Route path="/whitepapers/:slug/pdf" component={DynamicPrintPage} />
+        <Route path="/whitepapers/:slug" component={DynamicWhitepaperPage} />
         <Route path="/terminology" component={TerminologyPage} />
 
         {/* Visual Artifacts & Curriculum */}

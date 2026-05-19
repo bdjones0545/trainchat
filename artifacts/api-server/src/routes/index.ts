@@ -35,6 +35,8 @@ import billingRouter from "./billing";
 import intelligenceStatusRouter from "./intelligence-status";
 import atlasMemoriesRouter from "./atlas-memories";
 import externalRouter from "./external";
+import whitepaperAdminRouter from "./whitepapers-admin";
+import whitepaperPublicRouter from "./whitepapers-public";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -84,5 +86,7 @@ router.use(billingRouter);
 router.use(intelligenceStatusRouter);
 router.use(atlasMemoriesRouter);
 router.use(externalRouter);
+router.use(whitepaperAdminRouter);
+router.use(whitepaperPublicRouter);
 
 export default router;

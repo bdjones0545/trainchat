@@ -23,3 +23,4 @@ export * from "./mutation-audit-receipts";
 export * from "./research";
 export * from "./atlas-memories";
 export * from "./external-api";
+export * from "./whitepapers";
