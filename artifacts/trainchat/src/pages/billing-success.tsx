@@ -4,6 +4,7 @@ import { useNoIndex } from "@/hooks/useNoIndex";
 import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle, Loader2, ArrowRight } from "lucide-react";
 import { analytics } from "@/lib/analytics";
+import { capi } from "@/lib/capi";
 
 export default function BillingSuccess() {
   useNoIndex();
@@ -42,6 +43,12 @@ export default function BillingSuccess() {
             plan: data?.tier ?? "unknown",
             billing: data?.billingInterval ?? "unknown",
           });
+
+          // Meta CAPI: Subscribe + Purchase
+          const planLabel = data?.tier ?? "unknown";
+          const billingLabel = data?.billingInterval ?? "unknown";
+          capi.subscribe(undefined, { content_name: `TrainChat ${planLabel}`, billing_interval: billingLabel });
+          capi.purchase(0, "USD", undefined, { content_name: `TrainChat ${planLabel}`, content_category: "subscription" });
         })
         .catch(() => setStatus("success"));
 

@@ -9,6 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
 import { getOrCreateDeviceId, DEVICE_ID_KEY } from "@/lib/deviceId";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import { capi } from "@/lib/capi";
 
 const registerSchema = z.object({
   name: z.string().min(1, "Name required"),
@@ -91,6 +92,12 @@ export default function Register() {
           if (deviceId) {
             trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_COMPLETED).catch(() => {});
           }
+
+          // Meta CAPI: CompleteRegistration
+          capi.completeRegistration(
+            { email: data.email },
+            { content_name: "TrainChat Registration" },
+          );
 
           // Route to chat — the anonymous user was upgraded in-place so all
           // their conversations and training systems are already there.

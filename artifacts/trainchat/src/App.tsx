@@ -161,6 +161,7 @@ import { getOrCreateDeviceId } from "@/lib/deviceId";
 import { DeviceResetPanel } from "@/components/debug/DeviceResetPanel";
 import ScrollToTop from "@/components/ScrollToTop";
 import { FocusModeProvider } from "@/contexts/FocusModeContext";
+import { capi } from "@/lib/capi";
 
 // Attach the device ID to every API request immediately on module load.
 setDefaultHeaders({ "X-Device-Id": getOrCreateDeviceId() });
@@ -292,6 +293,14 @@ class ErrorBoundary extends Component<
   }
 }
 
+function RouteTracker() {
+  const [pathname] = useLocation();
+  useEffect(() => {
+    capi.pageView();
+  }, [pathname]);
+  return null;
+}
+
 function SmartRoot() {
   return <Redirect to="/chat" />;
 }
@@ -347,6 +356,7 @@ function Router() {
     // AEO pages served to search-engine bots are pre-rendered server-side
     // so the Suspense boundary never blocks bot indexing.
     <Suspense fallback={<PageSkeleton />}>
+      <RouteTracker />
       <Switch>
         <Route path="/" component={SmartRoot} />
         <Route path="/start">{() => <Redirect to="/chat" />}</Route>

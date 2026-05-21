@@ -37,6 +37,7 @@ import atlasMemoriesRouter from "./atlas-memories";
 import externalRouter from "./external";
 import whitepaperAdminRouter from "./whitepapers-admin";
 import whitepaperPublicRouter from "./whitepapers-public";
+import metaCapiRouter from "./meta-capi";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -88,5 +89,6 @@ router.use(atlasMemoriesRouter);
 router.use(externalRouter);
 router.use(whitepaperAdminRouter);
 router.use(whitepaperPublicRouter);
+router.use(metaCapiRouter);
 
 export default router;
