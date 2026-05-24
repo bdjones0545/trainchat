@@ -6,6 +6,7 @@ import { validateBillingConfig } from "./lib/billingUtils";
 import { startBillingReconciliation } from "./lib/billingReconciliation";
 import { seedExerciseLibraryIfEmpty } from "./lib/exercise-seeder";
 import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
+import { seedWhitepaperPublicationsIfMissing } from "./lib/whitepaper-publications-seeder";
 
 const rawPort = process.env["PORT"];
 
@@ -74,6 +75,7 @@ async function initStripe() {
 await initStripe();
 await seedExerciseLibraryIfEmpty();
 await seedCoachingKnowledgeIfEmpty();
+await seedWhitepaperPublicationsIfMissing();
 
 app.listen(port, (err) => {
   if (err) {
