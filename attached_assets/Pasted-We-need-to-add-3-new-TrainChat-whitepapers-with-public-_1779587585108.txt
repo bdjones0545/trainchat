@@ -1,0 +1,120 @@
+We need to add 3 new TrainChat whitepapers with public pages and downloadable PDFs.
+
+Create these whitepapers:
+
+1. Persistent Coaching Intelligence
+Subtitle: Why Memory-Based AI Changes the Future of Athlete Development
+Slug: persistent-coaching-intelligence
+
+2. Adaptive Readiness Periodization
+Subtitle: How AI-Driven Readiness Systems Continuously Recalibrate Training Stress in Real Time
+Slug: adaptive-readiness-periodization
+
+3. Movement Intelligence Systems
+Subtitle: The Shift From Muscle-Based Programming to Neuromuscular Coordination Models
+Slug: movement-intelligence-systems
+
+Requirements:
+
+1. Add each whitepaper to the existing whitepaper/publication system.
+   - If there is already a seed/default topic system, add these as seeded published whitepapers.
+   - If publications are stored in the database, create/update the seed logic so these appear as published records.
+   - Do not break existing manually created whitepapers.
+   - The seed should be idempotent.
+
+2. Each whitepaper needs:
+   - Public article page at `/whitepapers/:slug`
+   - Downloadable/print-ready PDF route at `/whitepapers/:slug/pdf`
+   - Title
+   - Subtitle
+   - SEO title
+   - Meta description
+   - Excerpt
+   - Category/tag
+   - Published status
+   - TrainChat CTA section
+   - Founder/brand footer
+   - Download PDF button on the article page
+
+3. Use this content direction:
+
+Persistent Coaching Intelligence:
+- The stateless AI problem
+- Why human coaches remember athletes
+- Persistent athlete profiles
+- Constraint memory systems
+- Behavioral adaptation tracking
+- Longitudinal performance intelligence
+- Conversation-aware coaching
+- Digital coaching memory
+
+Adaptive Readiness Periodization:
+- Failure of static periodization
+- Readiness as a dynamic biological variable
+- CNS fatigue vs muscular fatigue
+- Constraint-aware training adjustments
+- TrainChat readiness interpretation
+- Session mutation architecture
+- Adaptive exercise substitution logic
+- AI-guided autoregulation
+
+Movement Intelligence Systems:
+- Limitation of muscle-centric training
+- Movement as neurological output
+- Motor learning and coordination efficiency
+- Efferent signaling and force production
+- Movement quality and recruitment
+- Constraint-aware movement selection
+- AI movement coaching
+- Intelligent neuromuscular systems
+
+4. PDF/download behavior:
+   - The `/pdf` route should render a polished print-ready page.
+   - Browser print/save-as-PDF should work cleanly.
+   - Add print CSS:
+     - hide navigation/buttons
+     - preserve page breaks
+     - white background
+     - dark text
+     - clean margins
+   - Include a visible “Download PDF” or “Print / Save PDF” button on the web article page.
+   - If the app already has a PDF generation utility, reuse it. Otherwise, use the existing print-ready route approach.
+
+5. Design:
+   - Match the existing TrainChat whitepaper design system.
+   - Use a premium AI/sports science feel.
+   - Add sections, pull quotes, CTA blocks, and summary boxes.
+   - Mobile responsive.
+   - No broken layout on iPhone.
+   - Keep the pages professional, not gimmicky.
+
+6. SEO/AEO:
+   - Add structured metadata for each page if the app already supports it.
+   - Include strong keywords naturally:
+     - AI strength coach
+     - adaptive periodization
+     - AI sports performance
+     - neuromuscular training
+     - persistent AI memory
+     - constraint-aware coaching
+     - athlete readiness AI
+   - Make sure each page has a unique title, description, canonical slug if supported, and readable H1/H2 hierarchy.
+
+7. Admin/public API:
+   - Ensure `/api/whitepapers/published` returns these 3 whitepapers.
+   - Ensure `/api/whitepapers/published/:slug` returns the matching whitepaper.
+   - Ensure inactive/draft whitepapers do not appear publicly.
+   - Keep the existing admin approval workflow intact.
+
+8. Acceptance checks:
+   - Visiting `/whitepapers` shows all 3 new whitepapers.
+   - Visiting each slug works.
+   - Visiting each `/pdf` route works.
+   - The article page download button routes correctly to the PDF view.
+   - Refreshing any whitepaper page does not 404.
+   - API returns JSON, not HTML.
+   - No TypeScript errors.
+   - No console errors.
+   - Existing whitepapers still work.
+
+Build this cleanly and summarize the changed files when finished.
