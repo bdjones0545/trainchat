@@ -469,11 +469,12 @@ function KnowledgeChainRow({ node }: { node: GoalNode }) {
             >
               {/* Chain flow */}
               <div className="flex items-center flex-wrap gap-2 mb-2.5">
-                {[
-                  { label: chain.physicalQuality, icon: "🎯" },
-                  { label: chain.trainingMethod,   icon: "⚙️" },
-                  { label: chain.product,           icon: "🔧" },
-                ].map((step, si) => (
+                {([
+                  { label: chain.physicalQuality, accent: false },
+                  { label: chain.trainingMethod,   accent: false },
+                  { label: chain.product,           accent: true  },
+                  ...(chain.exercise ? [{ label: chain.exercise, accent: false, exercise: true }] : []),
+                ] as { label: string; accent: boolean; exercise?: boolean }[]).map((step, si) => (
                   <div key={si} className="flex items-center gap-1.5">
                     {si > 0 && (
                       <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} style={{ color: "rgba(255,255,255,0.20)" }}>
@@ -483,14 +484,20 @@ function KnowledgeChainRow({ node }: { node: GoalNode }) {
                     <span
                       className="text-[10px] font-medium px-2 py-0.5 rounded-full"
                       style={{
-                        background: si === 2
+                        background: step.accent
                           ? "hsl(199 89% 48% / 0.10)"
+                          : step.exercise
+                          ? "rgba(74,222,128,0.08)"
                           : "rgba(255,255,255,0.05)",
-                        color: si === 2
+                        color: step.accent
                           ? "hsl(199 89% 60%)"
+                          : step.exercise
+                          ? "rgb(74,222,128)"
                           : "rgba(255,255,255,0.50)",
-                        border: si === 2
+                        border: step.accent
                           ? "1px solid hsl(199 89% 48% / 0.20)"
+                          : step.exercise
+                          ? "1px solid rgba(74,222,128,0.18)"
                           : "1px solid rgba(255,255,255,0.06)",
                       }}
                     >
@@ -547,10 +554,11 @@ function KnowledgeGraphSection() {
             Knowledge Graph
           </h3>
           <p className="text-sm font-semibold" style={{ color: "#d4d4d8" }}>
-            Goal → Quality → Method → Product → Adaptation
+            Goal → Quality → Method → Product →{" "}
+            <span style={{ color: "rgb(74,222,128)" }}>Exercise</span> → Adaptation
           </p>
           <p className="text-[12px] mt-1" style={{ color: "rgba(255,255,255,0.38)" }}>
-            TrainChat understands why tools exist and what they develop. Click any goal to explore the chain.
+            TrainChat understands why tools exist and which exercises to prescribe. Click any goal to explore the full chain.
           </p>
         </div>
       </div>

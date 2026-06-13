@@ -1,0 +1,286 @@
+PHASE 3 — EXERCISE ↔ PRODUCT INTELLIGENCE
+
+Objective
+
+Connect TrainChat’s exercise library to the Performance Intelligence Directory.
+
+Currently TrainChat understands:
+
+Goals
+Physical Qualities
+Training Methods
+Products
+
+TrainChat also understands:
+
+Exercises
+
+However, these systems are not yet connected.
+
+Phase 3 creates the relationship layer between exercises and products so TrainChat can reason about available equipment, substitutions, regressions, progressions, and facility constraints.
+
+This is the phase where Product Intelligence begins influencing programming decisions.
+
+⸻
+
+NEW TABLE
+
+exercise_product_links
+
+Fields:
+
+id
+exercise_id
+product_id
+relationship_type
+priority
+notes
+created_at
+updated_at
+
+relationship_type values:
+
+PRIMARY
+SUPPORTED_BY
+OPTIONAL
+ALTERNATIVE
+SUBSTITUTION
+
+⸻
+
+EXERCISE ENRICHMENT
+
+Extend exercise metadata with:
+
+required_products
+optional_products
+alternative_products
+facility_requirements
+movement_category
+training_method_links
+
+Example:
+
+Resisted Sprint
+
+Required Products:
+Sprint Sled
+
+Optional Products:
+VertiMax
+EXER-GENIE
+
+Alternatives:
+Hill Sprint
+
+Training Methods:
+Acceleration Development
+Horizontal Force Development
+
+⸻
+
+PRODUCT DETAIL EXPANSION
+
+Add a new section:
+
+Related Exercises
+
+Example:
+
+Sprint Sled
+
+Related Exercises:
+
+Resisted Sprint
+Heavy Resisted Sprint
+Acceleration March
+Acceleration Start
+Falling Start Sprint
+
+Selecting an exercise opens the exercise detail view.
+
+⸻
+
+EXERCISE DETAIL EXPANSION
+
+Add a new section:
+
+Compatible Products
+
+Example:
+
+Resisted Sprint
+
+Compatible Products:
+
+Sprint Sled
+VertiMax
+EXER-GENIE
+
+Alternative Methods:
+
+Hill Sprint
+Partner Resisted Sprint
+
+⸻
+
+PROGRAMMING LOGIC FOUNDATION
+
+Create a utility layer:
+
+resolveAvailableEquipment()
+
+Input:
+
+Available Products
+
+Output:
+
+Compatible Exercises
+Compatible Methods
+Recommended Substitutions
+
+Example:
+
+Available Equipment:
+
+Resistance Bands
+Sled
+Trap Bar
+
+TrainChat can prioritize exercises using those products.
+
+⸻
+
+SUBSTITUTION ENGINE
+
+Create structured substitution rules.
+
+Example:
+
+Requested:
+
+Sled Sprint
+
+No Sled Available
+
+Suggested Alternatives:
+
+Hill Sprint
+Band Resisted Sprint
+Acceleration Marches
+
+Each substitution should preserve:
+
+Training Method
+Physical Quality
+Expected Adaptation
+
+⸻
+
+KNOWLEDGE GRAPH EXPANSION
+
+Current:
+
+Goal
+→ Quality
+→ Method
+→ Product
+→ Adaptation
+
+Expand to:
+
+Goal
+→ Quality
+→ Method
+→ Product
+→ Exercise
+→ Adaptation
+
+Example:
+
+Improve First Step
+
+↓
+
+Acceleration
+
+↓
+
+Horizontal Force Development
+
+↓
+
+Sprint Sled
+
+↓
+
+Resisted Sprint
+
+↓
+
+Improved Early Acceleration
+
+⸻
+
+TRAINCHAT CHAT INTEGRATION
+
+When users ask questions involving equipment:
+
+Examples:
+
+“I only have resistance bands.”
+
+“I train at home.”
+
+“I have a trap bar and sled.”
+
+“My school has no force plates.”
+
+TrainChat should use the new exercise-product relationships before generating recommendations.
+
+Programming should become equipment-aware.
+
+⸻
+
+NEW LANDING PAGE SECTION
+
+Equipment-Aware Programming
+
+Show examples:
+
+Goal:
+Improve Acceleration
+
+Available Equipment:
+Sprint Sled
+
+Recommended:
+Resisted Sprint Progression
+
+Goal:
+Improve Acceleration
+
+No Equipment Available
+
+Recommended:
+Hill Sprint Progression
+
+Demonstrate that TrainChat adapts training to available resources.
+
+⸻
+
+SUCCESS CRITERIA
+
+TrainChat can now connect:
+
+Goals
+Physical Qualities
+Methods
+Products
+Exercises
+Adaptations
+
+The agent becomes capable of generating equipment-aware programs, intelligent substitutions, and facility-specific recommendations.
+
+This phase completes the core Performance Intelligence reasoning engine and creates the foundation for future Facility Builder, Product Comparison, and Purchasing Recommendation systems.

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type DirectoryProduct } from "@/data/directory/products";
 import { EXTENDED_PRODUCT_DATA, type ExtendedProductOverride } from "@/data/directory/product-extended";
 import { getMethodsForProduct } from "@/data/directory/training-methods";
+import { PRODUCT_EXERCISE_DATA, type ExerciseLink } from "@/data/directory/exercise-product-links";
 
 // ─── Badge helpers ─────────────────────────────────────────────────────────────
 
@@ -448,6 +449,112 @@ export function ProductDetailDrawer({
               </div>
             </DrawerSection>
           )}
+
+          {/* Related Exercises */}
+          {(() => {
+            const exData = PRODUCT_EXERCISE_DATA[product.name];
+            if (!exData) return null;
+            const primary = exData.relatedExercises.filter((e: ExerciseLink) => e.relationshipType === "PRIMARY");
+            const supported = exData.relatedExercises.filter((e: ExerciseLink) => e.relationshipType === "SUPPORTED_BY");
+            const subs = exData.relatedExercises.filter((e: ExerciseLink) => e.relationshipType === "SUBSTITUTION" || e.relationshipType === "ALTERNATIVE");
+            if (primary.length === 0 && supported.length === 0) return null;
+            return (
+              <DrawerSection title="Related Exercises">
+                <div className="space-y-2">
+                  {primary.map((ex: ExerciseLink) => (
+                    <div
+                      key={ex.name}
+                      className="rounded-lg px-3 py-2.5"
+                      style={{
+                        background: "rgba(14,165,233,0.07)",
+                        border: "1px solid rgba(14,165,233,0.18)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span
+                          className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(14,165,233,0.18)", color: "hsl(199 89% 65%)" }}
+                        >
+                          Primary
+                        </span>
+                        <p className="text-[11px] font-semibold" style={{ color: "#d4d4d8" }}>
+                          {ex.name}
+                        </p>
+                      </div>
+                      {ex.description && (
+                        <p className="text-[10px] mt-1" style={{ color: "rgba(255,255,255,0.38)" }}>
+                          {ex.description}
+                        </p>
+                      )}
+                      {ex.physicalQuality && (
+                        <span
+                          className="inline-block mt-1 text-[9px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.45)" }}
+                        >
+                          {ex.physicalQuality}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {supported.map((ex: ExerciseLink) => (
+                    <div
+                      key={ex.name}
+                      className="rounded-lg px-3 py-2.5"
+                      style={{
+                        background: "rgba(255,255,255,0.04)",
+                        border: "1px solid rgba(255,255,255,0.07)",
+                      }}
+                    >
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span
+                          className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.40)" }}
+                        >
+                          Supported
+                        </span>
+                        <p className="text-[11px] font-semibold" style={{ color: "#d4d4d8" }}>
+                          {ex.name}
+                        </p>
+                      </div>
+                      {ex.description && (
+                        <p className="text-[10px] mt-1" style={{ color: "rgba(255,255,255,0.38)" }}>
+                          {ex.description}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                  {subs.length > 0 && (
+                    <div className="mt-1">
+                      <p
+                        className="text-[9px] font-semibold uppercase tracking-widest mb-2 flex items-center gap-1.5"
+                        style={{ color: "rgba(251,146,60,0.65)" }}
+                      >
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/>
+                        </svg>
+                        No Equipment? Try Instead:
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {subs.map((ex: ExerciseLink) => (
+                          <span
+                            key={ex.name}
+                            className="text-[10px] font-semibold px-2.5 py-1 rounded-full"
+                            style={{
+                              background: "rgba(251,146,60,0.09)",
+                              color: "rgba(251,146,60,0.85)",
+                              border: "1px solid rgba(251,146,60,0.18)",
+                            }}
+                          >
+                            {ex.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </DrawerSection>
+            );
+          })()}
 
           {/* Alternative Products */}
           {extended?.alternatives && extended.alternatives.length > 0 && (
