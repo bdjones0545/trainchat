@@ -1,0 +1,220 @@
+PHASE 1 — PERFORMANCE INTELLIGENCE DIRECTORY (LANDING PAGE)
+
+Objective
+
+Create a new section at the bottom of the TrainChat landing page called “Performance Intelligence Directory.”
+
+The purpose of this section is not e-commerce or product sales.
+
+The purpose is to demonstrate the depth of knowledge available inside TrainChat and reinforce that TrainChat is a specialized performance intelligence platform built for coaches, athletes, and performance professionals.
+
+No AI functionality is required for Phase 1.
+
+No recommendation engine is required for Phase 1.
+
+This is a display and credibility layer only.
+
+⸻
+
+SECTION HEADER
+
+Title:
+Performance Intelligence Directory
+
+Subtitle:
+TrainChat doesn’t just generate workouts.
+
+It understands the equipment, tools, technologies, and systems used throughout the performance industry.
+
+Explore a growing directory of products commonly used by coaches, athletes, rehabilitation specialists, and performance facilities.
+
+⸻
+
+PERFORMANCE INTELLIGENCE STATS BAR
+
+Display a horizontal statistics section:
+
+Performance Intelligence Network
+
+1,500+ Exercises
+150+ Products
+50+ Training Methods
+20+ Sports
+Growing Daily
+
+These values should be configurable and easy to update later.
+
+⸻
+
+CATEGORY GRID
+
+Create a responsive card grid.
+
+Category 1:
+Speed Development
+
+Examples:
+
+* Sprint Sleds
+* Timing Gates
+* Laser Timing Systems
+* Resisted Sprint Devices
+* Overspeed Training Systems
+
+Category 2:
+Strength Development
+
+Examples:
+
+* Trap Bars
+* Safety Squat Bars
+* Belt Squat Systems
+* Flywheel Devices
+* Specialty Bars
+
+Category 3:
+Recovery & Regeneration
+
+Examples:
+
+* Percussion Therapy
+* Compression Systems
+* Recovery Boots
+* Mobility Tools
+* Recovery Platforms
+
+Category 4:
+Monitoring & Assessment
+
+Examples:
+
+* Force Plates
+* Velocity Tracking
+* GPS Monitoring
+* Jump Testing Systems
+* Heart Rate Monitoring
+
+Category 5:
+Conditioning
+
+Examples:
+
+* Air Bikes
+* Ski Ergs
+* Rowers
+* Sled Systems
+* Circuit Equipment
+
+Category 6:
+Mobility & Rehabilitation
+
+Examples:
+
+* Resistance Bands
+* Balance Training
+* Isometric Devices
+* Manual Therapy Tools
+* Corrective Exercise Equipment
+
+⸻
+
+FEATURED PRODUCT CARDS
+
+Below the category grid, display example product cards.
+
+Each card should contain:
+
+Product Name
+
+Category
+
+Primary Use
+
+Best For
+
+Cost Tier
+
+TrainChat Compatible Badge
+
+Example Card:
+
+Product Name:
+Sprint Sled
+
+Category:
+Speed Development
+
+Primary Use:
+Acceleration Training
+
+Best For:
+Football, Hockey, Soccer
+
+Cost Tier:
+$$
+
+Badge:
+✓ Supported By TrainChat
+
+Create at least 8–12 example cards spanning multiple categories.
+
+These are placeholder records for Phase 1.
+
+⸻
+
+DATABASE PREPARATION
+
+Create a product_directory table for future expansion.
+
+Suggested schema:
+
+id
+name
+brand
+category
+subcategory
+description
+primary_use
+sports
+age_groups
+cost_tier
+portability
+equipment_required
+website
+image_url
+is_featured
+created_at
+updated_at
+
+Populate with initial seed data from the categories above.
+
+Target:
+100–150 starter products.
+
+⸻
+
+DESIGN REQUIREMENTS
+
+Match existing TrainChat branding.
+
+Use existing dark theme.
+
+Use existing card styling where possible.
+
+Use subtle hover effects.
+
+Mobile responsive.
+
+No authentication required.
+
+Publicly visible on the landing page.
+
+Position directly above the footer.
+
+⸻
+
+SUCCESS CRITERIA
+
+Users visiting the landing page should immediately understand that TrainChat has a growing performance intelligence knowledge base.
+
+The section should increase credibility, demonstrate domain expertise, and create a foundation for future Product Intelligence features without introducing unnecessary complexity in Phase 1.
