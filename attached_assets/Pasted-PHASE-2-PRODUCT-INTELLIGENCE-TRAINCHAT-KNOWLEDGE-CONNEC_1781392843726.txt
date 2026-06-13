@@ -1,0 +1,304 @@
+PHASE 2 — PRODUCT INTELLIGENCE & TRAINCHAT KNOWLEDGE CONNECTIONS
+
+Objective
+
+Transform the Performance Intelligence Directory from a static catalog into a structured knowledge layer that TrainChat can reason about.
+
+Phase 1 established visibility and credibility.
+
+Phase 2 establishes relationships.
+
+The goal is for TrainChat to understand:
+
+Goal → Physical Quality → Training Method → Product
+
+This phase does NOT require purchasing functionality, affiliate links, or ecommerce.
+
+This phase focuses entirely on knowledge and reasoning.
+
+⸻
+
+CORE OBJECTIVE
+
+Today the directory knows what a product is.
+
+After Phase 2 the system should know:
+
+Why it exists.
+
+What adaptation it develops.
+
+What sports benefit most.
+
+What physical qualities it influences.
+
+What training methods it supports.
+
+⸻
+
+DATABASE EXPANSION
+
+Extend product_directory with the following fields:
+
+training_adaptations
+primary_qualities
+secondary_qualities
+movement_patterns
+energy_systems
+sports_transfer
+research_strength
+evidence_rating
+related_methods
+contraindications
+alternatives
+recommended_budget_level
+
+Examples:
+
+Sprint Sled
+
+Primary Qualities:
+
+* Acceleration
+* Horizontal Force Production
+
+Secondary Qualities:
+
+* Work Capacity
+* Lower Body Power
+
+Movement Patterns:
+
+* Sprint
+* March
+* Acceleration Start
+
+Energy Systems:
+
+* ATP-PC
+
+Research Strength:
+High
+
+Sports Transfer:
+Football
+Hockey
+Soccer
+Lacrosse
+
+⸻
+
+TRAINING METHOD DATABASE
+
+Create a new table:
+
+training_methods
+
+Fields:
+
+id
+name
+category
+description
+primary_goal
+physical_qualities
+supported_products
+related_exercises
+sports
+difficulty_level
+evidence_rating
+created_at
+updated_at
+
+Seed with at least 50 methods.
+
+Examples:
+
+Acceleration Development
+Max Velocity Development
+Repeated Sprint Ability
+Contrast Training
+Cluster Training
+Velocity Based Training
+Isometric Training
+French Contrast
+Elastic Reactive Training
+Repeated Jump Training
+
+⸻
+
+PRODUCT ↔ METHOD RELATIONSHIPS
+
+Create structured links between products and methods.
+
+Example:
+
+Sprint Sled
+
+Supports:
+
+Acceleration Development
+Resisted Sprint Training
+Horizontal Force Development
+
+Timing Gates
+
+Supports:
+
+Sprint Testing
+Speed Monitoring
+Acceleration Assessment
+
+Force Plates
+
+Supports:
+
+Jump Profiling
+Neuromuscular Monitoring
+Readiness Assessment
+
+⸻
+
+DIRECTORY UI ENHANCEMENTS
+
+Product Detail Drawer
+
+When a user clicks a product:
+
+Display:
+
+Description
+
+Primary Use
+
+Training Adaptations
+
+Primary Qualities
+
+Secondary Qualities
+
+Movement Patterns
+
+Sports Transfer
+
+Research Strength
+
+Supported Training Methods
+
+Alternative Products
+
+TrainChat Use Cases
+
+⸻
+
+TRAINCHAT USE CASE SECTION
+
+Each product should generate example prompts.
+
+Example:
+
+Sprint Sled
+
+Ask TrainChat:
+
+“How can I use a sled to improve acceleration?”
+
+“Create a 6-week acceleration program using a sled.”
+
+“What sled loads should I use for hockey athletes?”
+
+“How does sled training compare to hill sprints?”
+
+These prompts should be generated dynamically.
+
+⸻
+
+KNOWLEDGE GRAPH FOUNDATION
+
+Create relationship structures that allow future expansion.
+
+Goal
+
+↓
+
+Physical Quality
+
+↓
+
+Training Method
+
+↓
+
+Product
+
+↓
+
+Expected Adaptation
+
+Example:
+
+Improve First Step
+
+↓
+
+Acceleration
+
+↓
+
+Horizontal Force Development
+
+↓
+
+Sprint Sled
+
+↓
+
+Faster Initial Sprint Performance
+
+This relationship structure should be stored and queryable.
+
+⸻
+
+CATEGORY LANDING IMPROVEMENTS
+
+Each category card should display:
+
+Product Count
+
+Training Method Count
+
+Most Common Physical Qualities
+
+Example:
+
+Speed Development
+
+25 Products
+
+12 Training Methods
+
+Acceleration
+Max Velocity
+Reactive Speed
+
+⸻
+
+PHASE 2 SUCCESS CRITERIA
+
+A visitor should immediately understand:
+
+TrainChat is not simply a workout generator.
+
+TrainChat understands performance tools, training methods, and the relationships between them.
+
+Internally, TrainChat should now have enough structured information to begin recommending products and methods based on goals in future phases.
+
+This phase creates the foundation for:
+
+Phase 3 — Exercise ↔ Product Intelligence
+
+Phase 4 — Facility Builder
+
+Phase 5 — Product Comparison Engine
+
+Phase 6 — Performance Knowledge Graph
