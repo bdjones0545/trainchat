@@ -24,3 +24,4 @@ export * from "./research";
 export * from "./atlas-memories";
 export * from "./external-api";
 export * from "./whitepapers";
+export * from "./product-directory";

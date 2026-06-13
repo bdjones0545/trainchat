@@ -6,6 +6,7 @@ import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId, t
 import { GuestPaywallModal } from "@/components/GuestPaywallModal";
 import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { stripProgramJson, extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
+import { PerformanceIntelligenceDirectory } from "@/components/directory/PerformanceIntelligenceDirectory";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -675,8 +676,12 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
   const canSend = inputText.trim().length > 0 && !isTyping;
 
   return (
-    /* 100dvh instead of 100vh — accounts for Safari's collapsible address bar */
-    <div className="flex flex-col" style={{ background: "hsl(222 47% 7%)", height: "100dvh" }}>
+    /* Outer wrapper is scrollable so the directory section below the chat is reachable.
+       The inner chat section is pinned to 100dvh so it still fills the viewport on load. */
+    <div className="flex flex-col" style={{ background: "hsl(222 47% 6%)", overflowY: "auto", overflowX: "hidden" }}>
+
+      {/* ── Hero section — fills the viewport on first load ──────────────────── */}
+      <div className="flex flex-col flex-shrink-0" style={{ height: "100dvh" }}>
 
       {/* ── Top nav — tight, touch-friendly ────────────────────────────────── */}
       <div
@@ -910,6 +915,58 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
           </div>
         </div>
       </div>
+
+      </div>{/* end hero section */}
+
+      {/* ── Performance Intelligence Directory — scrolls below the chat ──────── */}
+      <PerformanceIntelligenceDirectory />
+
+      {/* ── Footer ───────────────────────────────────────────────────────────── */}
+      <footer
+        className="px-6 py-8 text-center"
+        style={{
+          borderTop: "1px solid hsl(220 20% 12%)",
+          background: "hsl(222 47% 5%)",
+        }}
+      >
+        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <img src={logoSrc} alt="TrainChat" className="h-4 opacity-60" />
+            <span className="text-[11px]" style={{ color: "rgba(255,255,255,0.25)" }}>
+              © {new Date().getFullYear()} TrainChat
+            </span>
+          </div>
+          <div className="flex items-center gap-4">
+            <a
+              href="/privacy"
+              className="text-[11px] transition-colors"
+              style={{ color: "rgba(255,255,255,0.28)" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.60)")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.28)")}
+            >
+              Privacy
+            </a>
+            <a
+              href="/terms"
+              className="text-[11px] transition-colors"
+              style={{ color: "rgba(255,255,255,0.28)" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.60)")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.28)")}
+            >
+              Terms
+            </a>
+            <a
+              href="/about"
+              className="text-[11px] transition-colors"
+              style={{ color: "rgba(255,255,255,0.28)" }}
+              onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.60)")}
+              onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.color = "rgba(255,255,255,0.28)")}
+            >
+              About
+            </a>
+          </div>
+        </div>
+      </footer>
 
       {/* ── Paywall modal ────────────────────────────────────────────────── */}
       {showPaywall && (
