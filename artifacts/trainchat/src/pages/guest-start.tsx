@@ -9,6 +9,7 @@ import { stripProgramJson, extractProgramData, isProgramFragment } from "@/lib/e
 import { PerformanceIntelligenceDirectory } from "@/components/directory/PerformanceIntelligenceDirectory";
 import { EquipmentAwareProgramming } from "@/components/directory/EquipmentAwareProgramming";
 import { AssessmentIntelligence } from "@/components/directory/AssessmentIntelligence";
+import { HowTrainChatThinks } from "@/components/directory/HowTrainChatThinks";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -928,6 +929,9 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
 
       {/* ── Assessment Intelligence ──────────────────────────────────────────── */}
       <AssessmentIntelligence />
+
+      {/* ── How TrainChat Thinks — Phase 5 Program Intelligence ───────────── */}
+      <HowTrainChatThinks />
 
       {/* ── Footer ───────────────────────────────────────────────────────────── */}
       <footer

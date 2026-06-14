@@ -1,0 +1,419 @@
+PHASE 5 — PROGRAM INTELLIGENCE ENGINE
+
+Objective
+
+Connect the entire Performance Intelligence System directly to TrainChat program generation.
+
+Current State
+
+TrainChat understands:
+
+Assessments
+Physical Qualities
+Training Methods
+Products
+Exercises
+Expected Adaptations
+
+However, these systems primarily exist as knowledge layers.
+
+Phase 5 transforms the knowledge graph into an active decision-making engine that influences program architecture, exercise selection, progressions, regressions, and coaching explanations.
+
+This phase should make program generation measurably smarter.
+
+⸻
+
+CORE OBJECTIVE
+
+Move from:
+
+Goal
+→ Program
+
+To:
+
+Assessment
++
+Goal
++
+Sport
++
+Position
++
+Equipment
++
+Constraints
++
+Knowledge Graph
+
+↓
+
+Performance Profile
+
+↓
+
+Program Architecture
+
+↓
+
+Exercise Selection
+
+↓
+
+Progressions
+
+↓
+
+Expected Adaptations
+
+⸻
+
+NEW PERFORMANCE PROFILE ENGINE
+
+Create:
+
+buildPerformanceProfile()
+
+Inputs:
+
+Goals
+Sport
+Position
+Age
+Training Age
+Available Equipment
+Assessment Results
+Pain/Injury Constraints
+Session Frequency
+Session Duration
+
+Outputs:
+
+Priority Qualities
+Limiting Factors
+Recommended Methods
+Equipment Opportunities
+Recommended Exercise Pool
+Risk Factors
+Expected Adaptations
+
+Example Output:
+
+Priority Qualities
+
+1. Acceleration
+2. Reactive Strength
+3. Lower Body Max Strength
+
+Limiting Factors
+
+* Poor horizontal force production
+* Low RSI
+
+Recommended Methods
+
+* Resisted Sprint Development
+* Reactive Plyometric Development
+
+⸻
+
+PERFORMANCE PROFILE DATABASE
+
+Create:
+
+performance_profiles
+
+Fields:
+
+id
+user_id
+generated_at
+priority_qualities
+limiting_factors
+recommended_methods
+recommended_products
+recommended_exercises
+risk_factors
+expected_adaptations
+source_assessments
+version
+
+Profiles should be regeneratable whenever assessments change.
+
+⸻
+
+PROGRAM JUSTIFICATION ENGINE
+
+Create:
+
+generateExerciseReason()
+
+Every exercise included in a program should have a structured explanation.
+
+Example:
+
+Exercise:
+Heavy Resisted Sprint
+
+Reason:
+
+Selected because 10-Yard Sprint testing identified deficits in horizontal force production.
+
+Method:
+
+Acceleration Development
+
+Expected Adaptation:
+
+Improved first-step acceleration.
+
+⸻
+
+QUALITY PRIORITIZATION ENGINE
+
+Create:
+
+prioritizePerformanceQualities()
+
+Inputs:
+
+Goals
+Sport
+Position
+Assessment Results
+
+Outputs:
+
+Ranked Qualities
+
+Example:
+
+Priority 1
+Acceleration
+
+Priority 2
+Reactive Strength
+
+Priority 3
+Max Strength
+
+Priority 4
+Conditioning
+
+The generator should prioritize exercises and methods based on these rankings.
+
+⸻
+
+LIMITING FACTOR DETECTION
+
+Create:
+
+identifyLimitingFactors()
+
+Examples:
+
+Slow 10-Yard Sprint
+
+↓
+
+Horizontal Force Production Deficit
+
+Low RSI
+
+↓
+
+Reactive Strength Deficit
+
+Poor Ankle Mobility
+
+↓
+
+Force Transfer Limitation
+
+The system should automatically surface bottlenecks.
+
+⸻
+
+METHOD SELECTION ENGINE
+
+Create:
+
+selectTrainingMethods()
+
+Inputs:
+
+Priority Qualities
+Limiting Factors
+Available Equipment
+Training Age
+
+Outputs:
+
+Recommended Methods
+
+Ranked by confidence score.
+
+Example:
+
+Acceleration Development
+Confidence: 95%
+
+Reactive Plyometrics
+Confidence: 91%
+
+Heavy Strength Development
+Confidence: 88%
+
+⸻
+
+EXERCISE POOL GENERATION
+
+Create:
+
+buildExercisePool()
+
+Inputs:
+
+Selected Methods
+Equipment
+Constraints
+
+Outputs:
+
+Tier 1 Exercises
+Tier 2 Exercises
+Substitutions
+Regression Options
+Progression Options
+
+This pool should drive final program generation.
+
+⸻
+
+EXPECTED ADAPTATION FORECASTING
+
+Create:
+
+forecastAdaptations()
+
+Outputs:
+
+Primary Adaptations
+Secondary Adaptations
+
+Example:
+
+Primary:
+
+Improve 10-Yard Sprint Performance
+
+Secondary:
+
+Improve Horizontal Force Production
+Improve First-Step Power
+
+These should be visible inside generated programs.
+
+⸻
+
+PROGRAM INTELLIGENCE UI
+
+Create a new expandable section:
+
+Program Intelligence
+
+Visible inside generated programs.
+
+Display:
+
+Performance Profile
+
+Priority Qualities
+
+Limiting Factors
+
+Selected Methods
+
+Exercise Selection Rationale
+
+Expected Adaptations
+
+Confidence Scores
+
+⸻
+
+PROGRAM EXPLANATION MODE
+
+Users should be able to ask:
+
+Why was this exercise selected?
+
+Why is this method being used?
+
+What weakness is TrainChat trying to improve?
+
+What adaptation is expected?
+
+Responses should use the Program Intelligence Engine.
+
+⸻
+
+LANDING PAGE ADDITION
+
+Add a new section:
+
+How TrainChat Thinks
+
+Interactive chain:
+
+Assessment
+
+↓
+
+Limiting Factor
+
+↓
+
+Priority Quality
+
+↓
+
+Training Method
+
+↓
+
+Exercise Selection
+
+↓
+
+Expected Adaptation
+
+Include multiple real examples.
+
+⸻
+
+SUCCESS CRITERIA
+
+TrainChat should no longer simply generate workouts.
+
+It should:
+
+Diagnose
+
+Prioritize
+
+Reason
+
+Select Methods
+
+Select Exercises
+
+Explain Decisions
+
+Forecast Adaptations
+
+Every exercise should have a measurable reason for being included.
+
+The knowledge graph should actively influence program generation rather than simply existing as a reference layer.
+
+This phase establishes TrainChat as a true performance intelligence system rather than a traditional workout generator.

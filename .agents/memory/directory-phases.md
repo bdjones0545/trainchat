@@ -1,6 +1,6 @@
 ---
-name: Performance Intelligence Directory — Phases 1–4
-description: Tracks the build state of the guest-start page Performance Intelligence Directory feature across four phases.
+name: Performance Intelligence Directory — Phases 1–5
+description: Tracks the build state of the guest-start page Performance Intelligence Directory feature across five phases.
 ---
 
 ## Phase 1 — Static Catalog (complete)
@@ -80,3 +80,56 @@ Assessment → Quality → Method → Exercise → Adaptation (replaces/extends 
 
 ### Seed script
 - `artifacts/api-server/scripts/seed-assessments.ts` — idempotent seeder for all 5 assessment tables
+
+## Phase 5 — Program Intelligence Engine (complete)
+
+### Architecture
+Assessment + Goal + Sport + Equipment + Constraints + Knowledge Graph → Performance Profile → Program Architecture → Exercise Selection → Progressions → Expected Adaptations
+
+### Backend engine (pure TS, no AI/DB required at runtime)
+- `artifacts/api-server/src/lib/performance-intelligence/index.ts`
+  - `prioritizePerformanceQualities(input)` — ranks qualities from goal + sport + assessments (with confidence scores)
+  - `identifyLimitingFactors(qualities, assessments)` — maps deficits → bottlenecks with severity
+  - `selectTrainingMethods(qualities, factors, input)` — ranked methods with confidence %
+  - `buildExercisePool(methods, qualities, constraints)` — tiered pool (Tier1/Tier2/substitutions/progressions/regressions)
+  - `forecastAdaptations(goal, qualities, methods)` — primary + secondary adaptations + timeline
+  - `generateExerciseReason(exercise, profile)` — structured exercise justification
+  - `buildPerformanceProfile(input)` — orchestrator: runs all sub-engines, returns full `PerformanceProfile`
+  - `buildPerformanceProfilePromptSection(profile)` — compact system prompt section (~1000 chars) for AI injection
+
+### DB
+- `performance_profiles` table — stores generated profiles per user/system (created via direct SQL)
+- `lib/db/src/schema/performance-profiles.ts` — Drizzle schema
+- Exported from `lib/db/src/schema/index.ts`
+
+### AI injection (BUILD paths only)
+- `artifacts/api-server/src/lib/ai.ts` — `buildPerformanceProfile()` called for `isBuildIntent && profile` at line ~3336
+- Output added to `extras` array → injected into system prompt so AI selects exercises with performance reasoning
+- Logs: `[PerformanceIntelligence] Profile injected into build prompt`
+
+### API route
+- `artifacts/api-server/src/routes/performance-profile.ts`
+  - `GET /api/performance-profile?systemId=N` — fetch stored profile, or generate on-demand from user profile
+  - `POST /api/performance-profile/regenerate` — force regeneration with assessment inputs
+
+### Frontend
+- `artifacts/trainchat/src/lib/performanceIntelligenceTypes.ts` — frontend mirror of engine types
+- `artifacts/trainchat/src/components/chat/ProgramIntelligencePanel.tsx`
+  - 5 sub-tabs: Qualities | Limiters | Methods | Forecast | Why?
+  - Confidence meter, ranked quality bars, limiting factor severity badges, method confidence bars
+  - Fetches from `/api/performance-profile`
+- `artifacts/trainchat/src/components/chat/LiveProgramPanel.tsx`
+  - Added `"intelligence"` to `Tab` type
+  - Added "Intelligence" tab to tabs array (6th tab, Brain icon)
+  - Renders `ProgramIntelligencePanel` with `hasActiveSystem` + `trainingSystemId` props
+- `artifacts/trainchat/src/components/directory/HowTrainChatThinks.tsx`
+  - 5 interactive example chains: Acceleration Deficit, Reactive Strength Gap, Maximal Strength Base, Aerobic Ceiling, Movement Quality Gap
+  - Each chain: Assessment → Limiting Factor → Priority Quality → Method → Exercise → Expected Adaptation
+  - Hover reveals reasoning detail for each step
+- `artifacts/trainchat/src/pages/guest-start.tsx` — `HowTrainChatThinks` inserted after `AssessmentIntelligence`
+
+**Key design decisions:**
+- Engine is pure TS with embedded knowledge maps — zero latency, no AI cost
+- Profile generated on BUILD paths only (no edit/guidance overhead)
+- Frontend tab fetches from API (not coupled to program JSON parsing)
+- Pre-existing typecheck errors in conversations.ts/LiveProgramPanel.tsx/FeedbackModal.tsx predate Phase 5 — do not fix as part of this phase

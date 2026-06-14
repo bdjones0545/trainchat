@@ -31,6 +31,7 @@ import ProgramShareModal from "@/components/share/ProgramShareModal";
 import { handleTrainingSystemMutationResult } from "@/lib/trainingMutationHelper";
 import { ProgramVoiceTextInput } from "@/components/ui/ProgramVoiceTextInput";
 import { LaserScanLine, PrecisionGlowLine } from "@/components/laser-skill";
+import { ProgramIntelligencePanel } from "./ProgramIntelligencePanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -130,7 +131,7 @@ interface Props {
   onOpenAthleteProfile?: () => void;
 }
 
-type Tab = "program" | "changes" | "history" | "forecast" | "adapted";
+type Tab = "program" | "changes" | "history" | "forecast" | "adapted" | "intelligence";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -3960,11 +3961,12 @@ export default function LiveProgramPanel({
   }
 
   const tabs: { id: Tab; label: string; subtitle: string; icon: React.ElementType }[] = [
-    { id: "program", label: "Program", subtitle: "Current build · live", icon: Dumbbell },
-    { id: "adapted", label: "Adapted", subtitle: "What your system changed", icon: RefreshCw },
-    { id: "changes", label: "Changes", subtitle: "What changed & why", icon: Activity },
-    { id: "history", label: "History", subtitle: "How it evolved", icon: GitBranch },
-    { id: "forecast", label: "Forecast", subtitle: "What's coming next", icon: Zap },
+    { id: "program",       label: "Program",       subtitle: "Current build · live",        icon: Dumbbell  },
+    { id: "adapted",       label: "Adapted",       subtitle: "What your system changed",    icon: RefreshCw },
+    { id: "changes",       label: "Changes",        subtitle: "What changed & why",          icon: Activity  },
+    { id: "history",       label: "History",        subtitle: "How it evolved",              icon: GitBranch },
+    { id: "forecast",      label: "Forecast",       subtitle: "What's coming next",          icon: Zap       },
+    { id: "intelligence",  label: "Intelligence",   subtitle: "How your program was built",  icon: Brain     },
   ];
 
   const activeTabMeta = tabs.find((t) => t.id === activeTab);
@@ -4244,6 +4246,12 @@ export default function LiveProgramPanel({
           ) : (
             <CoachForecast onSendMessage={onSendMessage} />
           )
+        )}
+        {activeTab === "intelligence" && (
+          <ProgramIntelligencePanel
+            hasActiveSystem={hasActiveSystem}
+            trainingSystemId={trainingSystemId}
+          />
         )}
       </div>
     </div>

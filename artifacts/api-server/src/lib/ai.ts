@@ -125,6 +125,11 @@ import {
   logSystemBrainAudit,
   detectLeakageRisk,
 } from "../agents/trainchat-constitution";
+import {
+  buildPerformanceProfile,
+  buildPerformanceProfilePromptSection,
+  type PerformanceProfileInput,
+} from "./performance-intelligence/index";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -3321,7 +3326,42 @@ DENSITY RULE — NON-NEGOTIABLE:
 
   const failSafePrompt = failSafeResolution ? buildFailSafePromptSection(failSafeResolution) : null;
 
-  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, failSafePrompt, agentIntentProfileSection, responsePolicySection, architectureBriefText, buildThresholdSection, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
+  // ── Performance Intelligence Profile (Phase 5) ─────────────────────────────
+  // Generated on BUILD paths from the user's goal, sport, equipment, and any
+  // assessment results. Injected as a compact prompt section so the AI selects
+  // exercises with performance reasoning rather than generic workout logic.
+  let performanceProfileContext: string | null = null;
+  if (isBuildIntent && profile) {
+    try {
+      const perfInput: PerformanceProfileInput = {
+        goal: profile.trainingGoal ?? "general_fitness",
+        sport: extractedConstraints?.sportFocus ?? profile.sportFocus ?? null,
+        trainingAge: profile.experienceLevel ?? null,
+        availableEquipment: profile.equipmentAccess ?? null,
+        focusMode: focusMode ?? null,
+        sessionFrequency: profile.daysPerWeek ?? null,
+      };
+      const perfProfile = buildPerformanceProfile(perfInput);
+      performanceProfileContext = buildPerformanceProfilePromptSection(perfProfile);
+
+      logger.info(
+        {
+          goal: perfInput.goal,
+          sport: perfInput.sport,
+          focusMode: perfInput.focusMode,
+          topQuality: perfProfile.priorityQualities[0]?.quality ?? "n/a",
+          topMethod: perfProfile.recommendedMethods[0]?.method ?? "n/a",
+          confidence: perfProfile.confidence,
+        },
+        "[PerformanceIntelligence] Profile injected into build prompt"
+      );
+    } catch (perfErr) {
+      const errMsg = perfErr instanceof Error ? perfErr.message : String(perfErr);
+      logger.warn({ errMsg }, "[PerformanceIntelligence] Failed to build performance profile — continuing without it");
+    }
+  }
+
+  const extras = [filteredFocusModeContext, filteredFocusModeAdaptationContext, behaviorInstructions, profileFillContext, adaptationContext, memoryContext, sessionSportOverride, filteredInsightHint, filteredConversionHint, intentHint, editContext, specialistContextHint, preservationContext, constraintContract, failSafePrompt, agentIntentProfileSection, responsePolicySection, architectureBriefText, performanceProfileContext, buildThresholdSection, transformHint, responseModePrompt, neuralContext ?? null, uiContextSection, buildCompactInstruction]
     .filter(Boolean)
     .join("\n\n");
   const systemPrompt = extras ? `${enrichedBasePrompt}\n\n${extras}` : enrichedBasePrompt;

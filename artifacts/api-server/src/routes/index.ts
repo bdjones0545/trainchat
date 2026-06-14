@@ -38,6 +38,7 @@ import externalRouter from "./external";
 import whitepaperAdminRouter from "./whitepapers-admin";
 import whitepaperPublicRouter from "./whitepapers-public";
 import metaCapiRouter from "./meta-capi";
+import performanceProfileRouter from "./performance-profile";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -90,5 +91,6 @@ router.use(externalRouter);
 router.use(whitepaperAdminRouter);
 router.use(whitepaperPublicRouter);
 router.use(metaCapiRouter);
+router.use(performanceProfileRouter);
 
 export default router;
