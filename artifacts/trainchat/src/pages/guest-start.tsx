@@ -8,6 +8,7 @@ import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.
 import { stripProgramJson, extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
 import { PerformanceIntelligenceDirectory } from "@/components/directory/PerformanceIntelligenceDirectory";
 import { EquipmentAwareProgramming } from "@/components/directory/EquipmentAwareProgramming";
+import { AssessmentIntelligence } from "@/components/directory/AssessmentIntelligence";
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 
@@ -924,6 +925,9 @@ export default function GuestStart({ userMode }: { userMode: UserMode }) {
 
       {/* ── Equipment-Aware Programming ─────────────────────────────────────── */}
       <EquipmentAwareProgramming />
+
+      {/* ── Assessment Intelligence ──────────────────────────────────────────── */}
+      <AssessmentIntelligence />
 
       {/* ── Footer ───────────────────────────────────────────────────────────── */}
       <footer
