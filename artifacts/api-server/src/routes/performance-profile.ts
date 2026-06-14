@@ -5,6 +5,7 @@ import { userProfilesTable } from "@workspace/db";
 import { eq, and, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
 import { buildPerformanceProfile } from "../lib/performance-intelligence/index";
+import { buildResearchIntelligenceApiResponse } from "../lib/research-intelligence/index.js";
 
 const router = Router();
 

@@ -1,14 +1,26 @@
 // ─── Performance Intelligence Engine ─────────────────────────────────────────
 //
 // Phase 5 — Program Intelligence Engine
+// Phase 7 — Research Intelligence Integration
 //
 // Transforms raw athlete context (goals, sport, position, assessments, equipment)
 // into a structured Performance Profile that drives program architecture,
 // exercise selection, and coaching explanations.
 //
+// Phase 7 upgrades single-number method confidence to a multi-dimensional
+// Research Confidence Score:
+//   ProfileMatch × ResearchSupport × PopulationTransfer × AdaptationRelevance
+//
 // All functions are pure (no DB or AI calls). The engine is called on BUILD
 // paths in ai.ts and the output is injected into the system prompt + API.
 // ─────────────────────────────────────────────────────────────────────────────
+
+import {
+  applyResearchIntelligence,
+  buildResearchIntelligencePromptSection,
+  buildResearchIntelligenceApiResponse,
+} from "../research-intelligence/index.js";
+import type { ResearchConfidenceScore, ResearchIntelligenceOutput } from "../research-intelligence/index.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +63,12 @@ export interface RankedMethod {
   confidence: number;
   targetQuality: string;
   rationale: string;
+  /** Phase 7 — multi-dimensional research confidence breakdown */
+  researchConfidence?: ResearchConfidenceScore;
+  /** Phase 7 — short evidence summary */
+  evidenceSummary?: string;
+  /** Phase 7 — whether contradictory evidence exists for key claims */
+  hasContradictions?: boolean;
 }
 
 export interface ExercisePool {
@@ -90,6 +108,8 @@ export interface PerformanceProfile {
   exerciseRationale: ExerciseReason[];
   confidence: number;
   version: number;
+  /** Phase 7 — Research Intelligence Layer output. Populated after research layer runs. */
+  researchIntelligence?: ResearchIntelligenceOutput;
 }
 
 // ─── Knowledge Base ───────────────────────────────────────────────────────────
@@ -864,10 +884,35 @@ export function buildPerformanceProfile(input: PerformanceProfileInput): Perform
   const equipmentOpportunities = deriveEquipmentOpportunities(priorityQualities, recommendedMethods);
   const riskFactors = deriveRiskFactors(input, limitingFactors);
 
-  // Generate overall confidence score
+  // ─── Phase 7: Apply Research Intelligence Layer ────────────────────────────
+  // Upgrade single-number method confidence to multi-dimensional research scores.
+  const researchIntelligence = applyResearchIntelligence({
+    goal: input.goal,
+    sport: input.sport,
+    age: input.age,
+    trainingAge: input.trainingAge,
+    methods: recommendedMethods,
+    priorityQualities: priorityQualities.map((q) => ({ quality: q.quality, score: q.score })),
+    tier1Exercises: recommendedExercisePool.tier1,
+  });
+
+  // Merge research-enhanced confidence back into methods
+  const researchEnhancedMethods: RankedMethod[] = recommendedMethods.map((m) => {
+    const enhanced = researchIntelligence.methods.find((rm) => rm.method === m.method);
+    if (!enhanced) return m;
+    return {
+      ...m,
+      confidence: enhanced.confidence,
+      researchConfidence: enhanced.researchConfidence,
+      evidenceSummary: enhanced.evidenceSummary,
+      hasContradictions: enhanced.hasContradictions,
+    };
+  });
+
+  // Generate overall confidence score — now research-weighted
   const confidence = Math.round(
-    (priorityQualities.slice(0, 3).reduce((sum, q) => sum + q.score, 0) / 3) * 0.85 +
-    (recommendedMethods.slice(0, 2).reduce((sum, m) => sum + m.confidence, 0) / 2) * 0.15
+    (priorityQualities.slice(0, 3).reduce((sum, q) => sum + q.score, 0) / 3) * 0.70 +
+    researchIntelligence.systemConfidence * 0.30
   );
 
   const profile: PerformanceProfile = {
@@ -876,14 +921,15 @@ export function buildPerformanceProfile(input: PerformanceProfileInput): Perform
     focusMode: input.focusMode ?? null,
     priorityQualities,
     limitingFactors,
-    recommendedMethods,
+    recommendedMethods: researchEnhancedMethods,
     equipmentOpportunities,
     recommendedExercisePool,
     riskFactors,
     expectedAdaptations,
     exerciseRationale: [],
     confidence: Math.min(99, confidence),
-    version: 1,
+    version: 2, // v2: research-intelligence integrated
+    researchIntelligence,
   };
 
   // Generate rationale for tier-1 exercises
@@ -953,7 +999,13 @@ export function buildPerformanceProfilePromptSection(profile: PerformanceProfile
 
   const methodsList = profile.recommendedMethods
     .slice(0, 3)
-    .map((m) => `  • ${m.method} (Confidence: ${m.confidence}%) → targets ${m.targetQuality}`)
+    .map((m) => {
+      const breakdown = m.researchConfidence
+        ? ` [Match:${m.researchConfidence.profileMatch} | Research:${m.researchConfidence.researchSupport} | Transfer:${m.researchConfidence.populationTransfer}]`
+        : "";
+      const contradictionFlag = m.hasContradictions ? " ⚠ mixed evidence" : "";
+      return `  • ${m.method} (Confidence: ${m.confidence}%)${breakdown}${contradictionFlag} → targets ${m.targetQuality}`;
+    })
     .join("\n");
 
   const adaptationsList = profile.expectedAdaptations.primary
@@ -965,9 +1017,14 @@ export function buildPerformanceProfilePromptSection(profile: PerformanceProfile
     .slice(0, 5)
     .join(", ");
 
+  // Phase 7 — include research intelligence section when available
+  const researchSection = profile.researchIntelligence
+    ? "\n" + buildResearchIntelligencePromptSection(profile.researchIntelligence)
+    : "";
+
   return `
 ══════════════════════════════════════════
-PERFORMANCE INTELLIGENCE PROFILE (Phase 5)
+PERFORMANCE INTELLIGENCE PROFILE (v2 — Research-Backed)
 ══════════════════════════════════════════
 
 The following analysis has been computed from the athlete's goals, sport, training age, and
@@ -980,7 +1037,7 @@ ${qualitiesList}
 IDENTIFIED LIMITING FACTORS:
 ${factorsList || "  • No specific deficits identified — build from goal-based quality priorities"}
 
-RECOMMENDED TRAINING METHODS:
+RECOMMENDED TRAINING METHODS (research-weighted confidence):
 ${methodsList}
 
 EVIDENCE-BASED EXERCISE POOL (Tier 1):
@@ -988,12 +1045,13 @@ EVIDENCE-BASED EXERCISE POOL (Tier 1):
 
 EXPECTED ADAPTATIONS:
 ${adaptationsList}
-
+${researchSection}
 EXERCISE SELECTION DIRECTIVE:
 When building the program, prioritize Tier 1 exercises from the pool above. For every
-included exercise, you must reference the quality it targets and the expected adaptation.
-This system reasons from performance data — not just preferences. If the user asks "why
-was this exercise selected?", respond using this intelligence profile.
+included exercise, reference the quality it targets and the expected adaptation.
+When a method has ⚠ mixed evidence, acknowledge uncertainty rather than false consensus.
+Confidence breakdowns: Performance Match | Research Support | Population Transfer.
+If the user asks "why was this exercise selected?", respond using this intelligence profile.
 ══════════════════════════════════════════`.trim();
 }
 

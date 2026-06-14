@@ -16,11 +16,28 @@ export interface LimitingFactor {
   sourceAssessment?: string;
 }
 
+/** Phase 7 — multi-dimensional research confidence breakdown */
+export interface ResearchConfidenceScore {
+  profileMatch: number;
+  researchSupport: number;
+  populationTransfer: number;
+  adaptationRelevance: number;
+  composite: number;
+  evidenceStrength: string;
+  evidenceLevel: string;
+}
+
 export interface RankedMethod {
   method: string;
   confidence: number;
   targetQuality: string;
   rationale: string;
+  /** Phase 7 — multi-dimensional research confidence breakdown */
+  researchConfidence?: ResearchConfidenceScore;
+  /** Phase 7 — short evidence summary sentence */
+  evidenceSummary?: string;
+  /** Phase 7 — whether contradictory evidence exists */
+  hasContradictions?: boolean;
 }
 
 export interface ExercisePool {
@@ -46,6 +63,34 @@ export interface AdaptationForecast {
   timeline: string;
 }
 
+/** Phase 7 — research intelligence output surfaced in the API response */
+export interface ResearchIntelligenceOutput {
+  methods: Array<{
+    method: string;
+    targetQuality: string;
+    rationale: string;
+    confidence: number;
+    researchConfidence: ResearchConfidenceScore;
+    evidenceSummary: string;
+    evidenceStrength: string;
+    hasContradictions: boolean;
+  }>;
+  exerciseJustifications: Array<{
+    exercise: string;
+    primaryMechanism: string;
+    evidenceLevel: string;
+    transferNotes: string;
+    contradictions?: string;
+  }>;
+  adaptationTimelines: Array<{ adaptation: string; timeline: string }>;
+  populationContext: {
+    athletePopulation: string;
+    populationLabel: string;
+  };
+  systemConfidence: number;
+  evidenceQualityNote: string;
+}
+
 export interface PerformanceProfile {
   goal: string;
   sport: string | null;
@@ -60,4 +105,6 @@ export interface PerformanceProfile {
   exerciseRationale: ExerciseReason[];
   confidence: number;
   version: number;
+  /** Phase 7 — research intelligence layer output */
+  researchIntelligence?: ResearchIntelligenceOutput;
 }

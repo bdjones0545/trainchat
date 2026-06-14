@@ -1,0 +1,396 @@
+TrainChat Research Intelligence Engine
+
+Context
+
+We have already built:
+
+- Product Intelligence Directory
+- Exercise Intelligence Layer
+- Performance Intelligence Engine
+- Training Method Selection Engine
+- Adaptation Forecasting System
+
+I do NOT want to continue prioritizing product expansion.
+
+The next major objective is to transform TrainChat from a product directory into a research-backed performance intelligence platform.
+
+The goal is to create a Research Intelligence Engine that helps TrainChat reason from scientific evidence when selecting training methods, forecasting adaptations, prioritizing performance qualities, and explaining exercise selection.
+
+Desired reasoning flow:
+
+Assessment + Goal + Sport + Constraints
+↓
+Performance Profile
+↓
+Research Intelligence Layer
+↓
+Training Method Selection
+↓
+Exercise Selection
+↓
+Adaptation Forecast
+
+NOT:
+
+Goal
+↓
+Exercise List
+
+==================================================
+PHASE 1 — RESEARCH INTELLIGENCE FOUNDATION
+==================================================
+
+Create a new module:
+
+api-server/src/lib/research-intelligence/
+
+Suggested files:
+
+research-engine.ts
+research-taxonomy.ts
+research-confidence.ts
+adaptation-timelines.ts
+population-transfer.ts
+research-justifications.ts
+evidence-models.ts
+
+Create foundational types:
+
+ResearchStudy
+ResearchFinding
+TrainingMethodEvidence
+AdaptationEvidence
+PopulationEvidence
+EvidenceStrength
+EvidenceLevel
+TransferConfidence
+ResearchConfidenceScore
+
+Design for future scalability.
+
+This system must eventually support:
+
+- Meta analyses
+- Systematic reviews
+- Position stands
+- Consensus statements
+- Individual studies
+
+Do not hardcode around individual papers.
+
+Build abstractions.
+
+==================================================
+PHASE 2 — TRAINING METHOD EVIDENCE GRAPH
+==================================================
+
+Create a Training Method Evidence Graph.
+
+Structure:
+
+Training Method
+↓
+Supported Adaptations
+↓
+Evidence Strength
+↓
+Population Support
+↓
+Expected Timeline
+↓
+Confidence Score
+
+Example:
+
+{
+  method: "Resisted Sprint Training",
+
+  supportedAdaptations: [
+    "Acceleration",
+    "Horizontal Force Production"
+  ],
+
+  evidenceStrength: "strong",
+
+  confidence: 92,
+
+  timelineWeeks: {
+    minimum: 4,
+    expected: 8,
+    optimal: 12
+  }
+}
+
+Initial methods:
+
+- Sprinting
+- Resisted Sprint Training
+- Assisted Sprint Training
+- Plyometrics
+- Depth Jumps
+- Bounding
+- Heavy Strength Training
+- Olympic Lifting
+- Ballistic Training
+- Medicine Ball Training
+- COD Training
+- Aerobic Intervals
+- Tempo Runs
+- Isometrics
+- Eccentric Training
+- Mobility Training
+- Reactive Strength Training
+
+The system should reason about adaptations rather than exercises.
+
+==================================================
+PHASE 3 — POPULATION TRANSFER ENGINE
+==================================================
+
+Research does not transfer equally across populations.
+
+Build a Population Transfer Engine.
+
+Example:
+
+{
+  sourcePopulation: "College Volleyball Athletes",
+
+  transferScores: {
+    volleyball: 100,
+    basketball: 90,
+    soccer: 75,
+    baseball: 40
+  }
+}
+
+TrainChat should understand:
+
+- Direct support
+- Strong transfer
+- Moderate transfer
+- Weak transfer
+
+Supported populations:
+
+- Youth
+- High School
+- College
+- Professional
+- Male
+- Female
+- Team Sport
+- Individual Sport
+- Tactical
+- General Fitness
+
+When research does not directly match the athlete profile, TrainChat should estimate transfer confidence instead of assuming universal applicability.
+
+==================================================
+PHASE 4 — ADAPTATION TIMELINE DATABASE
+==================================================
+
+Build an Adaptation Timeline Engine.
+
+Example:
+
+{
+  adaptation: "Acceleration",
+
+  timeline: {
+    noticeable: 3,
+    meaningful: 6,
+    substantial: 10
+  },
+
+  confidence: 88
+}
+
+Initial adaptations:
+
+- Acceleration
+- Max Velocity
+- Change of Direction
+- Vertical Jump
+- Horizontal Power
+- Max Strength
+- Relative Strength
+- Rate of Force Development
+- Tendon Stiffness
+- Elasticity
+- Work Capacity
+- Aerobic Capacity
+- Muscular Endurance
+- Hypertrophy
+- Injury Resilience
+
+These timelines should later drive Atlas adaptation forecasting.
+
+==================================================
+PHASE 5 — RESEARCH-BASED EXERCISE JUSTIFICATIONS
+==================================================
+
+Build a Research Justification Engine.
+
+Example output:
+
+{
+  exercise: "Heavy Sled Sprint",
+
+  primaryReason:
+    "Selected to improve horizontal force production and acceleration.",
+
+  evidenceSupport:
+    "Strong evidence in field sport athletes.",
+
+  confidence: 91
+}
+
+Every exercise recommendation should be explainable through:
+
+- Performance need
+- Adaptation target
+- Research support
+- Confidence score
+- Population relevance
+
+Avoid generic AI explanations.
+
+Justifications should be generated from structured evidence.
+
+==================================================
+PHASE 6 — RESEARCH CONTRADICTION ENGINE
+==================================================
+
+Research often contains disagreement.
+
+Build support for contradictory findings.
+
+Example:
+
+{
+  topic: "Nordic Hamstrings",
+
+  strongEvidence: [
+    {
+      adaptation: "Hamstring Injury Reduction",
+      confidence: 95
+    }
+  ],
+
+  mixedEvidence: [
+    {
+      adaptation: "Sprint Speed",
+      confidence: 60
+    }
+  ]
+}
+
+Supported evidence categories:
+
+- Strong Evidence
+- Moderate Evidence
+- Mixed Evidence
+- Emerging Evidence
+- Insufficient Evidence
+
+TrainChat should communicate uncertainty rather than pretending all evidence is unanimous.
+
+==================================================
+PHASE 7 — PERFORMANCE INTELLIGENCE INTEGRATION
+==================================================
+
+Integrate the Research Intelligence Layer into:
+
+prioritizePerformanceQualities()
+
+identifyLimitingFactors()
+
+selectTrainingMethods()
+
+buildExercisePool()
+
+forecastAdaptations()
+
+generateExerciseReason()
+
+The Research Engine should influence confidence scoring.
+
+Example:
+
+Current:
+
+Resisted Sprint Training: 92%
+
+Future:
+
+Resisted Sprint Training
+
+Performance Match: 94
+Research Support: 90
+Population Transfer: 88
+
+Final Confidence: 91
+
+Confidence should become a weighted combination of:
+
+- Athlete profile match
+- Research support
+- Population transfer confidence
+- Adaptation relevance
+
+==================================================
+PHASE 8 — FUTURE RESEARCH INGESTION ARCHITECTURE
+==================================================
+
+Design the architecture so future research ingestion is possible.
+
+Potential future sources:
+
+- PubMed
+- Meta analyses
+- Systematic reviews
+- NSCA position stands
+- ACSM position stands
+- Consensus statements
+- Internal evidence reviews
+
+Do NOT build scraping right now.
+
+Instead build:
+
+Research Source
+↓
+Evidence Extraction
+↓
+Evidence Normalization
+↓
+Evidence Graph
+↓
+Performance Intelligence
+
+The architecture should be ready for future ingestion without requiring a redesign.
+
+==================================================
+SUCCESS CRITERIA
+==================================================
+
+TrainChat should be able to answer:
+
+- Why was this training method selected?
+- What adaptation does it target?
+- How strong is the supporting evidence?
+- How transferable is the evidence to this athlete?
+- How long should adaptation realistically take?
+- Where is the evidence mixed or uncertain?
+- What level of confidence should we have in this recommendation?
+
+The goal is NOT to build a research database.
+
+The goal is to build a Research Intelligence Layer that makes program design, exercise selection, and adaptation forecasting more evidence-aware, defensible, and scalable.
+
+Focus on architecture, reasoning systems, confidence models, adaptation logic, and future scalability.
+
+Avoid building a simple citation library.
+
+TrainChat should become capable of reasoning from evidence, not merely storing evidence.

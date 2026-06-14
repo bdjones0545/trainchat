@@ -90,6 +90,7 @@ function LimitingFactorRow({ factor }: { factor: LimitingFactor }) {
 function MethodRow({ method, index }: { method: RankedMethod; index: number }) {
   const c = method.confidence;
   const barColor = c >= 85 ? "hsl(199 89% 55%)" : c >= 72 ? "rgb(74,222,128)" : "rgb(251,191,36)";
+  const rc = method.researchConfidence;
 
   return (
     <div
@@ -108,14 +109,60 @@ function MethodRow({ method, index }: { method: RankedMethod; index: number }) {
             {method.method}
           </span>
         </div>
-        <span className="text-[10px] font-bold flex-shrink-0" style={{ color: barColor }}>{c}%</span>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {method.hasContradictions && (
+            <span
+              className="text-[8px] font-bold px-1.5 py-0.5 rounded"
+              style={{ background: "rgba(251,146,60,0.12)", color: "rgb(251,146,60)" }}
+              title="Mixed evidence — some studies show conflicting results"
+            >
+              mixed
+            </span>
+          )}
+          <span className="text-[10px] font-bold" style={{ color: barColor }}>{c}%</span>
+        </div>
       </div>
       <p className="text-[9px] mb-1.5" style={{ color: "rgba(255,255,255,0.30)" }}>
         → {method.targetQuality}
       </p>
-      <div className="h-0.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+      <div className="h-0.5 rounded-full overflow-hidden mb-2" style={{ background: "rgba(255,255,255,0.07)" }}>
         <div className="h-full rounded-full" style={{ width: `${c}%`, background: barColor }} />
       </div>
+
+      {/* Phase 7 — Research confidence breakdown */}
+      {rc && (
+        <div
+          className="rounded px-2 py-1.5 mt-1"
+          style={{ background: "rgba(14,165,233,0.05)", border: "1px solid rgba(14,165,233,0.10)" }}
+        >
+          <p className="text-[8px] font-bold uppercase tracking-widest mb-1.5" style={{ color: "rgba(14,165,233,0.50)" }}>
+            Evidence Breakdown
+          </p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {[
+              { label: "Profile Match", value: rc.profileMatch },
+              { label: "Research Support", value: rc.researchSupport },
+              { label: "Population Transfer", value: rc.populationTransfer },
+              { label: "Adaptation Fit", value: rc.adaptationRelevance },
+            ].map(({ label, value }) => (
+              <div key={label} className="flex items-center justify-between">
+                <span className="text-[8.5px]" style={{ color: "rgba(255,255,255,0.28)" }}>{label}</span>
+                <span
+                  className="text-[8.5px] font-bold"
+                  style={{ color: value >= 80 ? "rgb(74,222,128)" : value >= 65 ? "hsl(199 89% 60%)" : "rgb(251,191,36)" }}
+                >
+                  {value}
+                </span>
+              </div>
+            ))}
+          </div>
+          {method.evidenceSummary && (
+            <p className="text-[8.5px] mt-1.5 leading-snug" style={{ color: "rgba(255,255,255,0.28)" }}>
+              {method.evidenceSummary}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
