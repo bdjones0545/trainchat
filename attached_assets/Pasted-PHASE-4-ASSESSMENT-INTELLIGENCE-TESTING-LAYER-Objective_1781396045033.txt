@@ -1,0 +1,232 @@
+PHASE 4 — ASSESSMENT INTELLIGENCE & TESTING LAYER
+
+Objective
+
+Create a structured assessment system that connects testing, performance qualities, training methods, products, exercises, and expected adaptations.
+
+TrainChat should be capable of reasoning from assessment results rather than only user goals.
+
+Current Chain:
+
+Goal
+→ Quality
+→ Method
+→ Product
+→ Exercise
+→ Adaptation
+
+New Chain:
+
+Assessment
+→ Quality
+→ Method
+→ Product
+→ Exercise
+→ Adaptation
+
+⸻
+
+DATABASE
+
+Create assessments table.
+
+Fields:
+
+id
+name
+category
+description
+metric
+unit
+sport_relevance
+difficulty
+equipment_required
+normative_data
+created_at
+updated_at
+
+Seed 50 assessments.
+
+Categories:
+
+Speed
+Power
+Strength
+Mobility
+Conditioning
+Recovery
+Readiness
+Movement Quality
+
+⸻
+
+EXAMPLES
+
+Speed
+
+10 Yard Sprint
+20 Yard Sprint
+Flying 10
+Flying 20
+505 COD
+
+Power
+
+Countermovement Jump
+Squat Jump
+Broad Jump
+Triple Hop
+
+Strength
+
+Trap Bar Peak Force
+Isometric Mid-Thigh Pull
+5RM Trap Bar
+
+Mobility
+
+Ankle Dorsiflexion
+Hip Internal Rotation
+Shoulder Flexion
+
+Readiness
+
+CMJ Readiness
+Subjective Readiness
+HRV
+
+⸻
+
+ASSESSMENT ↔ QUALITY LINKS
+
+Create assessment_quality_links table.
+
+Example:
+
+10 Yard Sprint
+
+Measures:
+
+Acceleration
+Horizontal Force Production
+
+CMJ
+
+Measures:
+
+Lower Body Power
+Reactive Strength
+
+⸻
+
+ASSESSMENT ↔ METHOD LINKS
+
+Create structured relationships.
+
+Example:
+
+Poor Acceleration
+
+Recommended Methods:
+
+Resisted Sprint Training
+Horizontal Force Development
+Acceleration Mechanics
+
+⸻
+
+ASSESSMENT ↔ PRODUCT LINKS
+
+Example:
+
+CMJ
+
+Recommended Products:
+
+Force Plate
+Jump Mat
+
+Alternative:
+
+Vertec
+
+⸻
+
+ASSESSMENT ↔ EXERCISE LINKS
+
+Example:
+
+Poor Reactive Strength
+
+Exercises:
+
+Pogo Jumps
+Repeated Bounds
+Hurdle Hops
+
+⸻
+
+ASSESSMENT DETAIL DRAWER
+
+Display:
+
+Description
+Metric
+Normative Data
+Measured Qualities
+Recommended Methods
+Recommended Products
+Recommended Exercises
+
+⸻
+
+INTERACTIVE TESTING SECTION
+
+Add a new landing page section:
+
+Assessment Intelligence
+
+Show:
+
+Assessment
+↓
+Quality
+↓
+Method
+↓
+Exercise
+↓
+Adaptation
+
+Users can click through example pathways.
+
+⸻
+
+AI REASONING FOUNDATION
+
+Create utility:
+
+analyzeAssessmentResults()
+
+Input:
+
+Assessment Name
+Score
+
+Output:
+
+Detected Weaknesses
+Relevant Qualities
+Recommended Methods
+Recommended Products
+Recommended Exercises
+
+⸻
+
+SUCCESS CRITERIA
+
+TrainChat should be able to reason from objective assessment data rather than only user goals.
+
+The system should identify weaknesses, connect them to qualities, recommend methods, select products, prescribe exercises, and explain expected adaptations.
+
+This completes the core performance intelligence loop.
