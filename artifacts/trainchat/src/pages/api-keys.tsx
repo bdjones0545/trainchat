@@ -14,6 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  Code2,
+  ChevronRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -442,18 +444,54 @@ export default function ApiKeysPage() {
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
               <Key className="w-4 h-4 text-primary" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-base font-bold text-foreground">API Keys</h1>
               <p className="text-xs text-muted-foreground">
                 Manage keys for the TrainChat external API
               </p>
             </div>
           </div>
+          <button
+            onClick={() => navigate("/developer")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted/20 transition-colors flex-shrink-0"
+          >
+            <Code2 className="w-3.5 h-3.5" />
+            Docs
+          </button>
         </div>
+
+        {/* Developer Documentation card */}
+        <button
+          onClick={() => navigate("/developer")}
+          className="w-full text-left rounded-xl border border-primary/20 bg-gradient-to-r from-primary/6 to-primary/3 p-4 hover:border-primary/35 hover:from-primary/10 hover:to-primary/5 transition-all duration-150 group"
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+              <Code2 className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-foreground">Developer Documentation</p>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                Explore TrainChat's external API, authentication, endpoints, examples, SDKs, playground, and developer resources.
+              </p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors flex-shrink-0 mt-0.5" />
+          </div>
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-primary/10">
+            {["Quick Start", "Auth", "Endpoints", "Playground", "SDK"].map((tag) => (
+              <span key={tag} className="text-[10px] font-medium text-primary/60">{tag}</span>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-1.5">
+            <span className="text-xs font-semibold text-primary group-hover:text-primary/80 transition-colors">
+              View Documentation →
+            </span>
+          </div>
+        </button>
 
         {/* Docs callout */}
         <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-muted/30 border border-border">

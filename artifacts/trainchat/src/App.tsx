@@ -36,6 +36,7 @@ import GuestStart from "@/pages/guest-start";
 const AdminDashboard = lazy(() => import("@/pages/admin"));
 const WhitepaperPipelinePage = lazy(() => import("@/pages/admin/WhitepaperPipelinePage"));
 const ApiKeysPage = lazy(() => import("@/pages/api-keys"));
+const ApiDocsPage = lazy(() => import("@/pages/api-docs"));
 const SystemPage = lazy(() => import("@/pages/system"));
 const BillingPage = lazy(() => import("@/pages/billing"));
 const SettingsPage = lazy(() => import("@/pages/settings"));
@@ -419,6 +420,13 @@ function Router() {
           {() => (
             <AuthGuard>
               <ApiKeysPage />
+            </AuthGuard>
+          )}
+        </Route>
+        <Route path="/developer">
+          {() => (
+            <AuthGuard>
+              <ApiDocsPage />
             </AuthGuard>
           )}
         </Route>
