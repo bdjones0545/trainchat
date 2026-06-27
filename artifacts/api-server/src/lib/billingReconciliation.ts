@@ -89,8 +89,8 @@ async function reconcileStalePastDueUsers(): Promise<void> {
         );
       } else {
         // Sync the full subscription payload for all other states
-        // buildSyncPayload may throw on unknown price ID — that's intentional and loud
-        const payload = buildSyncPayload(sub);
+        // buildSyncPayload fetches from Stripe API as fallback for unknown prices
+        const payload = await buildSyncPayload(sub);
         if (payload) {
           await stripeStorage.syncUserSubscription(user.id, payload);
           logger.info(

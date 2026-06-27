@@ -21,7 +21,7 @@
  *       – new event dispatches and marks processed
  */
 
-import { describe, it, expect, vi, beforeEach, type MockedFunction } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── vi.hoisted() — variables usable inside vi.mock() factories ────────────────
 // vi.mock() calls are hoisted to the top of the file by vitest at transform
@@ -29,7 +29,7 @@ import { describe, it, expect, vi, beforeEach, type MockedFunction } from "vites
 // so it is initialised before the factory runs.
 const { mockStripeSync } = vi.hoisted(() => ({
   mockStripeSync: {
-    processWebhook: vi.fn<[Buffer, string], Promise<void>>(),
+    processWebhook: vi.fn(),
   },
 }));
 
@@ -60,8 +60,8 @@ vi.mock("../stripeClient", () => ({
 // stripeStorage mock — all methods start as passing no-ops
 vi.mock("../stripeStorage", () => {
   const storage = {
-    hasProcessedEvent: vi.fn<[string], Promise<boolean>>().mockResolvedValue(false),
-    markEventProcessed: vi.fn<[string, string], Promise<void>>().mockResolvedValue(undefined),
+    hasProcessedEvent: vi.fn().mockResolvedValue(false),
+    markEventProcessed: vi.fn().mockResolvedValue(undefined),
     getUser: vi.fn().mockResolvedValue(null),
     getUserByStripeCustomerId: vi.fn().mockResolvedValue(null),
     getUserByEmail: vi.fn().mockResolvedValue(null),
@@ -286,8 +286,8 @@ function makeSub(overrides: object = {}) {
 }
 
 describe("buildSyncPayload()", () => {
-  it("returns a full payload for a valid active subscription", () => {
-    const payload = buildSyncPayload(makeSub());
+  it("returns a full payload for a valid active subscription", async () => {
+    const payload = await buildSyncPayload(makeSub());
     expect(payload).not.toBeNull();
     expect(payload!.plan).toBe("pro");
     expect(payload!.planStatus).toBe("active");
@@ -300,13 +300,13 @@ describe("buildSyncPayload()", () => {
     expect(payload!.trialEnd).toBeNull();
   });
 
-  it("maps trainchat_monthly lookup_key to plan=pro", () => {
-    const payload = buildSyncPayload(makeSub());
+  it("maps trainchat_monthly lookup_key to plan=pro", async () => {
+    const payload = await buildSyncPayload(makeSub());
     expect(payload!.plan).toBe("pro");
   });
 
-  it("maps trainchat_starter_monthly lookup_key to plan=starter", () => {
-    const payload = buildSyncPayload(
+  it("maps trainchat_starter_monthly lookup_key to plan=starter", async () => {
+    const payload = await buildSyncPayload(
       makeSub({
         items: { data: [{ price: { id: "price_starter", lookup_key: "trainchat_starter_monthly" } }] },
       })
@@ -315,8 +315,8 @@ describe("buildSyncPayload()", () => {
     expect(payload!.billingInterval).toBe("monthly");
   });
 
-  it("maps trainchat_pro_yearly lookup_key to plan=pro interval=yearly", () => {
-    const payload = buildSyncPayload(
+  it("maps trainchat_pro_yearly lookup_key to plan=pro interval=yearly", async () => {
+    const payload = await buildSyncPayload(
       makeSub({
         items: { data: [{ price: { id: "price_pro_yr", lookup_key: "trainchat_pro_yearly" } }] },
       })
@@ -325,60 +325,85 @@ describe("buildSyncPayload()", () => {
     expect(payload!.billingInterval).toBe("yearly");
   });
 
-  it("maps trialing status → planStatus=active", () => {
-    const payload = buildSyncPayload(makeSub({ status: "trialing" }));
+  it("maps trialing status → planStatus=active", async () => {
+    const payload = await buildSyncPayload(makeSub({ status: "trialing" }));
     expect(payload!.planStatus).toBe("active");
   });
 
-  it("maps canceled status → planStatus=canceled", () => {
-    const payload = buildSyncPayload(makeSub({ status: "canceled" }));
+  it("maps canceled status → planStatus=canceled", async () => {
+    const payload = await buildSyncPayload(makeSub({ status: "canceled" }));
     expect(payload!.planStatus).toBe("canceled");
   });
 
-  it("maps unpaid status → planStatus=restricted", () => {
-    const payload = buildSyncPayload(makeSub({ status: "unpaid" }));
+  it("maps unpaid status → planStatus=restricted", async () => {
+    const payload = await buildSyncPayload(makeSub({ status: "unpaid" }));
     expect(payload!.planStatus).toBe("restricted");
   });
 
-  it("maps incomplete_expired status → planStatus=restricted", () => {
-    const payload = buildSyncPayload(makeSub({ status: "incomplete_expired" }));
+  it("maps incomplete_expired status → planStatus=restricted", async () => {
+    const payload = await buildSyncPayload(makeSub({ status: "incomplete_expired" }));
     expect(payload!.planStatus).toBe("restricted");
   });
 
-  it("returns null when customer is missing", () => {
-    const payload = buildSyncPayload(makeSub({ customer: "" }));
+  it("returns null when customer is missing", async () => {
+    const payload = await buildSyncPayload(makeSub({ customer: "" }));
     expect(payload).toBeNull();
   });
 
-  it("returns null when price item is missing", () => {
-    const payload = buildSyncPayload(makeSub({ items: { data: [] } }));
+  it("returns null when price item is missing", async () => {
+    const payload = await buildSyncPayload(makeSub({ items: { data: [] } }));
     expect(payload).toBeNull();
   });
 
-  it("throws when lookup_key is unrecognized and no env-var fallback", () => {
-    expect(() =>
-      buildSyncPayload(
-        makeSub({
-          items: { data: [{ price: { id: "price_unknown_xyz", lookup_key: "gym_weekly" } }] },
-        })
-      )
-    ).toThrow(/Unknown Stripe price ID/);
+  it("falls back to plan=pro for unknown lookup_key when Stripe fetch also fails", async () => {
+    // getUncachableStripeClient returns a client whose prices.retrieve rejects
+    const { getUncachableStripeClient } = await import("../stripeClient");
+    (getUncachableStripeClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      prices: { retrieve: vi.fn().mockRejectedValue(new Error("Stripe API error")) },
+    });
+
+    const payload = await buildSyncPayload(
+      makeSub({
+        items: { data: [{ price: { id: "price_unknown_xyz", lookup_key: "gym_weekly" } }] },
+      })
+    );
+    // Should not throw; should default to pro so the subscriber keeps access
+    expect(payload).not.toBeNull();
+    expect(payload!.plan).toBe("pro");
   });
 
-  it("sets trialEnd from trial_end unix timestamp when present", () => {
+  it("resolves plan via Stripe price fetch when lookup_key is absent on subscription object", async () => {
+    // getUncachableStripeClient returns a client that fills in the lookup_key
+    const { getUncachableStripeClient } = await import("../stripeClient");
+    (getUncachableStripeClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      prices: {
+        retrieve: vi.fn().mockResolvedValue({ id: "price_old", lookup_key: "trainchat_monthly" }),
+      },
+    });
+
+    const payload = await buildSyncPayload(
+      makeSub({
+        items: { data: [{ price: { id: "price_old", lookup_key: null } }] },
+      })
+    );
+    expect(payload).not.toBeNull();
+    expect(payload!.plan).toBe("pro");
+  });
+
+  it("sets trialEnd from trial_end unix timestamp when present", async () => {
     const trialTs = Math.floor(Date.now() / 1000) + 14 * 24 * 3600;
-    const payload = buildSyncPayload(makeSub({ trial_end: trialTs }));
+    const payload = await buildSyncPayload(makeSub({ trial_end: trialTs }));
     expect(payload!.trialEnd).toBeInstanceOf(Date);
     expect(payload!.trialEnd!.getTime()).toBeCloseTo(trialTs * 1000, -3);
   });
 
-  it("sets cancelAtPeriodEnd=true when sub.cancel_at_period_end=true", () => {
-    const payload = buildSyncPayload(makeSub({ cancel_at_period_end: true }));
+  it("sets cancelAtPeriodEnd=true when sub.cancel_at_period_end=true", async () => {
+    const payload = await buildSyncPayload(makeSub({ cancel_at_period_end: true }));
     expect(payload!.cancelAtPeriodEnd).toBe(true);
   });
 
-  it("handles customer as nested object (expanded Stripe resource)", () => {
-    const payload = buildSyncPayload(
+  it("handles customer as nested object (expanded Stripe resource)", async () => {
+    const payload = await buildSyncPayload(
       makeSub({ customer: { id: "cus_expanded" } })
     );
     expect(payload!.stripeCustomerId).toBe("cus_expanded");
@@ -394,10 +419,8 @@ describe("WebhookHandlers.processWebhook()", () => {
     vi.clearAllMocks();
     // Default: StripeSync succeeds, hasProcessedEvent returns false
     mockStripeSync.processWebhook.mockResolvedValue(undefined);
-    (stripeStorage.hasProcessedEvent as MockedFunction<typeof stripeStorage.hasProcessedEvent>)
-      .mockResolvedValue(false);
-    (stripeStorage.markEventProcessed as MockedFunction<typeof stripeStorage.markEventProcessed>)
-      .mockResolvedValue(undefined);
+    (stripeStorage.hasProcessedEvent as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    (stripeStorage.markEventProcessed as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   });
 
   // ── Non-buffer payload ─────────────────────────────────────────────────────
@@ -453,8 +476,7 @@ describe("WebhookHandlers.processWebhook()", () => {
   // ── Idempotency ────────────────────────────────────────────────────────────
 
   it("skips business logic when event ID was already processed", async () => {
-    (stripeStorage.hasProcessedEvent as MockedFunction<typeof stripeStorage.hasProcessedEvent>)
-      .mockResolvedValue(true);
+    (stripeStorage.hasProcessedEvent as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
     const event = makeEvent("customer.subscription.updated");
     const payload = makeBuffer(event);
@@ -469,8 +491,7 @@ describe("WebhookHandlers.processWebhook()", () => {
   });
 
   it("checks idempotency using the exact Stripe event ID", async () => {
-    (stripeStorage.hasProcessedEvent as MockedFunction<typeof stripeStorage.hasProcessedEvent>)
-      .mockResolvedValue(true);
+    (stripeStorage.hasProcessedEvent as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
     const event = makeEvent("invoice.paid");
     const eventId = event.id;
@@ -485,8 +506,7 @@ describe("WebhookHandlers.processWebhook()", () => {
   it("marks event processed after successful business logic", async () => {
     // Provide a no-user-found scenario so handleSubscriptionUpsert exits early
     // but still reaches markEventProcessed.
-    (stripeStorage.getUserByStripeCustomerId as MockedFunction<typeof stripeStorage.getUserByStripeCustomerId>)
-      .mockResolvedValue(null);
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     const event = makeEvent("customer.subscription.created");
     const payload = makeBuffer(event);
@@ -497,9 +517,9 @@ describe("WebhookHandlers.processWebhook()", () => {
 
   it("calls hasProcessedEvent before dispatching any business logic", async () => {
     const order: string[] = [];
-    (stripeStorage.hasProcessedEvent as MockedFunction<typeof stripeStorage.hasProcessedEvent>)
+    (stripeStorage.hasProcessedEvent as ReturnType<typeof vi.fn>)
       .mockImplementation(async () => { order.push("hasProcessed"); return false; });
-    (stripeStorage.getUserByStripeCustomerId as MockedFunction<typeof stripeStorage.getUserByStripeCustomerId>)
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>)
       .mockImplementation(async () => { order.push("getUserByCustomer"); return null; });
 
     const event = makeEvent("customer.subscription.updated");
@@ -510,8 +530,7 @@ describe("WebhookHandlers.processWebhook()", () => {
   });
 
   it("each unique event ID is processed independently", async () => {
-    (stripeStorage.getUserByStripeCustomerId as MockedFunction<typeof stripeStorage.getUserByStripeCustomerId>)
-      .mockResolvedValue(null);
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     const event1 = makeEvent("customer.subscription.updated");
     const event2 = makeEvent("customer.subscription.updated");
@@ -529,8 +548,7 @@ describe("WebhookHandlers.processWebhook()", () => {
   // ── Signature is passed through to StripeSync ─────────────────────────────
 
   it("passes raw Buffer and signature string to StripeSync unchanged", async () => {
-    (stripeStorage.getUserByStripeCustomerId as MockedFunction<typeof stripeStorage.getUserByStripeCustomerId>)
-      .mockResolvedValue(null);
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     const event = makeEvent("customer.subscription.updated");
     const buf = makeBuffer(event);
@@ -553,12 +571,9 @@ describe("WebhookHandlers.processWebhook()", () => {
   ];
 
   it.each(HANDLED)("routes %s through to business logic", async (eventType) => {
-    (stripeStorage.getUserByStripeCustomerId as MockedFunction<typeof stripeStorage.getUserByStripeCustomerId>)
-      .mockResolvedValue(null);
-    (stripeStorage.getUser as MockedFunction<typeof stripeStorage.getUser>)
-      .mockResolvedValue(null);
-    (stripeStorage.getUserByEmail as MockedFunction<typeof stripeStorage.getUserByEmail>)
-      .mockResolvedValue(null);
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (stripeStorage.getUser as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (stripeStorage.getUserByEmail as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     const event = makeEvent(eventType, { customer_details: { email: "test@example.com" } });
     await WebhookHandlers.processWebhook(makeBuffer(event), "sig");

@@ -136,50 +136,78 @@ export function normalizePlanStatus(stripeStatus: string): string {
 //
 // Exported so the reconciliation job can re-use the same mapping logic.
 
-export function buildSyncPayload(sub: any): SubscriptionSyncPayload | null {
-  try {
-    const item = sub.items?.data?.[0];
-    const priceId: string = item?.price?.id ?? "";
-    const lookupKey: string | null = item?.price?.lookup_key ?? null;
-    const customerId: string =
-      typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
+export async function buildSyncPayload(sub: any): Promise<SubscriptionSyncPayload | null> {
+  const item = sub.items?.data?.[0];
+  const priceId: string = item?.price?.id ?? "";
+  let lookupKey: string | null = item?.price?.lookup_key ?? null;
+  const customerId: string =
+    typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
 
-    if (!customerId || !priceId) {
-      logger.warn({ subId: sub.id }, "[WebhookHandlers] Cannot build sync payload — missing customer or price");
-      return null;
-    }
-
-    const periodEnd = sub.current_period_end
-      ? new Date(sub.current_period_end * 1000)
-      : new Date();
-
-    const trialEnd = sub.trial_end
-      ? new Date(sub.trial_end * 1000)
-      : null;
-
-    // detectPlanFromPriceId tries lookup_key first, then env-var map
-    const plan = detectPlanFromPriceId(priceId, lookupKey);
-
-    logger.debug(
-      { priceId, lookupKey, plan },
-      "[WebhookHandlers] Plan detected from price"
-    );
-
-    return {
-      stripeSubscriptionId: sub.id,
-      stripeCustomerId: customerId,
-      stripePriceId: priceId,
-      plan,
-      planStatus: normalizePlanStatus(sub.status),
-      billingInterval: detectIntervalFromPriceId(priceId, lookupKey),
-      currentPeriodEnd: periodEnd,
-      cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
-      trialEnd,
-    };
-  } catch (err) {
-    logger.error({ err }, "[WebhookHandlers] Failed to build sync payload");
-    throw err; // re-throw so the caller can propagate for retry
+  if (!customerId || !priceId) {
+    logger.warn({ subId: sub.id }, "[WebhookHandlers] Cannot build sync payload — missing customer or price");
+    return null;
   }
+
+  const periodEnd = sub.current_period_end
+    ? new Date(sub.current_period_end * 1000)
+    : new Date();
+
+  const trialEnd = sub.trial_end
+    ? new Date(sub.trial_end * 1000)
+    : null;
+
+  // ── Plan detection with automatic lookup_key fetch fallback ──────────────────
+  //
+  // Priority:
+  //   1. lookup_key on the price object (set by setup script — no network call)
+  //   2. STRIPE_PRICE_* env-var map (fast local fallback)
+  //   3. Fetch the price from Stripe API to discover its lookup_key (handles
+  //      prices created before the setup script added lookup_keys)
+  //   4. Fall back to "pro" as a last resort — never drop a paying subscriber
+
+  let plan: import("@workspace/db").PlanTier;
+  try {
+    plan = detectPlanFromPriceId(priceId, lookupKey);
+  } catch {
+    // Unknown price — try fetching it from Stripe to discover its lookup_key
+    try {
+      const stripe = await getUncachableStripeClient();
+      const fetchedPrice = await stripe.prices.retrieve(priceId);
+      lookupKey = fetchedPrice.lookup_key ?? null;
+      plan = detectPlanFromPriceId(priceId, lookupKey);
+      logger.info(
+        { priceId, lookupKey, plan },
+        "[WebhookHandlers] Plan resolved via Stripe price fetch (price predates lookup_key setup)"
+      );
+    } catch (fetchErr) {
+      // Absolute last resort — grant pro access rather than silently dropping
+      // a real subscriber. Log loudly so the admin knows to run stripe:setup-products.
+      logger.error(
+        { priceId, lookupKey, err: fetchErr },
+        "[WebhookHandlers] UNKNOWN PRICE — could not resolve via lookup_key or Stripe API. " +
+        "Defaulting to plan=pro so the paying subscriber retains access. " +
+        "Run stripe:setup-products to add lookup_keys to all existing prices."
+      );
+      plan = "pro";
+    }
+  }
+
+  logger.debug(
+    { priceId, lookupKey, plan },
+    "[WebhookHandlers] Plan detected from price"
+  );
+
+  return {
+    stripeSubscriptionId: sub.id,
+    stripeCustomerId: customerId,
+    stripePriceId: priceId,
+    plan,
+    planStatus: normalizePlanStatus(sub.status),
+    billingInterval: detectIntervalFromPriceId(priceId, lookupKey),
+    currentPeriodEnd: periodEnd,
+    cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+    trialEnd,
+  };
 }
 
 // ─── Handler: checkout.session.completed ─────────────────────────────────────
@@ -249,7 +277,7 @@ async function handleCheckoutSessionCompleted(
     : null;
 
   if (expandedSub) {
-    const payload = buildSyncPayload(expandedSub);
+    const payload = await buildSyncPayload(expandedSub);
     if (payload) {
       await stripeStorage.syncUserSubscription(user.id, payload);
       context.finalStatus = payload.planStatus;
@@ -269,7 +297,7 @@ async function handleCheckoutSessionCompleted(
     const sub = await stripe.subscriptions.retrieve(subscriptionId, {
       expand: ["items.data.price"],
     });
-    const payload = buildSyncPayload(sub);
+    const payload = await buildSyncPayload(sub);
     if (payload) {
       await stripeStorage.syncUserSubscription(user.id, payload);
       context.finalStatus = payload.planStatus;
@@ -300,7 +328,7 @@ async function handleSubscriptionUpsert(
   const sub = event.data.object;
   const eventType: string = event.type;
 
-  const payload = buildSyncPayload(sub); // throws on unknown price ID
+  const payload = await buildSyncPayload(sub);
   if (!payload) return;
 
   context.customerId = payload.stripeCustomerId;
@@ -440,7 +468,7 @@ async function handleInvoicePaid(
     expand: ["items.data.price"],
   });
 
-  const payload = buildSyncPayload(sub); // throws on unknown price ID
+  const payload = await buildSyncPayload(sub);
   if (!payload) return;
 
   await stripeStorage.syncUserSubscription(user.id, payload);
