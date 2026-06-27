@@ -27,3 +27,4 @@ export * from "./whitepapers";
 export * from "./product-directory";
 export * from "./assessments";
 export * from "./performance-profiles";
+export * from "./billing";

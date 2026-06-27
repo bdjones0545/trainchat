@@ -48,6 +48,7 @@ export const PLAN_PRICE_MAP = {
 
 const REQUIRED_STRIPE_ENV_VARS: string[] = [
   "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
 ];
 
 const OPTIONAL_STRIPE_ENV_VARS: string[] = [

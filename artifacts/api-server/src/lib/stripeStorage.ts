@@ -1,4 +1,4 @@
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, stripeProcessedEventsTable } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import type { PlanTier, BillingInterval } from "@workspace/db";
 import { logger } from "./logger";
@@ -222,6 +222,39 @@ export class StripeStorage {
       return Array.from(productsMap.values());
     } catch {
       return [];
+    }
+  }
+
+  // ── Webhook event idempotency ────────────────────────────────────────────────
+  //
+  // Prevents the same Stripe event from being processed twice by our business
+  // logic. StripeSync already stores raw events idempotently; this table guards
+  // our higher-level handlers (subscription sync, emails, etc.).
+
+  async hasProcessedEvent(eventId: string): Promise<boolean> {
+    try {
+      const [row] = await db
+        .select({ eventId: stripeProcessedEventsTable.eventId })
+        .from(stripeProcessedEventsTable)
+        .where(eq(stripeProcessedEventsTable.eventId, eventId));
+      return !!row;
+    } catch (err) {
+      // If the table doesn't exist yet (pre-migration), log and allow processing.
+      // This degrades gracefully to the upsert-idempotency approach.
+      logger.warn({ err, eventId }, "[StripeStorage] hasProcessedEvent: table not ready — allowing");
+      return false;
+    }
+  }
+
+  async markEventProcessed(eventId: string, eventType: string): Promise<void> {
+    try {
+      await db
+        .insert(stripeProcessedEventsTable)
+        .values({ eventId, eventType, processedAt: new Date() })
+        .onConflictDoNothing();
+    } catch (err) {
+      // Non-fatal — upsert idempotency is the fallback safety net.
+      logger.warn({ err, eventId }, "[StripeStorage] markEventProcessed: table not ready — skipping");
     }
   }
 }

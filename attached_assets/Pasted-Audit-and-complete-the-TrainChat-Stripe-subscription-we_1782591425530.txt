@@ -1,0 +1,77 @@
+Audit and complete the TrainChat Stripe subscription webhook setup.
+
+Goal:
+When a user signs up for TrainChat at $49.99/month, Stripe should create a recurring monthly subscription and TrainChat should stay synced with Stripe subscription status.
+
+Requirements:
+
+1. Confirm the Checkout Session uses:
+- mode: "subscription"
+- the single recurring Stripe price for TrainChat
+- lookup key: "trainchat_monthly"
+- $49.99/month recurring billing
+
+2. Confirm Stripe has a webhook endpoint for the deployed TrainChat backend.
+
+3. The webhook endpoint should handle these Stripe events:
+- checkout.session.completed
+- customer.subscription.created
+- customer.subscription.updated
+- customer.subscription.deleted
+- invoice.payment_succeeded
+- invoice.payment_failed
+
+4. For checkout.session.completed:
+- Link the Stripe customer ID to the TrainChat user.
+- Save the Stripe subscription ID.
+- Mark the user as paid / active.
+- Map the plan internally to TrainChat, even if the DB still stores "pro" for compatibility.
+
+5. For customer.subscription.updated:
+- Sync subscription status.
+- Keep access active for active or trialing subscriptions.
+- Remove or limit access for canceled, incomplete_expired, unpaid, or paused subscriptions.
+
+6. For customer.subscription.deleted:
+- Mark the user's subscription as canceled.
+- Remove paid access after the valid billing period ends, if Stripe provides current_period_end.
+
+7. For invoice.payment_succeeded:
+- Confirm the subscription remains active.
+- Update latest payment date / current billing period if those fields exist.
+
+8. For invoice.payment_failed:
+- Mark the subscription as past_due or payment_failed.
+- Do not immediately delete the user.
+- Preserve access if the policy allows a grace period.
+- Surface billing issue messaging in the app.
+
+9. Verify webhook signature validation:
+- Use the raw request body.
+- Require STRIPE_WEBHOOK_SECRET.
+- Invalid signatures must return HTTP 400 before any database writes.
+
+10. Add logging for every webhook event:
+- event id
+- event type
+- user id if resolved
+- customer id
+- subscription id
+- final subscription status
+
+11. Add idempotency:
+- Do not process the same Stripe event twice.
+- Store processed event IDs or safely ignore duplicates.
+
+12. Confirm old Starter/Pro/Elite Stripe prices are not offered to new users, but legacy subscribers still sync correctly if Stripe sends events for those old subscriptions.
+
+13. Add or update a setup script that creates/registers the Stripe webhook endpoint if the project supports automated Stripe setup. Otherwise document the exact webhook URL and required event list.
+
+14. Run the relevant tests/typecheck and report:
+- files changed
+- webhook endpoint URL
+- required env vars
+- Stripe event types supported
+- manual Stripe test steps
+
+Do not change unrelated billing logic. Preserve existing subscribers and existing auth behavior.
