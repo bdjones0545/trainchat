@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
-import { stripeService, getPlanPriceMap } from "../lib/stripeService";
+import { stripeService } from "../lib/stripeService";
 import { stripeStorage } from "../lib/stripeStorage";
 import { getUserPlanInfo, getPlanFeatures } from "../lib/planGating";
 import { detectPlanInterval } from "../lib/billingUtils";
@@ -52,12 +52,11 @@ router.get("/subscription/products", async (_req, res): Promise<void> => {
 
 // ─── GET /api/subscription/plan-map ──────────────────────────────────────────
 //
-// Returns the environment-variable-backed plan → price ID mapping.
-// Frontend uses this to initiate checkout without hardcoding price IDs.
+// Returns the single TrainChat subscription plan info.
 // Safe to expose: price IDs are not secret.
 
 router.get("/subscription/plan-map", async (_req, res): Promise<void> => {
-  res.json({ planMap: getPlanPriceMap() });
+  res.json({ planMap: { trainchat: process.env.STRIPE_PRICE_TRAINCHAT_MONTHLY ?? null } });
 });
 
 // ─── POST /api/subscription/checkout ─────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { X, Zap, Shield, ArrowRight, Loader2, Crown, Star } from "lucide-react";
+import { X, Zap, Shield, ArrowRight, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,12 +6,6 @@ import { z } from "zod";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
-
-const PLAN_NAMES: Record<string, string> = {
-  starter: "Starter",
-  pro: "Pro",
-  elite: "Elite",
-};
 
 const schema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -22,24 +16,15 @@ const schema = z.object({
 type FormData = z.infer<typeof schema>;
 
 interface Props {
-  planId: string;
-  billingInterval: "monthly" | "yearly";
+  planId?: string;
+  billingInterval?: "monthly" | "yearly";
   onClose: () => void;
 }
 
-function PlanIcon({ planId }: { planId: string }) {
-  if (planId === "elite") return <Crown className="w-6 h-6 text-amber-400" />;
-  if (planId === "pro") return <Star className="w-6 h-6 text-primary" />;
-  return <Zap className="w-6 h-6 text-primary" />;
-}
-
-export default function AnonymousUpgradeModal({ planId, billingInterval, onClose }: Props) {
+export default function AnonymousUpgradeModal({ onClose }: Props) {
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"form" | "loading">("form");
   const [error, setError] = useState<string | null>(null);
-
-  const planName = PLAN_NAMES[planId] ?? planId;
-  const isElite = planId === "elite";
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -71,12 +56,12 @@ export default function AnonymousUpgradeModal({ planId, billingInterval, onClose
       queryClient.setQueryData(getGetMeQueryKey(), user);
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
 
-      // Step 2: Start Stripe checkout using lookup-key based endpoint
+      // Step 2: Start Stripe checkout for the single TrainChat subscription
       const checkoutRes = await fetch("/api/billing/create-checkout-session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier: planId, billingInterval }),
+        body: JSON.stringify({ tier: "trainchat", billingInterval: "monthly" }),
       });
 
       if (!checkoutRes.ok) {
@@ -134,22 +119,16 @@ export default function AnonymousUpgradeModal({ planId, billingInterval, onClose
             </div>
           ) : (
             <>
-              <div
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-6 mx-auto border ${
-                  isElite
-                    ? "bg-amber-400/10 border-amber-400/20"
-                    : "bg-primary/10 border-primary/20"
-                }`}
-              >
-                <PlanIcon planId={planId} />
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mb-6 mx-auto">
+                <Zap className="w-6 h-6 text-primary" />
               </div>
 
               <div className="text-center mb-6">
                 <h2 className="text-xl font-bold text-foreground mb-2">
-                  Create your account to unlock {planName}
+                  Create your account to get TrainChat
                 </h2>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  We'll save your current system and attach {planName} ({billingInterval}) to your account.
+                  We'll save your current system and attach your subscription to your account.
                 </p>
               </div>
 
@@ -223,11 +202,7 @@ export default function AnonymousUpgradeModal({ planId, billingInterval, onClose
 
                 <button
                   type="submit"
-                  className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all duration-150 ${
-                    isElite
-                      ? "bg-amber-400 text-black hover:bg-amber-400/90"
-                      : "bg-primary text-primary-foreground hover:bg-primary/90"
-                  }`}
+                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold text-sm active:scale-[0.98] transition-all duration-150 bg-primary text-primary-foreground hover:bg-primary/90"
                 >
                   <Zap className="w-4 h-4" />
                   Continue

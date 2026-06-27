@@ -3,9 +3,8 @@
 // Shared helpers for plan detection from Stripe price IDs.
 // Used by both webhookHandlers.ts and stripe.ts (confirm endpoint).
 //
-// TASK 3: All price IDs are read exclusively from environment variables.
-// There are NO hardcoded fallback live price IDs.
-// If env vars are missing, validateBillingConfig() will throw at startup.
+// Single subscription: trainchat_monthly at $49.99/mo
+// Legacy plans (starter, pro, elite) are still supported for existing subscribers.
 
 import type { PlanTier, BillingInterval } from "@workspace/db";
 import { logger } from "./logger";
@@ -16,6 +15,8 @@ import { logger } from "./logger";
 // validateBillingConfig() must be called at startup to catch missing values.
 
 const PRICE_IDS = {
+  TRAINCHAT_MONTHLY: process.env.STRIPE_PRICE_TRAINCHAT_MONTHLY ?? "",
+  // Legacy plan IDs — retained for webhook plan detection on existing subscribers
   STARTER_MONTHLY: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "",
   STARTER_YEARLY:  process.env.STRIPE_PRICE_STARTER_YEARLY  ?? "",
   PRO_MONTHLY:     process.env.STRIPE_PRICE_PRO_MONTHLY     ?? "",
@@ -26,6 +27,8 @@ const PRICE_IDS = {
 
 // Exported for use in the plan-map API endpoint and webhook handlers
 export const PLAN_PRICE_MAP = {
+  trainchat: { monthly: PRICE_IDS.TRAINCHAT_MONTHLY, yearly: "" },
+  // Legacy entries — used only for existing subscriber detection
   starter: { monthly: PRICE_IDS.STARTER_MONTHLY, yearly: PRICE_IDS.STARTER_YEARLY },
   pro:     { monthly: PRICE_IDS.PRO_MONTHLY,     yearly: PRICE_IDS.PRO_YEARLY },
   elite:   { monthly: PRICE_IDS.ELITE_MONTHLY,   yearly: PRICE_IDS.ELITE_YEARLY },
@@ -49,6 +52,8 @@ const REQUIRED_STRIPE_ENV_VARS: string[] = [
 
 const OPTIONAL_STRIPE_ENV_VARS: string[] = [
   "STRIPE_PUBLISHABLE_KEY",
+  "STRIPE_PRICE_TRAINCHAT_MONTHLY",
+  // Legacy optional vars — retained for existing subscriber webhook detection
   "STRIPE_PRICE_STARTER_MONTHLY",
   "STRIPE_PRICE_STARTER_YEARLY",
   "STRIPE_PRICE_PRO_MONTHLY",
@@ -83,7 +88,7 @@ export function validateBillingConfig(): void {
   }
 }
 
-// ─── TASK 4: detectPlanInterval — fail loudly on unknown price IDs ─────────────
+// ─── detectPlanInterval — fail loudly on unknown price IDs ─────────────────────
 //
 // If the price ID is not in the known map, throw rather than silently falling
 // back to a default plan. This surfaces misconfiguration immediately.
@@ -92,6 +97,8 @@ export function detectPlanInterval(priceId: string): { plan: PlanTier; billingIn
   const monthlyMap: Record<string, PlanTier> = {};
   const yearlyMap: Record<string, PlanTier> = {};
 
+  if (PRICE_IDS.TRAINCHAT_MONTHLY) monthlyMap[PRICE_IDS.TRAINCHAT_MONTHLY] = "pro";
+  // Legacy plan detection
   if (PRICE_IDS.STARTER_MONTHLY) monthlyMap[PRICE_IDS.STARTER_MONTHLY] = "starter";
   if (PRICE_IDS.PRO_MONTHLY)     monthlyMap[PRICE_IDS.PRO_MONTHLY]     = "pro";
   if (PRICE_IDS.ELITE_MONTHLY)   monthlyMap[PRICE_IDS.ELITE_MONTHLY]   = "elite";
@@ -106,7 +113,7 @@ export function detectPlanInterval(priceId: string): { plan: PlanTier; billingIn
     return { plan: monthlyMap[priceId], billingInterval: "monthly" };
   }
 
-  // TASK 4: Unknown price ID — do not silently default
+  // Unknown price ID — do not silently default
   logger.error(
     { priceId, knownMonthlyIds: Object.keys(monthlyMap), knownYearlyIds: Object.keys(yearlyMap) },
     "[BillingUtils] UNKNOWN PRICE ID — cannot determine plan or interval. " +

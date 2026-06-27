@@ -1,8 +1,8 @@
 // ─── /api/billing/* routes ────────────────────────────────────────────────────
 //
-// Lookup-key-based checkout, subscription status, and portal session endpoints.
-// These complement the existing /api/subscription/* routes and support the
-// tier+billingInterval checkout flow without requiring price IDs in env vars.
+// Checkout, subscription status, and portal session endpoints.
+// Single subscription: trainchat_monthly at $49.99/mo
+// Legacy tiers (starter, pro, elite) still accepted for backward compatibility.
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -13,18 +13,27 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// ─── Lookup key format: trainchat_{tier}_{billingInterval} ────────────────────
+// ─── Lookup key format ────────────────────────────────────────────────────────
 //
-// Examples:
-//   trainchat_starter_monthly
-//   trainchat_pro_yearly
-//   trainchat_elite_monthly
+// Current:  trainchat_monthly
+// Legacy:   trainchat_(starter|pro|elite)_(monthly|yearly)
+//
+// When the caller passes tier="trainchat", interval="monthly"
+//   → buildLookupKey produces "trainchat_monthly"
+// When legacy tiers are passed (existing integrations), they still work.
 
 function buildLookupKey(tier: string, billingInterval: string): string {
+  if (tier === "trainchat") {
+    // New single subscription — no tier prefix
+    return `trainchat_monthly`;
+  }
+  // Legacy: trainchat_pro_monthly, etc.
   return `trainchat_${tier}_${billingInterval}`;
 }
 
-const VALID_TIERS = new Set(["starter", "pro", "elite"]);
+// "trainchat" is the canonical new tier.
+// Legacy tiers retained for existing integrations / external API clients.
+const VALID_TIERS = new Set(["trainchat", "starter", "pro", "elite"]);
 const VALID_INTERVALS = new Set(["monthly", "yearly"]);
 
 // ─── POST /api/billing/create-checkout-session ────────────────────────────────
@@ -40,7 +49,7 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
     const { tier, billingInterval } = req.body as { tier?: string; billingInterval?: string };
 
     if (!tier || !VALID_TIERS.has(tier)) {
-      res.status(400).json({ error: "tier must be one of: starter, pro, elite" });
+      res.status(400).json({ error: "tier must be one of: trainchat, starter, pro, elite" });
       return;
     }
 
@@ -147,7 +156,6 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
 // ─── GET /api/billing/subscription ───────────────────────────────────────────
 //
 // Returns subscription state for the authenticated user.
-// Equivalent to /api/subscription but at the /billing path for clarity.
 
 router.get("/billing/subscription", requireAuth, async (req: any, res): Promise<void> => {
   try {

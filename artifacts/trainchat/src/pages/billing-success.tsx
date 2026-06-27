@@ -11,8 +11,6 @@ export default function BillingSuccess() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<"loading" | "success" | "error">("loading");
-  const [plan, setPlan] = useState<string>("");
-  const [interval, setInterval] = useState<string>("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -32,23 +30,19 @@ export default function BillingSuccess() {
       fetch(`/api/billing/checkout-session/${sessionId}`, { credentials: "include" })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data?.tier) setPlan(data.tier);
-          if (data?.billingInterval) setInterval(data.billingInterval);
           setStatus("success");
           // Invalidate again after session fetch — webhook may have landed by now
           queryClient.invalidateQueries({ queryKey: ["subscription"] });
           queryClient.invalidateQueries({ queryKey: ["user-profile"] });
           // Track conversion
           analytics.track("subscription_activated", {
-            plan: data?.tier ?? "unknown",
-            billing: data?.billingInterval ?? "unknown",
+            plan: data?.tier ?? "trainchat",
+            billing: data?.billingInterval ?? "monthly",
           });
 
           // Meta CAPI: Subscribe + Purchase
-          const planLabel = data?.tier ?? "unknown";
-          const billingLabel = data?.billingInterval ?? "unknown";
-          capi.subscribe(undefined, { content_name: `TrainChat ${planLabel}`, billing_interval: billingLabel });
-          capi.purchase(0, "USD", undefined, { content_name: `TrainChat ${planLabel}`, content_category: "subscription" });
+          capi.subscribe(undefined, { content_name: "TrainChat", billing_interval: "monthly" });
+          capi.purchase(0, "USD", undefined, { content_name: "TrainChat", content_category: "subscription" });
         })
         .catch(() => setStatus("success"));
 
@@ -56,12 +50,6 @@ export default function BillingSuccess() {
     const timer = setTimeout(load, 1200);
     return () => clearTimeout(timer);
   }, []);
-
-  const PLAN_NAMES: Record<string, string> = {
-    starter: "Starter",
-    pro: "Pro",
-    elite: "Elite",
-  };
 
   return (
     <div className="min-h-screen bg-[#080e18] flex items-center justify-center p-6">
@@ -78,19 +66,9 @@ export default function BillingSuccess() {
               Payment successful
             </h1>
 
-            {plan ? (
-              <p className="text-muted-foreground mb-1">
-                Your{" "}
-                <span className="text-foreground font-semibold">
-                  TrainChat® {PLAN_NAMES[plan] ?? plan}
-                </span>{" "}
-                {interval ? `(${interval}) ` : ""}plan is now active.
-              </p>
-            ) : (
-              <p className="text-muted-foreground mb-1">
-                Your TrainChat® plan is now active.
-              </p>
-            )}
+            <p className="text-muted-foreground mb-1">
+              Your <span className="text-foreground font-semibold">TrainChat®</span> subscription is now active.
+            </p>
 
             <p className="text-sm text-muted-foreground/60 mb-8">
               You'll receive a receipt from Stripe at your email address.

@@ -9,8 +9,6 @@ import {
   CheckCircle,
   XCircle,
   Zap,
-  Crown,
-  Star,
   User,
   Mail,
   LogOut,
@@ -150,22 +148,23 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function PlanIcon({ plan }: { plan: string }) {
-  if (plan === "elite") return <Crown className="w-5 h-5 text-amber-400" />;
-  if (plan === "pro") return <Star className="w-5 h-5 text-primary" />;
+  if (plan === "starter" || plan === "pro" || plan === "elite") {
+    return <Zap className="w-5 h-5 text-primary" />;
+  }
   return <Zap className="w-5 h-5 text-muted-foreground" />;
 }
 
 const PLAN_NAMES: Record<string, string> = {
   free: "Free",
-  starter: "Starter",
-  pro: "Pro",
-  elite: "Elite",
+  starter: "TrainChat",
+  pro: "TrainChat",
+  elite: "TrainChat",
 };
 
 const PLAN_PRICES: Record<string, { monthly: number; yearly: number }> = {
-  starter: { monthly: 19, yearly: 182 },
-  pro: { monthly: 39, yearly: 374 },
-  elite: { monthly: 79, yearly: 758 },
+  starter: { monthly: 49.99, yearly: 49.99 * 12 },
+  pro: { monthly: 49.99, yearly: 49.99 * 12 },
+  elite: { monthly: 49.99, yearly: 49.99 * 12 },
 };
 
 // ─── Section Header ───────────────────────────────────────────────────────────
@@ -1068,7 +1067,7 @@ export default function SettingsPage() {
                         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all"
                       >
                         <Zap className="w-4 h-4" />
-                        {isPaid ? "Reactivate subscription" : "Upgrade to Pro"}
+                        {isPaid ? "Reactivate subscription" : "Get TrainChat"}
                       </button>
                     </div>
                   )}

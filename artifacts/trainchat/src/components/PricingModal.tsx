@@ -1,76 +1,6 @@
-import { X, Zap, Check, Star, Crown, Loader2 } from "lucide-react";
+import { X, Zap, Check, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { analytics } from "@/lib/analytics";
-
-interface Plan {
-  id: string;
-  name: string;
-  monthlyPrice: number;
-  yearlyPrice: number;
-  badge?: string;
-  badgeColor?: string;
-  headline: string;
-  description: string;
-  features: string[];
-  highlighted?: boolean;
-  ctaLabel: string;
-}
-
-const PLANS: Plan[] = [
-  {
-    id: "starter",
-    name: "Starter",
-    monthlyPrice: 19,
-    yearlyPrice: 182,
-    headline: "Your program, saved and evolving.",
-    description: "Build your training system and keep progressing.",
-    ctaLabel: "Save my training system",
-    features: [
-      "Full program building",
-      "Basic exercise library",
-      "Conversation history",
-      "Save and return to your system",
-    ],
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    monthlyPrice: 39,
-    yearlyPrice: 374,
-    badge: "Most Popular",
-    badgeColor: "text-primary border-primary/30 bg-primary/10",
-    headline: "Your coach remembers you.",
-    description: "Adaptive coaching with long-term memory and evolving programming.",
-    ctaLabel: "Start coaching with Pro",
-    highlighted: true,
-    features: [
-      "Unlimited AI coaching",
-      "Adaptive training (readiness-based)",
-      "Long-term memory — coach remembers you",
-      "Program evolution week-over-week",
-      "Session logging & progress tracking",
-      "Proactive insights engine",
-    ],
-  },
-  {
-    id: "elite",
-    name: "Elite",
-    monthlyPrice: 79,
-    yearlyPrice: 758,
-    badge: "High Performance",
-    badgeColor: "text-amber-400 border-amber-400/30 bg-amber-400/10",
-    headline: "Maximum coaching intelligence.",
-    description: "Priority adaptation, deeper performance memory, and early access systems.",
-    ctaLabel: "Activate Elite",
-    features: [
-      "Everything in Pro",
-      "Priority AI response speed",
-      "Advanced adaptation logic",
-      "Deepest performance memory",
-      "Early access to new features",
-    ],
-  },
-];
 
 interface Props {
   onClose: () => void;
@@ -78,37 +8,53 @@ interface Props {
   currentPlan?: string;
 }
 
+const FEATURES = [
+  "Unlimited AI coaching conversations",
+  "Adaptive training — readiness-based adjustments",
+  "Long-term memory — your coach remembers you",
+  "Program evolution week-over-week",
+  "Session logging & progress tracking",
+  "Proactive insights engine",
+  "Full exercise library",
+  "Priority AI response speed",
+  "Advanced adaptation logic",
+  "Deep performance memory",
+];
+
 export default function PricingModal({ onClose, onSelectPlan, currentPlan = "free" }: Props) {
-  const [billing, setBilling] = useState<"monthly" | "yearly">("monthly");
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
+  const [loadingPlan, setLoadingPlan] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const yearlyDiscount = Math.round((1 - (182 / (19 * 12))) * 100);
+  const isSubscribed =
+    currentPlan === "starter" ||
+    currentPlan === "pro" ||
+    currentPlan === "elite" ||
+    currentPlan === "trainchat";
 
-  async function handleSelectPlan(plan: Plan) {
-    if (plan.id === currentPlan) return;
+  async function handleSubscribe() {
+    if (isSubscribed) return;
     setErrorMsg(null);
 
     if (onSelectPlan) {
-      onSelectPlan(plan.id, billing);
+      onSelectPlan("trainchat", "monthly");
       return;
     }
 
-    setLoadingPlan(plan.id);
-    analytics.track("checkout_started", { plan: plan.id, billing });
+    setLoadingPlan(true);
+    analytics.track("checkout_started", { plan: "trainchat", billing: "monthly" });
     try {
       const r = await fetch("/api/billing/create-checkout-session", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier: plan.id, billingInterval: billing }),
+        body: JSON.stringify({ tier: "trainchat", billingInterval: "monthly" }),
       });
 
       const data = await r.json().catch(() => ({}));
 
       if (!r.ok) {
         setErrorMsg(data.error ?? "Failed to start checkout. Please try again.");
-        setLoadingPlan(null);
+        setLoadingPlan(false);
         return;
       }
 
@@ -116,11 +62,11 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
         window.location.href = data.url;
       } else {
         setErrorMsg("Checkout session URL not returned. Please try again.");
-        setLoadingPlan(null);
+        setLoadingPlan(false);
       }
     } catch {
       setErrorMsg("Unable to reach payment service. Please try again.");
-      setLoadingPlan(null);
+      setLoadingPlan(false);
     }
   }
 
@@ -129,7 +75,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
       <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" onClick={onClose} />
 
       <div
-        className="relative w-full max-w-3xl rounded-2xl border border-primary/15 bg-[#080e18] overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="relative w-full max-w-md rounded-2xl border border-primary/15 bg-[#080e18] overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent" />
@@ -141,7 +87,7 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
           <X className="w-4 h-4" />
         </button>
 
-        <div className="p-8 pb-2">
+        <div className="p-8">
           <div className="text-center mb-8">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 mb-4">
               <Zap className="w-3 h-3 text-primary" />
@@ -153,113 +99,59 @@ export default function PricingModal({ onClose, onSelectPlan, currentPlan = "fre
             </p>
           </div>
 
-          {/* Billing toggle */}
-          <div className="flex items-center justify-center gap-3 mb-8">
-            <button
-              onClick={() => setBilling("monthly")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                billing === "monthly"
-                  ? "bg-primary/15 text-primary border border-primary/30"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Monthly
-            </button>
-            <button
-              onClick={() => setBilling("yearly")}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                billing === "yearly"
-                  ? "bg-primary/15 text-primary border border-primary/30"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Yearly
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-green-500/15 text-green-400 border border-green-500/20">
-                Save {yearlyDiscount}%
-              </span>
-            </button>
-          </div>
-
-          {/* Error message */}
           {errorMsg && (
             <div className="mb-4 px-4 py-3 rounded-xl border border-red-500/20 bg-red-500/5 text-sm text-red-400 text-center">
               {errorMsg}
             </div>
           )}
 
-          {/* Plans grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {PLANS.map((plan) => {
-              const price = billing === "monthly" ? plan.monthlyPrice : Math.round(plan.yearlyPrice / 12);
-              const isCurrentPlan = plan.id === currentPlan;
-              const isLoading = loadingPlan === plan.id;
+          {/* Single subscription card */}
+          <div className="relative rounded-xl border border-primary/40 bg-primary/5 p-6 mb-6">
+            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-bold border border-primary/30 bg-primary/10 text-primary whitespace-nowrap">
+              Everything included
+            </div>
 
-              return (
-                <div
-                  key={plan.id}
-                  className={`relative rounded-xl border p-5 flex flex-col transition-all ${
-                    plan.highlighted
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-border bg-card/50"
-                  }`}
-                >
-                  {plan.badge && (
-                    <div className={`absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${plan.badgeColor}`}>
-                      {plan.id === "elite" ? <Crown className="w-3 h-3 inline mr-1" /> : <Star className="w-3 h-3 inline mr-1" />}
-                      {plan.badge}
-                    </div>
-                  )}
+            <div className="text-center mb-6">
+              <h3 className="text-lg font-bold text-foreground mb-1">TrainChat</h3>
+              <div className="flex items-baseline gap-1 justify-center">
+                <span className="text-4xl font-bold text-foreground">$49.99</span>
+                <span className="text-sm text-muted-foreground">/month</span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Monthly recurring · Cancel anytime</p>
+            </div>
 
-                  <div className="mb-4">
-                    <h3 className="text-sm font-bold text-foreground mb-1">{plan.name}</h3>
-                    <p className="text-[12px] font-semibold text-foreground/80 leading-snug mb-1">{plan.headline}</p>
-                    <p className="text-[11px] text-muted-foreground leading-relaxed mb-3">{plan.description}</p>
+            <ul className="space-y-2.5 mb-6">
+              {FEATURES.map((feat) => (
+                <li key={feat} className="flex items-start gap-2.5">
+                  <Check className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+                  <span className="text-[12px] text-muted-foreground leading-snug">{feat}</span>
+                </li>
+              ))}
+            </ul>
 
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold text-foreground">${price}</span>
-                      <span className="text-xs text-muted-foreground">/mo</span>
-                    </div>
-                    {billing === "yearly" && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5">
-                        ${plan.yearlyPrice}/year
-                      </p>
-                    )}
-                  </div>
-
-                  <ul className="space-y-2 flex-1 mb-5">
-                    {plan.features.map((feat) => (
-                      <li key={feat} className="flex items-start gap-2">
-                        <Check className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
-                        <span className="text-[11px] text-muted-foreground leading-snug">{feat}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <button
-                    onClick={() => handleSelectPlan(plan)}
-                    disabled={isCurrentPlan || isLoading || loadingPlan !== null}
-                    className={`w-full py-2.5 rounded-lg text-sm font-semibold transition-all duration-150 flex items-center justify-center gap-2 ${
-                      isCurrentPlan
-                        ? "bg-accent/40 text-muted-foreground cursor-default border border-border"
-                        : plan.highlighted
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60"
-                        : "bg-card border border-border text-foreground hover:border-primary/40 hover:bg-primary/5 active:scale-[0.98] disabled:opacity-60"
-                    }`}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        Redirecting…
-                      </>
-                    ) : isCurrentPlan ? (
-                      "Current Plan"
-                    ) : (
-                      plan.ctaLabel
-                    )}
-                  </button>
-                </div>
-              );
-            })}
+            <button
+              onClick={handleSubscribe}
+              disabled={isSubscribed || loadingPlan}
+              className={`w-full py-3 rounded-xl text-sm font-semibold transition-all duration-150 flex items-center justify-center gap-2 ${
+                isSubscribed
+                  ? "bg-accent/40 text-muted-foreground cursor-default border border-border"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60"
+              }`}
+            >
+              {loadingPlan ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Redirecting…
+                </>
+              ) : isSubscribed ? (
+                "Current Plan"
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5" />
+                  Get TrainChat
+                </>
+              )}
+            </button>
           </div>
 
           <div className="flex items-center justify-center gap-6 py-4 border-t border-border/50">

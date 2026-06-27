@@ -106,7 +106,7 @@ export default function PaywallModal({ plan, messagesUsed, isAnonymous, onUpgrad
             <p className="text-sm text-muted-foreground leading-relaxed">
               {isFree
                 ? "You've built a real training program — and this is just the start. Unlock full access to keep adapting it week over week, log sessions, and let your coach remember everything."
-                : "You've hit your monthly limit. Upgrade to Pro for unlimited coaching sessions."}
+                : "You've hit your message limit. Subscribe to TrainChat for unlimited coaching conversations."}
             </p>
           </div>
 
@@ -130,7 +130,7 @@ export default function PaywallModal({ plan, messagesUsed, isAnonymous, onUpgrad
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary/90 active:scale-[0.98] transition-all duration-150"
           >
             <Zap className="w-4 h-4" />
-            {isFree ? "Keep Building — See Plans" : "View Plans & Unlock Access"}
+            {isFree ? "Keep Building — Get TrainChat" : "Get TrainChat — Unlimited Access"}
             <ArrowRight className="w-4 h-4" />
           </button>
 

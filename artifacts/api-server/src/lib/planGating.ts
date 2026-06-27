@@ -3,7 +3,6 @@ import { eq } from "drizzle-orm";
 import type { PlanTier } from "@workspace/db";
 
 export const FREE_MESSAGE_LIMIT = 12;
-export const STARTER_MESSAGE_LIMIT = 75;
 
 // Anonymous users (device-ID authenticated, not yet registered) get 8 free
 // interactions — enough to build and refine a real program before the paywall.
@@ -19,8 +18,12 @@ export interface PlanFeatures {
   sessionLogging: boolean;
 }
 
+// All subscribed tiers (starter, pro, elite — legacy or current) unlock everything.
+// "free" retains the limited feature set.
 export function getPlanFeatures(plan: PlanTier): PlanFeatures {
   switch (plan) {
+    case "starter":
+    case "pro":
     case "elite":
       return {
         unlimitedMessages: true,
@@ -30,26 +33,6 @@ export function getPlanFeatures(plan: PlanTier): PlanFeatures {
         programEvolution: true,
         priorityAI: true,
         sessionLogging: true,
-      };
-    case "pro":
-      return {
-        unlimitedMessages: true,
-        adaptationContext: true,
-        memoryContext: true,
-        insightHints: true,
-        programEvolution: true,
-        priorityAI: false,
-        sessionLogging: true,
-      };
-    case "starter":
-      return {
-        unlimitedMessages: false,
-        adaptationContext: false,
-        memoryContext: false,
-        insightHints: false,
-        programEvolution: false,
-        priorityAI: false,
-        sessionLogging: false,
       };
     default:
       return {
@@ -173,10 +156,8 @@ export async function getUserPlanInfo(userId: number): Promise<{
   if (effectivePlan === "free") {
     messagesRemaining = Math.max(0, FREE_MESSAGE_LIMIT - messageCount);
     canSendMessage = messageCount < FREE_MESSAGE_LIMIT;
-  } else if (effectivePlan === "starter") {
-    messagesRemaining = Math.max(0, STARTER_MESSAGE_LIMIT - messageCount);
-    canSendMessage = messageCount < STARTER_MESSAGE_LIMIT;
   }
+  // All subscribed plans (starter/pro/elite) have unlimited messages
 
   return {
     plan: effectivePlan,
@@ -199,7 +180,7 @@ export const PLAN_DISPLAY: Record<
   { name: string; price: number; yearlyPrice: number; badge?: string }
 > = {
   free: { name: "Free", price: 0, yearlyPrice: 0 },
-  starter: { name: "Starter", price: 19, yearlyPrice: 182 },
-  pro: { name: "Pro", price: 39, yearlyPrice: 374, badge: "Most Popular" },
-  elite: { name: "Elite", price: 79, yearlyPrice: 758, badge: "High Performance" },
+  starter: { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
+  pro: { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
+  elite: { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
 };

@@ -149,7 +149,7 @@ export function UpgradeHint({ onDismiss }: UpgradeHintProps) {
       </div>
       <div className="flex items-center gap-2 flex-1 px-4 py-2.5 rounded-2xl rounded-tl-sm bg-card border border-border/60 min-w-0">
         <p className="text-[12px] text-muted-foreground flex-1">
-          Pro unlocks unlimited systems and advanced edits
+          TrainChat unlocks unlimited systems and advanced coaching
         </p>
         <button
           onClick={onDismiss}

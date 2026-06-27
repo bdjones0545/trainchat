@@ -134,7 +134,7 @@ const sections: { heading: string; items: FaqItem[] }[] = [
     items: [
       {
         q: "Is TrainChat free?",
-        a: "TrainChat offers free access for new users with an initial message allowance so you can experience the coaching system before subscribing. Pro plans unlock unlimited coaching conversations, full adaptive programming, and complete program history."
+        a: "TrainChat offers free access for new users with an initial message allowance so you can experience the coaching system before subscribing. A TrainChat subscription ($49.99/mo) unlocks unlimited coaching conversations, full adaptive programming, and complete program history."
       },
       {
         q: "Do I need to create an account to use TrainChat?",

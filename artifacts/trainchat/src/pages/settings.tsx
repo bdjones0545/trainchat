@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useNoIndex } from "@/hooks/useNoIndex";
 import {
   ArrowLeft, CreditCard, Calendar, AlertCircle, CheckCircle, XCircle, Zap,
-  Crown, Star, User, Mail, LogOut, Trash2, ChevronRight, Dumbbell, Target,
+  User, Mail, LogOut, Trash2, ChevronRight, Dumbbell, Target,
   Brain, Shield, Edit2, Save, X, ToggleLeft, BarChart2, AlertTriangle,
   Loader2, Pencil, Activity, TrendingUp, TrendingDown, Minus, Download,
   RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Heart, Clock, Siren,
@@ -1107,13 +1107,18 @@ function SubscriptionSection({ sub, subLoading, isAnonymousUser, onUpgrade, onMa
   if (isPaid && cancelAtPeriodEnd) displayStatus = "canceled_within_period";
   if (!isPaid) displayStatus = "free";
 
-  const PLAN_NAMES: Record<string, string> = { free: "Free", starter: "Starter", pro: "Pro", elite: "Elite" };
+  const PLAN_NAMES: Record<string, string> = {
+    free: "Free",
+    starter: "TrainChat",
+    pro: "TrainChat",
+    elite: "TrainChat",
+  };
 
   const planFeatures: Record<string, string[]> = {
-    free: ["5 messages / session", "Basic program building"],
-    starter: ["Unlimited messages", "Full program building", "Check-in tracking"],
-    pro: ["Everything in Starter", "Long-term memory", "Athlete DNA calibration", "Advanced forecasting"],
-    elite: ["Everything in Pro", "Competition-mode coaching", "Priority intelligence", "Dedicated support"],
+    free: ["Limited messages", "Basic program building"],
+    starter: ["Unlimited AI coaching", "Full program building", "Long-term memory", "Adaptive training", "Session logging"],
+    pro: ["Unlimited AI coaching", "Full program building", "Long-term memory", "Adaptive training", "Session logging"],
+    elite: ["Unlimited AI coaching", "Full program building", "Long-term memory", "Adaptive training", "Session logging"],
   };
 
   return (
@@ -1124,7 +1129,7 @@ function SubscriptionSection({ sub, subLoading, isAnonymousUser, onUpgrade, onMa
         <div className="flex items-start justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-              {plan === "elite" ? <Crown className="w-5 h-5 text-amber-400" /> : plan === "pro" ? <Star className="w-5 h-5 text-primary" /> : <Zap className="w-5 h-5 text-muted-foreground" />}
+              {(plan === "starter" || plan === "pro" || plan === "elite") ? <Zap className="w-5 h-5 text-primary" /> : <Zap className="w-5 h-5 text-muted-foreground" />}
             </div>
             <div>
               <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-0.5">Current plan</p>
@@ -1187,9 +1192,9 @@ function SubscriptionSection({ sub, subLoading, isAnonymousUser, onUpgrade, onMa
           <div className="px-4 py-3">
             <button onClick={onUpgrade}
               className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all">
-              <Zap className="w-4 h-4" />{isPaid ? "Reactivate subscription" : "Upgrade to Pro"}
+              <Zap className="w-4 h-4" />{isPaid ? "Reactivate subscription" : "Get TrainChat"}
             </button>
-            <p className="text-center text-[11px] text-muted-foreground/50 mt-2">Unlock memory, Athlete DNA, and adaptive coaching</p>
+            <p className="text-center text-[11px] text-muted-foreground/50 mt-2">Unlimited coaching · Adaptive programming · $49.99/mo</p>
           </div>
         )}
       </Card>

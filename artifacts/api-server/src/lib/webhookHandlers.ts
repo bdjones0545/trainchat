@@ -22,7 +22,8 @@ import type { PlanTier, BillingInterval } from "@workspace/db";
 // ─── Plan detection from Stripe price lookup_key or price ID ──────────────────
 //
 // Primary path: parse the lookup_key field on the Stripe price object.
-//   Format: trainchat_{tier}_{interval}  e.g. trainchat_starter_monthly
+//   Current format:  trainchat_monthly
+//   Legacy formats:  trainchat_(starter|pro|elite)_(monthly|yearly)
 //
 // Fallback: match against STRIPE_PRICE_* environment variables.
 //   This allows continued operation when prices predate lookup_key adoption.
@@ -32,6 +33,9 @@ import type { PlanTier, BillingInterval } from "@workspace/db";
 
 // Env-var fallback map (populated at startup; missing vars are safely skipped)
 const PLAN_PRICE_MAP: Record<string, PlanTier> = {
+  // Current single plan
+  [process.env.STRIPE_PRICE_TRAINCHAT_MONTHLY ?? ""]: "pro",
+  // Legacy plans — existing subscribers retain access
   [process.env.STRIPE_PRICE_STARTER_MONTHLY ?? ""]: "starter",
   [process.env.STRIPE_PRICE_PRO_MONTHLY ?? ""]: "pro",
   [process.env.STRIPE_PRICE_ELITE_MONTHLY ?? ""]: "elite",
@@ -47,8 +51,9 @@ const YEARLY_PRICE_IDS = new Set([
   process.env.STRIPE_PRICE_ELITE_YEARLY ?? "",
 ].filter(Boolean));
 
-// TRAINCHAT_LOOKUP_KEY_RE matches: trainchat_(starter|pro|elite)_(monthly|yearly)
-const LOOKUP_KEY_RE = /^trainchat_(starter|pro|elite)_(monthly|yearly)$/;
+// Matches current: trainchat_monthly
+// Matches legacy:  trainchat_(starter|pro|elite)_(monthly|yearly)
+const LOOKUP_KEY_RE = /^trainchat_(?:(starter|pro|elite)_)?(monthly|yearly)$/;
 
 export function detectPlanFromLookupKey(
   lookupKey: string | null | undefined
@@ -56,9 +61,19 @@ export function detectPlanFromLookupKey(
   if (!lookupKey) return null;
   const m = lookupKey.match(LOOKUP_KEY_RE);
   if (!m) return null;
+
+  // m[1] = tier (undefined for new single plan), m[2] = interval
+  const interval = m[2] as BillingInterval;
+
+  // New single plan: trainchat_monthly → maps to "pro" internally
+  if (!m[1]) {
+    return { plan: "pro", billingInterval: interval };
+  }
+
+  // Legacy plans: trainchat_starter_monthly, trainchat_pro_yearly, etc.
   return {
     plan: m[1] as PlanTier,
-    billingInterval: m[2] as BillingInterval,
+    billingInterval: interval,
   };
 }
 
@@ -296,7 +311,7 @@ async function handleSubscriptionDeleted(event: any): Promise<void> {
 
 // ─── Handler: invoice.paid ────────────────────────────────────────────────────
 //
-// TASK 2: Full subscription sync on every successful payment.
+// Full subscription sync on every successful payment.
 //
 // Fires on every successful payment including renewals. We perform a FULL sync
 // of the subscription state — not just a planStatus patch — by retrieving the
@@ -304,8 +319,6 @@ async function handleSubscriptionDeleted(event: any): Promise<void> {
 //
 // This prevents stale currentPeriodEnd, stale interval, or stale plan fields
 // if customer.subscription.updated was delayed or missed.
-//
-// One Stripe API call per paid invoice is intentional: reliability > latency.
 
 async function handleInvoicePaid(event: any): Promise<void> {
   const invoice = event.data.object;
@@ -331,7 +344,6 @@ async function handleInvoicePaid(event: any): Promise<void> {
   }
 
   // Retrieve the full subscription object from Stripe to get current state.
-  // This ensures currentPeriodEnd, plan, interval, and status are all fresh.
   const stripe = await getUncachableStripeClient();
   const sub = await stripe.subscriptions.retrieve(subscriptionId, {
     expand: ["items.data.price"],
@@ -371,8 +383,6 @@ async function handleInvoicePaid(event: any): Promise<void> {
   }
 
   try {
-    const PLAN_NAMES: Record<string, string> = { starter: "Starter", pro: "Pro", elite: "Elite" };
-    const planName = PLAN_NAMES[payload.plan] ?? payload.plan;
     const intervalLabel = payload.billingInterval === "yearly" ? "yearly" : "monthly";
     const amountPaid = invoice.amount_paid ? `$${(invoice.amount_paid / 100).toFixed(2)}` : "";
     const receiptUrl: string = invoice.hosted_invoice_url ?? invoice.receipt_url ?? "";
@@ -380,7 +390,7 @@ async function handleInvoicePaid(event: any): Promise<void> {
     const emailBody = [
       `Hi,`,
       ``,
-      `Your TrainChat ${planName} (${intervalLabel}) payment has been confirmed.`,
+      `Your TrainChat (${intervalLabel}) payment has been confirmed.`,
       amountPaid ? `Amount: ${amountPaid}` : "",
       receiptUrl ? `View receipt: ${receiptUrl}` : "",
       ``,
@@ -407,13 +417,13 @@ async function handleInvoicePaid(event: any): Promise<void> {
       body: JSON.stringify({
         personalizations: [{ to: [{ email: customerEmail }] }],
         from: { email: process.env.SENDGRID_FROM_EMAIL ?? "noreply@trainchat.app", name: "TrainChat" },
-        subject: `TrainChat payment confirmed — ${planName} plan`,
+        subject: `TrainChat payment confirmed`,
         content: [{ type: "text/plain", value: emailBody }],
       }),
     });
 
     logger.info(
-      { userId: user.id, email: customerEmail, plan: payload.plan },
+      { userId: user.id, email: customerEmail },
       "[BillingEmail] Payment confirmation email sent via SendGrid"
     );
   } catch (emailErr) {
@@ -492,8 +502,6 @@ async function dispatchWebhookEvent(event: any): Promise<void> {
 
 // ─── Main entry point ─────────────────────────────────────────────────────────
 //
-// TASK 1: Webhook retry reliability.
-//
 // If business logic throws, we re-throw so the webhook route returns 4xx/5xx.
 // Stripe will then retry the event. StripeSync already recorded the event
 // idempotently, so retries are safe — the upsert writes produce the same state.
@@ -516,7 +524,7 @@ export class WebhookHandlers {
 
     // Layer 2: Business logic — runs after verified event.
     // Parse raw payload as JSON (StripeSync already verified the signature).
-    // TASK 1: Do NOT catch exceptions here. Let them bubble up to the route handler,
+    // Do NOT catch exceptions here. Let them bubble up to the route handler,
     // which will return 5xx so Stripe retries the event.
     const event = JSON.parse(payload.toString("utf8"));
     if (HANDLED_EVENTS.has(event.type)) {

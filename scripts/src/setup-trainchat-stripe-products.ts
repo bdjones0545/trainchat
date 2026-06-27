@@ -1,47 +1,30 @@
 /**
  * setup-trainchat-stripe-products.ts
  *
- * Creates TrainChat Stripe products and prices with lookup keys.
+ * Creates the single TrainChat subscription product and price in Stripe.
  * Fully idempotent — safe to re-run at any time.
  *
  *   pnpm --filter @workspace/scripts run stripe:setup-products
  *
  * Behavior:
- *   - Creates Products if missing (matched by metadata.trainchat_plan)
- *   - Creates recurring Prices with lookup_key if missing
+ *   - Creates the Product if missing (matched by metadata.trainchat_plan)
+ *   - Creates a recurring monthly Price with lookup_key if missing
  *   - If a price with the lookup_key already exists, reuses it
- *   - Prints product ID, price IDs, amounts, and intervals
+ *   - Prints product ID, price ID, amount, and interval
  *
- * After running, copy the STRIPE_PRICE_* env var lines printed at the end
- * into your Replit Secrets panel. The app also works via lookup keys alone,
- * so this step is optional — but env vars enable plan detection in webhooks.
+ * After running, copy the STRIPE_PRICE_TRAINCHAT_MONTHLY env var line printed
+ * at the end into your Replit Secrets panel. The app also works via lookup
+ * key alone, so this step is optional but recommended.
  */
 
 import Stripe from "stripe";
 
-const PLANS = [
-  {
-    plan: "starter",
-    name: "TrainChat Starter",
-    description: "AI coaching with 75 messages/month — full program building included.",
-    monthly: { amount: 1900, lookupKey: "trainchat_starter_monthly" },
-    yearly:  { amount: 18200, lookupKey: "trainchat_starter_yearly" },
-  },
-  {
-    plan: "pro",
-    name: "TrainChat Pro",
-    description: "Unlimited AI coaching, adaptive training, long-term memory & program evolution.",
-    monthly: { amount: 3900, lookupKey: "trainchat_pro_monthly" },
-    yearly:  { amount: 37400, lookupKey: "trainchat_pro_yearly" },
-  },
-  {
-    plan: "elite",
-    name: "TrainChat Elite",
-    description: "Everything in Pro + priority AI speed, advanced adaptation & early access features.",
-    monthly: { amount: 7900, lookupKey: "trainchat_elite_monthly" },
-    yearly:  { amount: 75800, lookupKey: "trainchat_elite_yearly" },
-  },
-] as const;
+const PRODUCT = {
+  plan: "trainchat",
+  name: "TrainChat",
+  description: "AI performance coaching — unlimited conversations, adaptive training, long-term memory, and program evolution.",
+  monthly: { amount: 4999, lookupKey: "trainchat_monthly" },
+} as const;
 
 async function getStripeClient(): Promise<Stripe> {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
@@ -126,83 +109,49 @@ async function main() {
 
   console.log("Connected to Stripe.\n");
 
-  const results: Array<{
-    plan: string;
-    productId: string;
-    monthlyPriceId: string;
-    monthlyLookupKey: string;
-    yearlyPriceId: string;
-    yearlyLookupKey: string;
-  }> = [];
+  console.log(`── ${PRODUCT.name} ──`);
 
-  for (const plan of PLANS) {
-    console.log(`\n── ${plan.name} ──`);
+  // Find or create product
+  let product: Stripe.Product;
+  const existing = await stripe.products.search({
+    query: `metadata["trainchat_plan"]:"${PRODUCT.plan}"`,
+  });
 
-    // Find or create product
-    let product: Stripe.Product;
-    const existing = await stripe.products.search({
-      query: `metadata["trainchat_plan"]:"${plan.plan}"`,
+  if (existing.data.length > 0) {
+    product = existing.data[0];
+    console.log(`  Product exists: ${product.name} (${product.id})`);
+  } else {
+    product = await stripe.products.create({
+      name: PRODUCT.name,
+      description: PRODUCT.description,
+      metadata: { trainchat_plan: PRODUCT.plan },
     });
-
-    if (existing.data.length > 0) {
-      product = existing.data[0];
-      console.log(`  Product exists: ${product.name} (${product.id})`);
-    } else {
-      product = await stripe.products.create({
-        name: plan.name,
-        description: plan.description,
-        metadata: { trainchat_plan: plan.plan },
-      });
-      console.log(`  Created product: ${product.name} (${product.id})`);
-    }
-
-    // Find or create prices
-    const monthlyPrice = await getOrCreatePrice(
-      stripe,
-      product.id,
-      plan.monthly.amount,
-      "month",
-      plan.monthly.lookupKey
-    );
-
-    const yearlyPrice = await getOrCreatePrice(
-      stripe,
-      product.id,
-      plan.yearly.amount,
-      "year",
-      plan.yearly.lookupKey
-    );
-
-    results.push({
-      plan: plan.plan,
-      productId: product.id,
-      monthlyPriceId: monthlyPrice.id,
-      monthlyLookupKey: plan.monthly.lookupKey,
-      yearlyPriceId: yearlyPrice.id,
-      yearlyLookupKey: plan.yearly.lookupKey,
-    });
+    console.log(`  Created product: ${product.name} (${product.id})`);
   }
+
+  // Find or create the monthly price
+  const monthlyPrice = await getOrCreatePrice(
+    stripe,
+    product.id,
+    PRODUCT.monthly.amount,
+    "month",
+    PRODUCT.monthly.lookupKey
+  );
 
   // Print summary
   console.log("\n\n=== SETUP COMPLETE ===\n");
-  console.log("All products and prices are ready.\n");
+  console.log("Product and price are ready.\n");
 
-  console.log("── Lookup Keys (used automatically) ──");
-  for (const r of results) {
-    console.log(`  ${r.plan}: ${r.monthlyLookupKey}, ${r.yearlyLookupKey}`);
-  }
+  console.log("── Lookup Key (used automatically) ──");
+  console.log(`  trainchat: ${PRODUCT.monthly.lookupKey}`);
 
-  console.log("\n── Optional: Set these in Replit Secrets for env-var-based plan detection ──");
-  console.log("   (The app works via lookup keys without these, but setting them");
+  console.log("\n── Optional: Set this in Replit Secrets for env-var-based plan detection ──");
+  console.log("   (The app works via lookup key without this, but setting it");
   console.log("    adds a fast local fallback in webhook handlers)\n");
-  for (const r of results) {
-    const tier = r.plan.toUpperCase();
-    console.log(`  STRIPE_PRICE_${tier}_MONTHLY=${r.monthlyPriceId}`);
-    console.log(`  STRIPE_PRICE_${tier}_YEARLY=${r.yearlyPriceId}`);
-  }
+  console.log(`  STRIPE_PRICE_TRAINCHAT_MONTHLY=${monthlyPrice.id}`);
 
   console.log("\n── Next Steps ──");
-  console.log("  1. Copy the STRIPE_PRICE_* lines above into Replit Secrets (optional but recommended)");
+  console.log("  1. Copy the STRIPE_PRICE_TRAINCHAT_MONTHLY line above into Replit Secrets (optional but recommended)");
   console.log("  2. Set STRIPE_WEBHOOK_SECRET from your Stripe Dashboard webhook endpoint");
   console.log("  3. Set CLIENT_URL to your app's base URL");
   console.log("  4. Restart the API server");

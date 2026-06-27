@@ -4,7 +4,7 @@
  * Three explicit tiers drive all feature-level gating:
  *   guest_preview  — unauthenticated visitor
  *   free_preview   — authenticated but no active subscription
- *   full_access    — subscribed (pro / elite)
+ *   full_access    — subscribed (any active plan: starter, pro, or elite)
  *
  * Access checks are intentionally feature-level, not route-level, so the
  * same component can render partial content regardless of entry point
@@ -18,7 +18,10 @@ export function getAccessTier(
   subscriptionPlan: string | null | undefined,
 ): AccessTier {
   if (!isAuthenticated) return "guest_preview";
-  if (subscriptionPlan === "pro" || subscriptionPlan === "elite") return "full_access";
+  // Any active subscription plan (starter, pro, elite — legacy or current) grants full access
+  if (subscriptionPlan === "starter" || subscriptionPlan === "pro" || subscriptionPlan === "elite") {
+    return "full_access";
+  }
   return "free_preview";
 }
 
