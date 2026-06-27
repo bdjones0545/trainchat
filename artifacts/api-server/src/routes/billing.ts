@@ -115,7 +115,7 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
         : `${req.protocol}://${req.get("host")}`);
 
     const successUrl = `${clientUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`;
-    const cancelUrl  = `${clientUrl}/billing/cancelled`;
+    const cancelUrl  = "https://www.trainchat.ai";
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,

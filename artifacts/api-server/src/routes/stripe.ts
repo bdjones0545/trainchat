@@ -98,7 +98,7 @@ router.post("/subscription/checkout", requireAuth, async (req: any, res): Promis
     const successUrl = process.env.STRIPE_CHECKOUT_SUCCESS_URL
       ?? `${baseUrl}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = process.env.STRIPE_CHECKOUT_CANCEL_URL
-      ?? `${baseUrl}/?checkout=cancel`;
+      ?? "https://www.trainchat.ai";
 
     const session = await stripeService.createCheckoutSession(
       customerId,
