@@ -1,0 +1,75 @@
+Harden and test the TrainChat Stripe billing + webhook system end-to-end.
+
+Focus only on billing, subscriptions, checkout, webhook processing, idempotency, legacy subscriber compatibility, and access control.
+
+Test and verify:
+
+1. Checkout
+- New user can subscribe to TrainChat at $49.99/month.
+- Checkout uses mode: "subscription".
+- Checkout uses the single TrainChat recurring price.
+- Starter/Pro/Elite are not offered anywhere.
+
+2. Webhooks
+- POST /api/stripe/webhook uses raw body.
+- STRIPE_WEBHOOK_SECRET is required.
+- Invalid signatures return HTTP 400 before DB writes.
+- Duplicate Stripe event IDs are skipped safely.
+- Supported events work:
+  - checkout.session.completed
+  - customer.subscription.created
+  - customer.subscription.updated
+  - customer.subscription.deleted
+  - invoice.paid
+  - invoice.payment_succeeded
+  - invoice.payment_failed
+
+3. Subscription status mapping
+- active/trialing users get full access.
+- past_due preserves access during retry/grace period.
+- canceled users keep access until current_period_end.
+- unpaid/incomplete_expired/paused users are restricted.
+- legacy starter/pro/elite subscribers keep access and receive all TrainChat features.
+
+4. Customer Portal
+- Users can manage billing.
+- Old Starter/Pro/Elite plans are not available as switchable options.
+- Canceling through the portal updates TrainChat correctly.
+
+5. Access control
+- Paid-only features unlock for active TrainChat users.
+- Restricted users see the correct billing/paywall state.
+- No free user can access paid-only endpoints.
+
+6. Regression search
+Search the entire codebase for:
+- starter
+- pro
+- elite
+- trainchat_monthly
+- STRIPE_PRICE
+- subscriptionStatus
+- plan
+- paywall
+- upgrade
+
+Confirm legacy references are intentional and documented.
+
+7. Tests
+Add or update automated tests for:
+- webhook idempotency
+- invalid webhook signatures
+- checkout session creation
+- subscription status sync
+- legacy plan compatibility
+- access gating
+
+8. Report back with:
+- files changed
+- tests added
+- tests run
+- pass/fail result
+- any remaining risks
+- exact manual Stripe test checklist
+
+Do not change unrelated product logic. Preserve current production subscribers.
