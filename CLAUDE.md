@@ -1,12 +1,12 @@
 # CLAUDE.md — TrainChat Engineering Knowledge Base
 
 > **Document type:** Architecture Specification
-> **Version:** 1.0 (Engineering Knowledge Base — Version 1)
+> **Version:** 1.1 (Reconciled against Version 2 implementation docs — 2026-06-29)
 > **Status:** Canonical. Describes how this repository is *organized and reasoned about*.
 > **Scope:** Architecture, engineering philosophy, AI programming philosophy, exercise-science
 > philosophy, repository organization, documentation governance, and the verification model.
-> **Out of scope (for this version):** step-by-step implementation guides, API reference,
-> runbooks. Those are deferred to later, separate documents.
+> **Out of scope:** step-by-step implementation guides, API reference, runbooks. Those live in the
+> `docs/<subsystem>.md` implementation documents (Version 2).
 
 TrainChat is an **AI Performance Architect** — a conversational coaching system that designs,
 edits, and adapts real strength-and-conditioning programs through dialogue. This file is the
@@ -16,6 +16,15 @@ arranged, and the principles that constrain change* — not how to perform any s
 When this document and a subsystem's own docs disagree, treat **the code as ground truth**,
 this file as the intended architecture, and the root `*_QA.md` / `*_AUDIT.md` files as design
 records that may be partly aspirational (see *Documentation Governance*).
+
+> **Reconciliation status (v1.1).** This spec was reconciled against the 12 code-derived
+> implementation docs in `docs/`. Claims are now tagged **[accurate]**, **[drifted → corrected
+> here]**, or **[aspirational/known-divergence]**. Material gaps found during Version 2 are
+> corrected inline below and catalogued in **§11 Known Divergences**, which links each to its
+> Discrepancy Register entry (`docs/documentation-governance.md §5`). Three divergences are
+> high-severity (`DR-0007`, `DR-0011`, `DR-0025`) and are flagged in place. Per governance, code
+> issues (e.g. the merge data loss) are *documented* here but still require an engineering fix —
+> documenting a bug does not close it.
 
 ---
 
@@ -34,15 +43,27 @@ These are the load-bearing principles. Every subsystem below is an expression of
 4. **Safety and verification are gates, not suggestions.** Generated output passes through
    deterministic validation gates before a user sees it. Gates *warn, log, and let the
    responsible agent decide* — they do not silently rewrite.
-5. **Anonymous-user-first.** Every visitor is a real account from first byte; identity is merged
-   on registration. Guest and authenticated paths share one data model.
-6. **Auditability over cleverness.** Mutations, routing decisions, research approvals, and
-   learning signals are logged as structured, replayable records. Prefer explainable scoring to
-   opaque inference.
-7. **Spec-first contracts.** The HTTP surface is described once (OpenAPI) and *generated* into
-   typed clients and validators. Hand-writing both ends of a contract is a defect.
-8. **Learning is gated, never autonomous.** The system collects and aggregates behavioral
-   signals and proposes improvements, but promotion into live behavior requires human review.
+5. **Anonymous-user-first.** Every visitor is a real account from first byte. ⚠️ *Identity-merge is
+   partial:* on registration the merge moves only conversations + training_systems and **deletes the
+   anon user**, cascade-dropping their memory/profile/readiness/logs — see §5 and `DR-0025` (a
+   correctness gap, not yet fixed). A *legacy* guest-session system also still runs alongside this
+   (§2, `DR-0035`).
+6. **Auditability over cleverness.** Mutations, routing, research approvals, and learning signals are
+   logged as structured, replayable records. *Realized via* an append-only `system_change_log` +
+   jsonb snapshots — **not** DB transactions (none are used; `DR-0006`). The dedicated
+   `mutation_audit_receipts` table is only written on edit-panel/history routes, not chat (`DR-0017`).
+7. **Spec-first contracts.** Where used, the HTTP surface is generated from OpenAPI. ⚠️ *Partial in
+   practice:* the spec covers ~9 of 40 mounted routers; the **core product flow** (SSE chat,
+   mutations) rides **hand-synchronized** client↔server types, not generated ones (§2, `DR-0007`,
+   `DR-0040`). Treat this as the aspiration, not the current ground truth.
+8. **Learning is gated, never autonomous.** [accurate] The system collects/aggregates behavioral
+   signals and proposes candidates; the live Coach never reads them and promotion is admin-gated
+   (§6, verified).
+
+> **Which principles are fully realized today:** #1 (deterministic skeleton) and #8 (gated learning)
+> are verified-faithful. #2/#3/#4 hold but with caveats (typed-boundaries undermined by unwired
+> scaffolding `DR-0011`/`DR-0012`; receipts are real but split across three mechanisms `DR-0017`;
+> gates are non-blocking and partly `info`-only). #5/#6/#7 are **partially realized** as noted above.
 
 ---
 
@@ -94,21 +115,58 @@ applications, and `lib/*` packages are leaf nodes that do not depend on each oth
 `artifacts/mockup-sandbox`. The frontend and whitepaper sites are Vite builds served alongside.
 Treat `.replit` as the source of truth for what actually deploys.
 
-### The contract spine (spec-first)
+### The contract spine (spec-first) — **partial coverage** [drifted → corrected]
 
-`lib/api-spec/openapi.yaml` is the **single source of truth** for the HTTP surface. Orval
-generates the typed React Query client (`api-client-react/generated`) and the Zod schemas
-(`api-zod/generated`). The backend validates against `@workspace/api-zod`; the frontend calls
-through `@workspace/api-client-react`. **Never hand-edit generated directories** — change the
-spec and regenerate. This is principle #7 made physical.
+`lib/api-spec/openapi.yaml` → Orval → the React Query client (`api-client-react/generated`) + Zod
+schemas (`api-zod/generated`). The backend validates contracted routes against `@workspace/api-zod`;
+the frontend calls them through `@workspace/api-client-react`. **Never hand-edit generated
+directories** — change the spec and regenerate. Libs are consumed as **TypeScript source** via their
+`exports` maps (no build step for libs).
+
+⚠️ **It is the source of truth for a contracted *subset only*, not the whole HTTP surface.** The
+spec describes **24 operations across ~9 of the 40 mounted routers** (`DR-0007`, high). The majority
+— `training-system*`, billing, memory, the external API, etc. — are hand-written and **uncontracted**;
+the **core product flow** (SSE streaming chat + mutations) is governed by **hand-synchronized**
+client↔server types (`DR-0040`), and even within covered routes validation is partial (inline zod +
+ad-hoc error shapes; `DR-0008`). The external API has its own `{success,data,meta,error}` envelope and
+`/external/docs` (`DR-0039`). Principle #7 is the goal; coverage is the gap.
+
+### Anonymous identity & the legacy guest system [drifted → corrected]
+
+Two anonymous/guest systems are **both live**: the current anonymous-user-first model
+(`POST /auth/bootstrap` → a real `users` row with `isAnonymous`, cookie session) **and** a legacy
+guest-session system (`/guest/*` over `guest_sessions`) that `auth.ts` says bootstrap "replaces" but
+which is still mounted and frontend-invoked (`DR-0035`). Sessions are **Postgres-backed**
+(connect-pg-simple) and durable across instances.
+
+### Frontend surface note
+
+`@workspace/trainchat`'s largest page surface by file count is **AEO/marketing content**
+(~45 `pages/aeo/*` + concepts/whitepapers), distinct from the product UI and the standalone `wp-*`
+microsites (`DR-0041`).
 
 ---
 
 ## 3. Data Architecture (`@workspace/db`)
 
 Drizzle ORM over PostgreSQL 16; client created from `DATABASE_URL`. Schema lives in
-`lib/db/src/schema/*.ts`, one file per domain, re-exported through `schema/index.ts`. Schema
-changes are applied with `drizzle-kit push` (push-based, not a long migration history).
+`lib/db/src/schema/*.ts` (**51 tables across 30 files**), re-exported through `schema/index.ts`.
+Schema changes are applied with `drizzle-kit push` (push-based).
+
+> **[drifted → corrected] Schema realities (from `docs/db-schema.md`):**
+> - The `drizzle/0000_*` migration is a **stale snapshot** (covers 29 of 51 tables). Read the
+>   TypeScript schema, **not** the migration, to learn the data model (`DR-0002`).
+> - **Enums are app-level** `text` columns with Drizzle `{enum}` hints — **no `pgEnum`, no CHECK**.
+>   Only `atlas_memories` declares secondary indexes (`db-schema §6`).
+> - **Referential integrity is partial:** a user-cascade backbone + the two program hierarchies use
+>   FKs; many other links are **soft** plain-integer references (`DR-0005`). Two columns are
+>   type-mismatched (`performance_profiles.user_id` text; `mutation_audit_receipts.conversation_id`
+>   text) so they cannot be real FKs (`DR-0003`/`DR-0004`).
+> - **No DB transactions** wrap multi-table writes (`DR-0006`); `applyEditPlan` is deliberately never
+>   retried as a result.
+> - The live DB also has **non-Drizzle tables**: `user_sessions` (connect-pg-simple) and the
+>   `stripe.*` schema (stripe-replit-sync) — the 51-table count is the Drizzle-managed subset
+>   (`DR-0037`).
 
 The ~30 schema files organize into **domains**:
 
@@ -127,22 +185,30 @@ The ~30 schema files organize into **domains**:
 - **Commerce & ops** — `billing`, `external-api`, `support`, `analytics`, `share-moments`
 
 **Architectural couplings worth internalizing:** users own their data via cascade; programs link
-back to the `conversation` that produced them; every program edit writes an immutable
-`mutation_audit_receipt` with before/after snapshots; memory and research feed *into* prompts but
-are governed separately from program tables.
+back to the `conversation` that produced them; memory and research feed *into* prompts but are
+governed separately from program tables. ⚠️ *Audit nuance:* **chat** mutations write
+`system_change_log` (universal, with before/after snapshots); the dedicated `mutation_audit_receipts`
+table is written **only** on edit-panel/history routes, not the chat path (`DR-0017`). The two
+program representations (legacy `saved_programs` vs canonical `training_systems`) and three
+"exercise" tables (`exercise_library` / legacy `exercises` / `session_exercises`) are easy to
+confuse — know which a code path targets (`DR-0009`).
 
 ---
 
 ## 4. AI Architecture — The Three-Agent System
 
 The backend implements a **three-agent architecture** under
-`artifacts/api-server/src/agents/`, coordinated by `agent-orchestrator.ts`. All three share one
-constitution: `trainchat-constitution.ts` (the "system brain" — product identity, hard laws,
-authority hierarchy, communication model), injected above every agent's own persona.
+`artifacts/api-server/src/agents/`, coordinated by `agent-orchestrator.ts`. All live agents prepend
+one constitution: `trainchat-constitution.ts` (the "system brain" — product identity, 7 hard laws,
+authority hierarchy, communication model). ⚠️ **The persona *registry* (`agent-personas.ts`) is
+unwired (0 runtime consumers); the Coach's identity is hardcoded inline in `lib/ai.ts`** — edit the
+registry and nothing changes at runtime (`DR-0011`, high). Likewise `behavioral-intelligence.ts` and
+`progression-intelligence.ts` are defined but **not wired** into the live path (`DR-0012`). The
+constitution, orchestrator, CEO Heartbeat, and model registry **are** live.
 
 | Agent (internal persona) | Nature | Responsibility | User-facing? |
 |---|---|---|---|
-| **Coach** ("Atlas") | LLM (OpenAI GPT-4.1) | Conversation, coaching, surgical edits, final program language | Yes |
+| **Coach** ("Atlas") | LLM (OpenAI `gpt-4.1`) | Conversation, coaching, surgical edits, final program language — **plus a mandatory conversion/sales-strategist identity layer** for non-paying users (`DR-0015`) | Yes |
 | **Performance Architect** ("Vale") | **Deterministic engine, no LLM call** | Session identities, movement-pattern allocation, weekly architecture, exercise-slot selection → emits an *architecture brief* | No (brief is injected into Coach's prompt) |
 | **Research Librarian** ("Sable") | LLM, **admin-only** | Evaluates/curates research evidence; never invoked from a user chat turn | No |
 
@@ -158,8 +224,8 @@ Structural changes route through the Architect; minor edits bypass it.
 
 ### Conflict-resolution hierarchy (the chain of command)
 
-When directives conflict, this strict ranking decides — encoded in the orchestrator **and**
-restated in the system prompt:
+The **orchestrator's** 5-tier programming-conflict hierarchy (encoded in `agent-orchestrator.ts` and
+restated in the system prompt):
 
 1. **SAFETY** — joint integrity, injury, pain. Overrides everything.
 2. **MOVEMENT_QUALITY** — mechanics override load/volume.
@@ -167,24 +233,40 @@ restated in the system prompt:
 4. **FATIGUE_MANAGEMENT** — recovery capacity constrains prescription.
 5. **USER_PREFERENCE** — honored only when no higher rule applies.
 
+⚠️ **Two hierarchies coexist** (`DR-0013`): the **constitution** *also* defines a separate **6-level
+`AUTHORITY_HIERARCHY`** (SAFETY → USER_CONSTRAINTS → COACH_JUDGMENT → ARCHITECT_STRUCTURE →
+RESEARCH_GUIDANCE → STYLE_PERSONA) governing *agent authority*, and each file's comments claim sole
+authority. Memory dominance adds a third prompt-level override ordering (§5). Treat the 5-tier above
+as the programming-decision rule and the 6-level as the agent-authority rule.
+
 ### Context, mutation, and verification machinery
 
-- **LLM access** is centralized in `lib/ai.ts` (`callOpenAI`) with the model registry in
-  `lib/openai-models.ts` as the **single source of truth** for model selection (GPT-4.1 family;
-  `gpt-4.1-mini` for routing). The provider is OpenAI — do not assume otherwise.
-- **System prompt** is assembled in layers (`buildSystemPrompt`): constitution → persona →
-  ~30 conditional context blocks (research, periodization, memory dominance, sport, edit context,
-  architecture brief…), under a size guardrail.
-- **Conversation Context Resolver** (`lib/conversation-context-resolver.ts`) — in-memory,
-  short-TTL store that resolves deictic follow-ups ("change *that* exercise") into fully-qualified
-  commands before planning; asks for clarification rather than guessing.
-- **Mutation Ontology** (`lib/mutation-ontology.ts`) — canonical registry of mutation commands
-  (category, default scope, anti-patterns, AI directive). Mutations execute via
-  `services/mutation-execution-service.ts` and return typed **receipts** (principle #3).
-- **Validation gates** — the Architecture Validation Gate (structural integrity) and the
-  **CEO Heartbeat** (`agents/ceo-heartbeat.ts`, ~9 coaching-quality checks) run *after* generation
-  as non-blocking gates; `mutation-verifier.ts` / `post-mutation-validator.ts` confirm mutations
-  did what the receipt claims.
+- **LLM access** is centralized in `lib/ai.ts` (`callOpenAI`) with `lib/openai-models.ts` as the
+  single source of truth. [corrected] Only **two model IDs** are used: `gpt-4.1` and `gpt-4.1-mini`
+  (routing/intent/memory-extraction). **No `gpt-4o`** is referenced (stale comments aside; `DR-0014`).
+  A deterministic `generateFallbackResponse` runs when no API key is present.
+- **System prompt** is assembled in layers by `buildSystemPrompt` (`lib/ai.ts`): constitution +
+  inlined Coach identity + many conditional blocks (research, periodization, memory dominance,
+  return-from-injury, mobility, UIContext, …) + the conversion layer, under a 22k-char guardrail.
+  (The exact count is **~10+ verified**, not the previously-claimed "~30"; `DR-0023`.)
+- **Conversation Context Resolver** (`lib/conversation-context-resolver.ts`) — resolves deictic
+  follow-ups into fully-qualified commands before planning; clarifies rather than guesses. ⚠️ It is a
+  **process-local in-memory** store, so under the `autoscale` deployment its state is **not shared
+  across instances** (`DR-0020`); a parallel LLM-delegated UIContext prompt section does similar work
+  (`DR-0022`); exercise/session refs are only populated via mutation inference (`DR-0021`).
+- **Mutation Ontology** (`lib/mutation-ontology.ts`) — used as a **classifier** (canonical name +
+  category + is-mutation). ⚠️ Its rich per-command metadata (`aiDirective`, `antiPatterns`,
+  `defaultScope`, `minimumStructuralChanges`) is **defined but unconsumed** (`DR-0016`). There are
+  **two mutation engines**: the DB-backed `edit-intent-service` + `edit-engine` pipeline (primary for
+  chat) and a legacy in-memory `mutation-engine.ts` (`DR-0018`); `mutation-execution-service.ts` is a
+  thin adapter. The pipeline is ATTEMPT→APPLY→VERIFY→RESPOND and returns typed receipts
+  (`MutationSuccessReceipt`/`MutationFailureReceipt` from `architect-patch-generator.ts`).
+- **Validation gates** — the Architecture Validation Gate runs **inside `generateAIResponse`
+  (`lib/ai.ts`)**, not the orchestrator; it is **non-blocking**, and its stylistic checks are
+  `info`-severity (only empty-program/day-count failures and CEO safety concerns are `critical`). The
+  **CEO Heartbeat** (`agents/ceo-heartbeat.ts`, 9 checks) is merged into that gate. Edits use a
+  *separate* gate, `validateStructuralChanges` (`DR-0019`); `mutation-verifier.ts` /
+  `post-mutation-validator.ts` confirm mutations.
 
 ---
 
@@ -192,11 +274,19 @@ restated in the system prompt:
 
 Memory is **layered and governed**, not a single store. Each layer has a distinct lifecycle:
 
-- **Durable coaching memories** (`memory.ts` → `userMemoriesTable`) — long-lived observations
-  (injuries, equipment, preferences) with type/sentiment/confidence/status.
-- **Atlas memories** (`atlas-memories.ts`) — insights *asynchronously extracted* from chat by
-  `lib/atlas-memory-extractor.ts` (runs off the SSE path, never blocking the user), deduped by a
-  normalized key via `lib/atlas-memory-store.ts`.
+> **[drifted → corrected] Two parallel memory systems (`DR-0024`):** the **server-side** memory that
+> actually reaches the Coach prompt is `user_memories` (`memory.ts`), chat-extracted off the response
+> path via `extractMemoriesFromMessage`. The **Atlas** system below is **frontend-facing** — wired
+> only to the `atlas-memories` route and consumed by the client's `AtlasGlobalContextResolver`; the
+> server Coach prompt never reads `atlas_memories`. Memory + adaptation injection is also
+> **plan-gated** (`memoryContext`/`adaptationContext` features), not universal (`DR-0026`).
+
+- **Durable coaching memories** (`memory.ts` → `userMemoriesTable`) — the **live** server-side
+  memory: long-lived observations (injuries, equipment, preferences) with type/sentiment/confidence/
+  status; chat-extracted and injected into the prompt (plan-gated).
+- **Atlas memories** (`atlas-memories.ts`, `lib/atlas-memory-extractor.ts`/`-store.ts`) — extracted
+  via the `atlas-memories` route and consumed by the **frontend** context UI (chips); deduped by
+  normalized key. *Not* injected into the server Coach prompt.
 - **Neural profile** (`neural-profile.ts`) — gamification/progression state (XP, levels,
   milestones); orthogonal to program correctness.
 - **Performance profiles** (`performance-profiles.ts`) — derived athlete intelligence (priority
@@ -204,9 +294,16 @@ Memory is **layered and governed**, not a single store. Each layer has a distinc
 
 **Memory dominance** (`lib/memory-dominance.ts`) is the key principle: memory is *governing*, not
 passive. A priority hierarchy — hard constraints (high-confidence injuries/equipment) → active
-signals (recent pain/fatigue/adherence) → block structure → original intent — is compiled into a
-context block injected *before* adaptive context, so durable safety facts can override a
-conflicting scheduled prescription. Memory merges from anonymous → registered identity on signup.
+signals (recent pain/fatigue/adherence) → block structure → original intent — is compiled (within
+`buildAdaptationContext`, alongside performance signals) into the context block, so durable safety
+facts can override a conflicting scheduled prescription. This is genuinely wired and well-built.
+
+⚠️ **Memory does NOT fully merge on signup (`DR-0025`, high).** `mergeAnonymousToRegistered` moves
+only conversations + training_systems and then deletes the anonymous `users` row — which
+**cascade-deletes** that user's `user_memories`, `atlas_memories`, `neural_profiles`, `user_profiles`,
+`readiness_entries`, `session_logs`, `exercise_logs`. On the anon-logs-into-existing-account path,
+that accumulated data is **silently lost**. This is a probable bug; documenting it here does not fix
+it (see §11).
 
 ---
 
@@ -231,7 +328,12 @@ chat time. Lives in `artifacts/api-server/src/research/` + schema `research`/`kn
 - **Global learning** (`global-learning.ts`, `lib/globalLearningService.ts`) — appends normalized
   behavioral events and aggregates them into *learning candidates* with confidence/risk scores.
   The live Coach **never reads** these tables; promotion into system behavior is **admin-gated**
-  (principle #8).
+  (principle #8). [verified] (`safe_to_promote` is a *recommendation*, not auto-apply; capture is
+  wired on edit/feedback/history routes — `DR-0028`.)
+
+> **[accurate] This is the most faithful subsystem** — the description above matches the code (per
+> `docs/research.md`, L4). Minor caveats: research guidance **gracefully no-ops** when no approved
+> documents exist (the evidence base is populated by manually-run seeders/ingestion; `DR-0027`).
 
 ---
 
@@ -252,9 +354,16 @@ the *narrative* statement of the principles the engine implements.
    and progression models that change over weeks. Output is a prompt context block, not prose.
 3. **Coach (LLM)** receives the brief + periodization + research + memory context and produces the
    final, human-readable program.
-4. Supporting deterministic logic in `lib/programs/*` enforces *variety and coherence* —
-   block archetypes, split architectures, exercise-variation/similarity scoring, variance
-   thresholds and re-rolls, theme-coherence and description-integrity validators.
+4. Supporting deterministic logic in `lib/programs/*` (the ~25-file **Block Variation Engine**)
+   enforces *variety and coherence* — block archetypes, split architectures, exercise-variation/
+   similarity scoring (6-dimension), variance thresholds and re-rolls, theme-coherence and
+   description-integrity validators.
+
+> **[accurate, with completeness notes]** This subsystem (the largest, ~18k lines) is faithful to the
+> deterministic-skeleton principle. Not previously mentioned: builds dispatch through a **focus-mode
+> engine layer** (`lib/focus-engines/`: strength/speed/mobility + router; `DR-0031`); a separate
+> `program-specialist.ts` runs on the legacy in-memory engine (`DR-0030`); and **≥4 overlapping
+> program/architecture validators** exist without a documented precedence (`DR-0029`).
 
 **Prescription is field-safe.** `lib/prescription-schema.ts` (built from the design brief in
 `attached_assets/`) maps each exercise *family* (`load_reps`, `height_reps`, `distance_reps`,
@@ -265,9 +374,12 @@ load field, never fall back to free-text notes. This is the prescription-layer e
 
 **Adaptation loop.** `readiness`, `session-logs`, and `session-feedback` feed
 `lib/check-in-adaptation.ts` / `lib/performance-adaptation-service.ts` /
-`lib/session-log-adaptation-analyzer.ts`, which surface user-visible
-`system-adjustment-events`. The program is a *living training state*, continuously refined through
-dialogue and check-ins while preserving long-term block structure.
+`lib/session-log-adaptation-analyzer.ts` (plus `next-session-intelligence`, `block-projection`,
+`block-intelligence`, proactive `insights`; `DR-0033`), producing the living training state. ⚠️
+**Two different apply models (`DR-0032`):** readiness **check-ins are user-confirmed** (evaluate →
+`/readiness/apply-adjustment`), but **session logging auto-applies** next-session adjustments, block
+projections, and continuation-phase generation without confirmation. Some auto-adaptations write
+`system_change_log` but are **not** surfaced as visible `system_adjustment_events` (`DR-0034`).
 
 **Embedded exercise-science commitments (the philosophy the code defends):**
 - Safety and movement quality outrank load, volume, and user preference (the §4 hierarchy).
@@ -287,9 +399,11 @@ TrainChat verifies at four layers. A change is "done" only when the relevant lay
    Strict-null-checks on; generated code must be regenerated, never hand-fixed.
 2. **Automated tests** — Vitest in `api-server` (`src/__tests__`, plus `pnpm scenario-replay`)
    and `trainchat` (`src/__tests__`). Run these for backend logic and UI behavior.
-3. **Runtime gates** — the Architecture Validation Gate, CEO Heartbeat, and mutation
-   verifier/post-mutation validator are *part of correctness*, not optional. A feature that
-   produces program output must satisfy them.
+3. **Runtime gates** — the Architecture Validation Gate (inside `ai.ts`; non-blocking, stylistic
+   checks `info`-only), CEO Heartbeat (merged into it), the edit-path `validateStructuralChanges`,
+   and the mutation verifier/post-mutation validator are *part of correctness*. Note these are
+   **warn-and-proceed** gates plus several overlapping validators (`DR-0029`), not hard stops, and
+   integrity rests on audit/snapshots rather than DB transactions (`DR-0006`).
 4. **Behavioral verification** — confirm a change in the running app (the `/run` and `/verify`
    skills) before declaring success on anything user-visible. Report failures with output; never
    claim a gate passed that you did not run.
@@ -307,9 +421,10 @@ This repository accumulates three kinds of docs. Keep them in their lanes:
   and principles. **Stable; changes deliberately.** Update it when an *architectural boundary*
   moves, not for routine implementation work.
 - **`replit.md`** — operational quickstart: how to run, build, typecheck, the required env vars,
-  and a "where things live" index. **Treat as ops truth, not architecture truth.** Note: it
-  predates parts of the current system (e.g. it cites GPT-4o; the live registry in
-  `lib/openai-models.ts` is GPT-4.1). On conflicts, code wins.
+  and a "where things live" index. **Treat as ops truth, not architecture truth.** It is partly
+  stale (e.g. it cites GPT-4o; the live registry is `gpt-4.1`/`gpt-4.1-mini` only — `DR-0001`/
+  `DR-0014`). On conflicts, code wins. The authoritative per-subsystem reference is now the
+  Version 2 implementation docs in `docs/`.
 - **Root `*_QA.md` / `*_AUDIT.md`** (e.g. `AGENT_ORCHESTRATION_QA.md`, `SYSTEM_BRAIN_AUDIT.md`,
   `RESEARCH_PROGRAMMING_QA.md`, `PROGRAMMING_FLEXIBILITY_QA.md`) — **design and audit records.**
   Valuable for *intent and history*, but may describe aspirational or partially-implemented
@@ -320,8 +435,12 @@ This repository accumulates three kinds of docs. Keep them in their lanes:
 2. Do not silently fork architecture into a subsystem doc — change it here, or note the divergence.
 3. Never edit generated directories (`api-zod/generated`, `api-client-react/generated`); change
    `openapi.yaml` and regenerate.
-4. This file does **not** contain implementation walkthroughs. Those belong in later, separate
-   documents once Version 1 of the architecture spec is settled.
+4. This file does **not** contain implementation walkthroughs. Those live in the Version 2
+   `docs/<subsystem>.md` implementation documents, generated from code and tracked against the
+   Discrepancy Register.
+5. **Reconciliation cadence:** when an implementation doc opens a divergence that resolves in favor
+   of the code, correct this file deliberately and mark the register entry `resolved`/`reconciling`.
+   This v1.1 pass did exactly that for the doc-vs-code drifts; code-fix items remain open (§11).
 
 ---
 
@@ -332,9 +451,48 @@ This repository accumulates three kinds of docs. Keep them in their lanes:
   `lib/ai.ts` (prompt assembly) and `services/`.
 - **Understand the data** → `lib/db/src/schema/` (start at `training-system.ts`,
   `conversations.ts`, `mutation-audit-receipts.ts`).
-- **Understand the contract** → `lib/api-spec/openapi.yaml` → generated client/zod.
+- **Understand the contract** → `lib/api-spec/openapi.yaml` → generated client/zod (**contracted
+  subset only**; the rest is hand-written — see §2).
 - **Understand the philosophy** → the three `artifacts/wp-*` whitepaper sites.
+- **Understand any subsystem in depth** → its `docs/<subsystem>.md` implementation document.
 
 ---
 
-*End of Architecture Specification v1.0. Implementation documentation is intentionally deferred.*
+## 11. Known Divergences (as of the v1.1 reconciliation)
+
+Material gaps between the *intended* architecture and the *as-built* code, from the Version 2
+verification. Full detail + status in `docs/documentation-governance.md §5`. Two classes:
+
+**A. Corrected-in-place (doc-vs-code; this spec now matches reality).** The text above has been
+updated; these register entries are eligible to move to `resolved`:
+`DR-0002` (stale migration), `DR-0007` (contract covers ~9/40 routers), `DR-0008` (partial
+validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies), `DR-0014`/`DR-0001`
+(model = gpt-4.1 only), `DR-0015` (conversion identity), `DR-0017` (audit-table coverage), `DR-0023`
+(prompt-layer count), `DR-0024` (dual memory systems), `DR-0026` (plan-gated memory), `DR-0031`
+(focus-mode layer), `DR-0033` (broader adaptation modules), `DR-0035` (legacy guest system live),
+`DR-0036` (two billing surfaces), `DR-0037` (non-Drizzle tables), `DR-0039` (external envelope),
+`DR-0040` (hand-synced streaming), `DR-0041` (AEO surface), plus the low clarifications
+(`DR-0005`, `DR-0016`, `DR-0019`, `DR-0021`, `DR-0022`, `DR-0027`, `DR-0028`, `DR-0030`, `DR-0034`).
+
+**B. Open — require an engineering decision or fix (documenting them here does NOT close them):**
+- 🔴 **`DR-0025` (high) — anonymous→registered merge data loss.** Probable bug; decide fix vs intended
+  and, if intended, define which data is meant to survive.
+- 🔴 **`DR-0011` (high) — unwired persona registry / inlined Coach identity.** Wire the registry or
+  delete it; until then `lib/ai.ts` is the only source of the Coach prompt.
+- 🟠 **`DR-0012` — unwired behavioral/progression intelligence.** Wire or remove.
+- 🟠 **`DR-0006` — no DB transactions** around multi-table writes. Accept (audit-based) or introduce.
+- 🟠 **`DR-0020` / `DR-0038` — in-memory state under autoscale** (context resolver, rate limiter).
+  Move to a shared store if horizontal scaling is real.
+- 🟠 **`DR-0018` — dual mutation engines** (and the broader dual-systems pattern: program models,
+  guest, memory, billing). Decide retire-legacy vs document-coexistence — the highest-leverage call.
+- 🟠 **`DR-0003` / `DR-0004` — type-mismatched soft references** (`user_id`/`conversation_id` text).
+- 🟠 **`DR-0032` — split adaptation apply model** (check-in confirmed vs session-log auto-apply).
+
+The **recurring root pattern** behind most of Class B is **"dual coexisting systems + defined-but-
+unwired scaffolding"** — new capability added beside legacy/intended code without retiring or wiring
+it. See `docs/version-2-summary.md` for the full synthesis and Version 3 priorities.
+
+---
+
+*End of Architecture Specification v1.1. Reconciled against the Version 2 implementation docs
+(`docs/`). Code remains ground truth; Class-B divergences in §11 are tracked, not yet resolved.*

@@ -6,7 +6,8 @@
 > governance framework. **Version 2 produces the code-derived implementation docs** under
 > `docs/implementation/`, following `documentation-generation-workflow.md`.
 >
-> Status: **in progress.** 2 of 12 implementation documents generated.
+> Status: **COMPLETE.** 12 of 12 implementation documents generated. (`research` is the first L4.)
+> Cross-cutting reconciliation pass (§5) and Version 3 priorities are pending.
 >
 > **Note on path:** the first document was generated at `docs/db-schema.md` (flat `docs/`), per the
 > task instruction, rather than `docs/implementation/db-schema.md`. The remaining documents may
@@ -19,7 +20,16 @@
 |---|---|---|---|---|---|
 | 1 | `db-schema` | `docs/db-schema.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0002…DR-0006. Live-DB introspection is the one open verification gap (caps L4). |
 | 2 | `contract-spine` | `docs/contract-spine.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0007 (**high**)…DR-0010. Headline: spec covers ~9 of 40 routers. Open gaps: codegen-parity run; per-route validation audit. |
-| 3–12 | — | — | ⚪ PLANNED | L1 | Not started. Next: `ai-agents` (Wave 2 keystone, target L4). |
+| 3 | `ai-agents` | `docs/ai-agents.md` | 🟢 VERIFIED (source) | **L3** (target was L4) | Done. Opened DR-0011 (**high**)…DR-0015. Headline: persona registry + both intelligence modules are **unwired**. L4 blocked by open high-severity DR-0011. |
+| 4 | `mutation-pipeline` | `docs/mutation-pipeline.md` | 🟢 VERIFIED (source) | **L3** (target was L4) | Done. Opened DR-0016…DR-0019 (all medium/low). Headline: `mutation_audit_receipts` not written on chat path; ontology metadata unconsumed. L3 (edit-intent-service + edit-engine ~6.8k lines not fully read). |
+| 5 | `context-pipeline` | `docs/context-pipeline.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0020…DR-0023 (medium/low). Headline: in-memory resolver + autoscale = context not shared across instances. Resolver is genuinely wired. |
+| 6 | `memory` | `docs/memory.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0024…DR-0026 (incl. **high** DR-0025: anon→registered merge silently cascade-deletes memory/profile/logs). Atlas memory is frontend-only; memory injection is plan-gated. |
+| 7 | `research` | `docs/research.md` | 🟢 VERIFIED (source) | **L4** ✅ | Done. **Most faithful subsystem; L4 target met.** Only DR-0027/DR-0028 (low). Keyword retrieval, 7-dim guidance, 3-gate approval, admin-only Librarian, collect→aggregate→suggest all confirmed. |
+| 8 | `exercise-programming` | `docs/exercise-programming.md` | 🟢 VERIFIED (source) | L3 | Done. **Largest subsystem (~18k lines); §7 faithful.** Only DR-0029…DR-0031 (low). L3: engine + lib/programs read at header/wiring level, not full. |
+| 9 | `adaptation-loop` | `docs/adaptation-loop.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0032 (medium)…DR-0034. Headline: split apply model — check-ins user-confirmed, session logs auto-apply. **Wave 3 complete.** |
+| 10 | `identity-billing` | `docs/identity-billing.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0035 (medium)…DR-0037. Headline: legacy guest system still live alongside anonymous-first; two billing surfaces; non-Drizzle tables. |
+| 11 | `external-api` | `docs/external-api.md` | 🟢 VERIFIED (source) | L3 | Done. Opened DR-0038 (medium)…DR-0039. Clean isolated namespace; reuses the Coach engine; in-memory rate limiter under autoscale. |
+| 12 | `frontend` | `docs/frontend.md` | 🟢 VERIFIED (source) | L3 | Done. **Final V2 doc.** Opened DR-0040 (medium)…DR-0041. Headline: core product flow rides hand-synchronized client↔server types; large AEO surface. |
 
 ## 1. Goals for Version 2
 

@@ -27,7 +27,7 @@ Legend used below: see `docs/documentation-status-legend.md` (status) and
 
 | Document | Purpose | Status |
 |---|---|---|
-| `CLAUDE.md` | Architecture Specification (v1.0) | 🟢 VERIFIED |
+| `CLAUDE.md` | Architecture Specification (**v1.1 — reconciled against V2 docs**) | 🟢 VERIFIED |
 | `docs/_template.md` | Implementation-doc template + verification frontmatter | 🟢 VERIFIED |
 | `docs/documentation-map.md` | This index | 🟢 VERIFIED |
 | `docs/documentation-governance.md` | Governance constitution + Discrepancy Register | 🟢 VERIFIED |
@@ -46,16 +46,16 @@ codebase and to a `CLAUDE.md` section. All are ⚪ **PLANNED / L0–L1** until V
 |---|---|---|---|---|---|---|
 | 1 | `db-schema` | `docs/db-schema.md` ✅ | `lib/db/src/schema/*`, `lib/db/src/index.ts`, `lib/db/drizzle.config.ts` | CLAUDE.md §3 | 🟢 VERIFIED | L3 |
 | 2 | `contract-spine` | `docs/contract-spine.md` ✅ | `lib/api-spec/openapi.yaml`, `lib/api-spec/orval.config.ts`, `lib/api-zod/`, `lib/api-client-react/`, `api-server/src/routes/index.ts` | CLAUDE.md §2 (contract spine) | 🟢 VERIFIED | L3 |
-| 3 | `ai-agents` | `docs/implementation/ai-agents.md` | `artifacts/api-server/src/agents/*`, `lib/ai.ts`, `lib/openai-models.ts` | CLAUDE.md §4 | ⚪ PLANNED | L1 |
-| 4 | `mutation-pipeline` | `docs/implementation/mutation-pipeline.md` | `lib/mutation-ontology.ts`, `services/mutation-execution-service.ts`, `lib/mutation-verifier.ts`, `lib/post-mutation-validator.ts`, schema `mutation-audit-receipts.ts` | CLAUDE.md §4 | ⚪ PLANNED | L1 |
-| 5 | `context-pipeline` | `docs/implementation/context-pipeline.md` | `lib/conversation-context-resolver.ts`, `lib/ai.ts` (`buildSystemPrompt`) | CLAUDE.md §4 | ⚪ PLANNED | L1 |
-| 6 | `memory` | `docs/implementation/memory.md` | `lib/memory-dominance.ts`, `lib/atlas-memory-*`, schema `memory.ts`/`atlas-memories.ts`/`neural-profile.ts`/`performance-profiles.ts` | CLAUDE.md §5 | ⚪ PLANNED | L1 |
-| 7 | `research` | `docs/implementation/research.md` | `artifacts/api-server/src/research/*`, schema `research.ts`/`knowledge.ts`/`global-learning.ts` | CLAUDE.md §6 | ⚪ PLANNED | L1 |
-| 8 | `exercise-programming` | `docs/implementation/exercise-programming.md` | `lib/program-architecture-engine.ts`, `lib/periodization-engine.ts`, `lib/prescription-schema.ts`, `lib/programs/*` | CLAUDE.md §7 | ⚪ PLANNED | L1 |
-| 9 | `adaptation-loop` | `docs/implementation/adaptation-loop.md` | `lib/check-in-adaptation.ts`, `lib/performance-adaptation-service.ts`, `lib/session-log-adaptation-analyzer.ts`, schema `readiness.ts`/`session-logs.ts`/`system-adjustment-events.ts` | CLAUDE.md §7 | ⚪ PLANNED | L1 |
-| 10 | `external-api` | `docs/implementation/external-api.md` | `routes/external/*`, `middlewares/external-api-auth.ts`, `lib/external-api-rate-limiter.ts`, schema `external-api.ts` | CLAUDE.md §2/§3 | ⚪ PLANNED | L1 |
-| 11 | `identity-billing` | `docs/implementation/identity-billing.md` | `routes/auth.ts`, `routes/guest.ts`, `routes/billing.ts`, `routes/stripe.ts`, schema `users.ts`/`guest-sessions.ts`/`billing.ts` | CLAUDE.md §2/§3 | ⚪ PLANNED | L1 |
-| 12 | `frontend` | `docs/implementation/frontend.md` | `artifacts/trainchat/src/*` | CLAUDE.md §2 | ⚪ PLANNED | L1 |
+| 3 | `ai-agents` | `docs/ai-agents.md` ✅ | `artifacts/api-server/src/agents/*`, `lib/ai.ts`, `lib/openai-models.ts`, `routes/conversations.ts` | CLAUDE.md §4 | 🟢 VERIFIED | L3 |
+| 4 | `mutation-pipeline` | `docs/mutation-pipeline.md` ✅ | `lib/mutation-ontology.ts`, `lib/edit-intent-service.ts`, `lib/edit-engine.ts`, `lib/mutation-verifier.ts`, `lib/post-mutation-validator.ts`, `lib/mutation-outcome-finalizer.ts`, `lib/mutation-audit-receipt-service.ts`, `lib/change-log-service.ts`, `routes/conversations.ts` | CLAUDE.md §4 | 🟢 VERIFIED | L3 |
+| 5 | `context-pipeline` | `docs/context-pipeline.md` ✅ | `lib/conversation-context-resolver.ts`, `lib/ai.ts` (`buildSystemPrompt`, `UIContextData`), `routes/conversations.ts` | CLAUDE.md §4 | 🟢 VERIFIED | L3 |
+| 6 | `memory` | `docs/memory.md` ✅ | `lib/memory.ts`, `lib/memory-dominance.ts`, `lib/constraint-memory.ts`, `lib/decision-memory-service.ts`, `lib/atlas-memory-*`, `lib/adaptation.ts`, `lib/anonymousMerge.ts`, `routes/atlas-memories.ts` | CLAUDE.md §5 | 🟢 VERIFIED | L3 |
+| 7 | `research` | `docs/research.md` ✅ | `artifacts/api-server/src/research/*`, `lib/globalLearningService.ts`, `lib/ai.ts`, `lib/edit-intent-service.ts` | CLAUDE.md §6 | 🟢 VERIFIED | **L4** |
+| 8 | `exercise-programming` | `docs/exercise-programming.md` ✅ | `lib/program-architecture-engine.ts`, `lib/periodization-engine.ts`, `lib/prescription-schema.ts`, `lib/prescription-remap.ts`, `lib/programs/*`, `lib/focus-engines/*`, `services/program-build-service.ts` | CLAUDE.md §7 | 🟢 VERIFIED | L3 |
+| 9 | `adaptation-loop` | `docs/adaptation-loop.md` ✅ | `lib/adaptation.ts`, `lib/check-in-adaptation.ts`, `lib/performance-adaptation-service.ts`, `lib/session-log-adaptation-analyzer.ts`, `lib/system-adjustment-service.ts`, `routes/{readiness,session-logs}.ts` | CLAUDE.md §7 | 🟢 VERIFIED | L3 |
+| 10 | `external-api` | `docs/external-api.md` ✅ | `routes/external/*`, `middlewares/external-api-auth.ts`, `lib/external-api-rate-limiter.ts`, schema `external-api.ts` | CLAUDE.md §2/§3 | 🟢 VERIFIED | L3 |
+| 11 | `identity-billing` | `docs/identity-billing.md` ✅ | `lib/session.ts`, `routes/{auth,guest,billing,stripe}.ts`, `lib/{guestService,anonymousMerge,webhookHandlers,stripeStorage,stripeClient}.ts`, `app.ts` | CLAUDE.md §2/§3 | 🟢 VERIFIED | L3 |
+| 12 | `frontend` | `docs/frontend.md` ✅ | `artifacts/trainchat/src/*` (main/App/lib/hooks/pages) | CLAUDE.md §2 | 🟢 VERIFIED | L3 |
 
 > Ordering and rationale for which of these get written first is in
 > `docs/version-2-roadmap.md`. The 12 keys above are the canonical subsystem vocabulary —
@@ -64,11 +64,20 @@ codebase and to a `CLAUDE.md` section. All are ⚪ **PLANNED / L0–L1** until V
 ## 4. Roll-up (current state)
 
 - **Governance framework:** complete (8/8 documents present and verified).
-- **Implementation coverage:** 2 / 12 subsystems documented (`db-schema`, `contract-spine` —
-  both 🟢 VERIFIED / L3). Remaining 10: ⚪ PLANNED / L1.
-- **Discrepancy Register:** 10 open (`DR-0001` low; `DR-0002`–`DR-0006` from `db-schema`;
-  `DR-0007`–`DR-0010` from `contract-spine`) — see `docs/documentation-governance.md §5`.
-  **1 `high`-severity:** `DR-0007` (contract covers ~9 of 40 routers).
+- **Implementation coverage: 12 / 12 subsystems documented — Version 2 COMPLETE.** `research`
+  🟢 VERIFIED / **L4**; the other 11 🟢 VERIFIED / L3. Knowledge-base implementation maturity: **L3+**
+  (all subsystems verified; one reconciled to L4).
+- **CLAUDE.md reconciliation:** v1.1 pass complete (2026-06-29) — see the **Reconciliation ledger**
+  in `documentation-governance.md §5`. **30 entries → `resolved`** (doc-vs-code drift corrected in
+  CLAUDE.md); **11 → `reconciling`** (documented in CLAUDE.md §11, awaiting code fix), incl. both
+  high items `DR-0011`, `DR-0025`.
+- **Discrepancy Register:** 41 entries (`DR-0001` low; `DR-0002`–`DR-0006` `db-schema`;
+  `DR-0007`–`DR-0010` `contract-spine`; `DR-0011`–`DR-0015` `ai-agents`; `DR-0016`–`DR-0019`
+  `mutation-pipeline`; `DR-0020`–`DR-0023` `context-pipeline`; `DR-0024`–`DR-0026` `memory`;
+  `DR-0027`–`DR-0028` `research`; `DR-0029`–`DR-0031` `exercise-programming`; `DR-0032`–`DR-0034`
+  `adaptation-loop`; `DR-0035`–`DR-0037` `identity-billing`; `DR-0038`–`DR-0039` `external-api`;
+  `DR-0040`–`DR-0041` `frontend`) — see `docs/documentation-governance.md §5`. **3 `high`-severity:**
+  `DR-0007`, `DR-0011`, `DR-0025`.
 
 ## 5. Maintenance
 
