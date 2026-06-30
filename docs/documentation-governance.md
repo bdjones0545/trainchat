@@ -92,7 +92,7 @@ The single ledger of every known gap between code, implementation docs, and arch
 | DR-0022 | context-pipeline | Two overlapping deixis-resolution strategies coexist: the deterministic resolver (rewrites the message) and the LLM-delegated UIContext prompt section. | doc-vs-code | low | open |
 | DR-0023 | context-pipeline | CLAUDE.md §4 claims "~30 conditional context blocks"; ~10+ distinct engine blocks observed, exact count unverified. | doc-vs-code | low | open |
 | DR-0024 | memory | Two parallel memory systems: `user_memories` (server-side, chat-extracted via memory.ts, injected into the Coach prompt) vs `atlas_memories` (frontend context UI via atlas-memories route + atlas-memory-extractor). Coach prompt never reads atlas. | doc-vs-code | medium | open |
-| DR-0025 | memory | Anon→registered merge migrates only conversations + training_systems then deletes the anon user, cascade-deleting user_memories/atlas_memories/neural_profiles/profiles/readiness/session_logs/exercise_logs — silent data loss; contradicts CLAUDE.md §5 "memory merges on signup." | code-vs-architecture | high | open |
+| DR-0025 | memory | ~~Anon→registered merge migrates only conversations + training_systems then deletes the anon user, cascade-deleting user_memories/atlas_memories/neural_profiles/profiles/readiness/session_logs/exercise_logs — silent data loss.~~ **RESOLVED 2026-06-30.** All 12 child tables are now migrated inside a DB transaction before the anonymous user is deleted. Conflict policy: user_profiles preserves target; neural_profiles merges additively (XP/sessions additive, scores max, milestones union). Integration-verified (61/61) against live Replit DB. See `artifacts/api-server/src/lib/anonymousMerge.ts` and `scripts/integration-test-dr0025.ts`. | code-vs-architecture | high | resolved |
 | DR-0026 | memory | Memory + adaptation (incl. memory dominance) injection is plan-gated (memoryContext/adaptationContext features), not universal. | doc-vs-code | medium | open |
 | DR-0027 | research | Research-informed programming silently no-ops (empty guidance/context) when no approved+active documents exist; live evidence base depends on manually-run seeders/ingestion. | doc-vs-code | low | open |
 | DR-0028 | research | Global-learning capture (`trackLearningEvent`) is wired on edit/feedback/history routes, not the main conversations chat handler — partial interaction coverage. | code-vs-architecture | low | open |
@@ -131,12 +131,12 @@ remain effectively open until code action):
 `DR-0003, DR-0004` (type-mismatched refs), `DR-0006` (no transactions), `DR-0010` (no spec↔generated↔
 routes parity guard — needs CI tooling, V3), `DR-0011` 🔴 (unwired persona), `DR-0012` (unwired
 intelligence), `DR-0018` (dual mutation engines / dual-systems pattern), `DR-0020`, `DR-0038`
-(in-memory under autoscale), `DR-0025` 🔴 (merge data loss — probable bug), `DR-0032` (split
-adaptation apply model) (**11**).
+(in-memory under autoscale), `DR-0032` (split
+adaptation apply model) (**10**). `DR-0025` 🔴 resolved 2026-06-30.
 
 **Effect on maturity:** subsystems whose Class-B items are all ≤ medium AND whose docs are L3-verified
 become L4 candidates once their docs get a code-level deep read (Version 3). `memory` and `ai-agents`
-remain blocked from L4 by their open **high** Class-B items (`DR-0025`, `DR-0011`).
+remain blocked from L4 by their open **high** Class-B items (`DR-0011`). `DR-0025` resolved — `memory` subsystem's only high-severity Class-B item is now closed.
 
 **Rules:**
 - A document at `status: DISCREPANCY` **must** have at least one `open` register entry.
