@@ -136,10 +136,13 @@ Set all secrets in the **Replit Secrets panel** (`Tools → Secrets`). Values in
 | `STRIPE_PRICE_PRO_YEARLY` | None | Legacy plan price ID fallback. |
 | `STRIPE_PRICE_ELITE_MONTHLY` | None | Legacy plan price ID fallback. |
 | `STRIPE_PRICE_ELITE_YEARLY` | None | Legacy plan price ID fallback. |
-| `EMAIL_FROM` | `Bryan.jones@efficiencystrengthtraining.com` (in `.replit`) | Sender address for transactional email. |
+| `EMAIL_FROM` | `Bryan.jones@efficiencystrengthtraining.com` (in `.replit`) | Sender address for transactional email (`src/lib/email.ts`). |
+| `SENDGRID_FROM_EMAIL` | `noreply@trainchat.app` | Sender address used specifically in Stripe webhook billing emails (`src/lib/webhookHandlers.ts`). Same concept as `EMAIL_FROM` but a separate variable in a different module — keep them in sync. |
 | `EMAIL_SUPPORT_TO` | `Bryan.jones@trainchat.ai` (in `.replit`) | Internal address for support/bug/feature request emails. |
-| `CLIENT_URL` | `https://trainchat.ai` | Used in retention email CTAs. |
-| `APP_URL` | None | Used for link generation in some routes. |
+| `CLIENT_URL` | `https://trainchat.ai` | Used in retention email CTAs and Stripe billing portal return URL fallback. |
+| `APP_URL` | Falls back to `REPLIT_DEV_DOMAIN`, then `https://www.trainchat.ai` | Used to construct password reset email links (`src/routes/auth.ts`). |
+| `BASE_PATH` | Replit-injected during frontend build | Required by all Vite configs (`artifacts/trainchat/`, `artifacts/mockup-sandbox/`, whitepaper prototypes). Throws at build time if missing. Not needed at API server runtime. |
+| `WEBHOOK_URL` | None | Override for Stripe webhook URL in the `stripe:setup-products` script only. Not used by the API server at runtime. |
 | `ADMIN_SECRET` | Set in `.replit [userenv.production]` | Bearer token for `/api/admin/*` routes. |
 | `ADMIN_EMAILS` | None | Comma-separated list of admin email addresses. |
 | `LOG_LEVEL` | `info` | Pino log level (`trace`, `debug`, `info`, `warn`, `error`). |
