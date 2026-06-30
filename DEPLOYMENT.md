@@ -403,7 +403,20 @@ TrainChat runs on Replit Autoscale (`deploymentTarget = "autoscale"`). Important
 
 Run through this before every production deployment. Check off each item — do not deploy if any item is unchecked.
 
+### CI gate (automated — check before merging to main)
+
+The GitHub Actions CI workflow (`.github/workflows/ci.yml`) runs automatically on every pull
+request and push to `main`. **Do not merge to main while CI is red.**
+
+CI validates: frozen lockfile · typecheck (libs + all artifacts) · unit tests (api-server
+~1,472 cases, trainchat ~55 cases) · build verification (esbuild + Vite).
+
+CI does NOT validate: OpenAI/Stripe/SendGrid live calls, session/cookie behavior, Replit
+autoscale behavior, or the DR-0025 live-DB integration test. Those require manual Replit
+verification (items below).
+
 ### Code Quality
+- [ ] CI is green on the branch being merged (see GitHub Actions tab)
 - [ ] Unit tests pass: `pnpm --filter @workspace/api-server test`
 - [ ] TypeScript compiles without new errors: `pnpm typecheck` (pre-existing TS6305 errors from unbuilt lib/db are expected — treat any NEW errors as blockers)
 - [ ] No `console.log` calls added to production paths (use `logger.info/warn/error`)

@@ -270,6 +270,18 @@ The complete reference is [`.env.example`](.env.example). Here is the short vers
 
 ## 7. Running Tests
 
+### CI (GitHub Actions) — runs automatically
+
+GitHub Actions validates every pull request and every push to `main`. You do not need to
+trigger it manually. Check the **Actions** tab on GitHub or the status badge on the PR.
+
+**CI validates:** lockfile integrity · typecheck (all packages) · unit tests (both suites) · build verification.
+
+**CI does not validate:** live DB operations, OpenAI/Stripe/SendGrid calls, Replit-specific
+session/cookie behavior, or autoscale behavior. Those require Replit (see §8).
+
+See `TESTING.md §3 — CI` for the complete CI vs. Replit split.
+
 ### Unit tests
 
 ```bash

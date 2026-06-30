@@ -100,6 +100,37 @@ runtime verification in Replit in addition to passing unit tests.
 
 ## 3. Running All Tests
 
+### CI (GitHub Actions)
+
+GitHub Actions runs on every pull request and every push to `main`. It validates the
+repository without external services. Check the `.github/workflows/ci.yml` badge or the
+**Actions** tab on GitHub to see CI status.
+
+**What CI validates automatically:**
+
+| Check | Command |
+|---|---|
+| Frozen lockfile (pnpm-lock.yaml in sync) | `pnpm install --frozen-lockfile` |
+| TypeScript — libs + all artifacts | `pnpm typecheck` |
+| Unit tests — api-server (~1,472 cases) | `pnpm --filter @workspace/api-server run test` |
+| Unit tests — trainchat (~55 cases) | `pnpm --filter @workspace/trainchat run test` |
+| Build — api-server (esbuild) | `pnpm --filter @workspace/api-server run build` |
+| Build — trainchat (Vite) | `pnpm --filter @workspace/trainchat run build` |
+
+**What CI intentionally does NOT validate** (requires Replit or external services):
+
+| Check | Why excluded | How to run manually |
+|---|---|---|
+| OpenAI scenario replay | Live API key + running server | `pnpm exec tsx scenario-replay.ts` in Replit |
+| DR-0025 integration test | Live PostgreSQL | `pnpm exec tsx scripts/integration-test-dr0025.ts` in Replit |
+| Stripe e2e | Live Stripe key | `pnpm exec tsx src/e2e-webhook-test.ts` |
+| SendGrid delivery | Live SendGrid key | Submit support form, check inbox |
+| Session / cookie behavior | Replit HTTPS proxy required | Open Replit preview, log in, refresh |
+| Autoscale behavior | Replit deployment required | Deploy to Replit, test under load |
+
+CI is deterministic. It does not call external APIs, connect to databases, or depend on
+environment-specific secrets. A clean clone with no manual intervention should pass.
+
 ### Backend unit tests
 
 ```bash
@@ -564,7 +595,19 @@ curl $DOMAIN/api/external/docs
 
 ## 11. What Must Pass Before Deployment
 
-### Mandatory gates (blocking)
+### CI gate (automated — must be green before merge to main)
+
+The GitHub Actions CI workflow runs automatically on every PR and push to `main`. A merge
+to `main` should not proceed while CI is red. CI covers:
+
+- `pnpm install --frozen-lockfile` (lockfile discipline)
+- `pnpm typecheck` (all libs + artifacts)
+- Unit tests — api-server (~1,472 cases)
+- Unit tests — trainchat (~55 cases)
+- Build — api-server (esbuild)
+- Build — trainchat (Vite with `PORT=3000 BASE_PATH=/`)
+
+### Additional mandatory gates (blocking — run manually in Replit)
 
 - [ ] `pnpm --filter @workspace/api-server test` — all ~1,472 backend unit tests pass
 - [ ] `pnpm --filter @workspace/trainchat test` — all ~55 frontend tests pass

@@ -1,0 +1,173 @@
+# TrainChat CI
+#
+# Runs on every pull request and every push to main.
+# Validates: dependencies, types, unit tests, build artifacts.
+#
+# Does NOT run:
+#   - OpenAI scenario replay  (requires live API + running server)
+#   - DR-0025 integration test (requires live PostgreSQL)
+#   - Stripe e2e tests        (requires live Stripe keys)
+#   - SendGrid delivery       (requires live SendGrid key)
+#   - Session/cookie behavior (requires Replit HTTPS proxy)
+#   - Autoscale behavior      (requires Replit deployment)
+#
+# See TESTING.md §CI for the complete split between CI-validated and
+# Replit-verified checks.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel in-progress runs for the same ref so rapid pushes don't queue.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Minimal permissions — read-only.
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      # Unit tests mock @workspace/db entirely (vi.mock). This value satisfies
+      # the truthiness guard in lib/db/src/index.ts without a real connection.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/trainchat
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Node + pnpm ───────────────────────────────────────────────────────
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # lockfileVersion 9.0 requires pnpm 10+.
+          version: 10
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'pnpm'
+
+      # ── 3. Install ───────────────────────────────────────────────────────────
+      #
+      # --frozen-lockfile fails if pnpm-lock.yaml is out of sync with
+      # package.json, enforcing lockfile discipline on every merge.
+      #
+      # Platform-specific optional packages (e.g. @esbuild/darwin-arm64 in
+      # devDependencies) are skipped automatically by pnpm on linux-x64;
+      # the linux-x64 variants of esbuild/rollup are resolved instead.
+
+      - name: Install dependencies
+        id: install
+        run: pnpm install --frozen-lockfile
+
+      # ── 4. Typecheck ─────────────────────────────────────────────────────────
+      #
+      # pnpm typecheck runs two passes:
+      #   1. tsc --build   — compiles lib packages (db, api-zod, api-client-react)
+      #                      and emits declaration files consumed downstream.
+      #   2. tsc --noEmit  — typechecks each artifact (api-server, trainchat,
+      #                      mockup-sandbox, wp-*, scripts) against the built libs.
+      #
+      # Pre-existing TS6305 errors from unbuilt lib/db are resolved by pass 1.
+
+      - name: Typecheck
+        id: typecheck
+        run: pnpm typecheck
+
+      # ── 5. Unit tests ────────────────────────────────────────────────────────
+      #
+      # Both test suites run against mocked dependencies — no live DB, no OpenAI,
+      # no Stripe, no network I/O required.
+
+      - name: Test — @workspace/api-server
+        id: test-api
+        run: pnpm --filter @workspace/api-server run test
+
+      - name: Test — @workspace/trainchat
+        id: test-frontend
+        run: pnpm --filter @workspace/trainchat run test
+
+      # ── 6. Build verification ────────────────────────────────────────────────
+      #
+      # api-server: esbuild bundles src/ → dist/index.mjs. No env vars needed.
+      #
+      # trainchat: Vite build. vite.config.ts throws at startup if PORT or
+      # BASE_PATH are absent (they are Replit-injected in production). CI
+      # supplies deterministic dummy values; the build is verified structurally,
+      # not deployed.
+      #
+      # mockup-sandbox and wp-* are excluded: they are not production-critical
+      # deployables and share the same Vite build path as trainchat.
+
+      - name: Build — @workspace/api-server
+        id: build-api
+        run: pnpm --filter @workspace/api-server run build
+
+      - name: Build — @workspace/trainchat
+        id: build-frontend
+        run: pnpm --filter @workspace/trainchat run build
+        env:
+          PORT: '3000'
+          BASE_PATH: /
+
+      # ── 7. Job summary ───────────────────────────────────────────────────────
+      #
+      # Always runs — reports pass/fail for every check even when earlier
+      # steps have failed. Visible in the GitHub Actions UI summary tab.
+
+      - name: Write CI summary
+        if: always()
+        run: |
+          node_ver="$(node --version)"
+          pnpm_ver="$(pnpm --version)"
+
+          {
+            echo "## CI — TrainChat"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Branch** | \`${{ github.ref_name }}\` |"
+            echo "| **Commit** | \`${{ github.sha }}\` |"
+            echo "| **Node** | ${node_ver} |"
+            echo "| **pnpm** | ${pnpm_ver} |"
+            echo "| **Runner** | ${{ runner.os }} / ${{ runner.arch }} |"
+            echo ""
+            echo "### Checks"
+            echo ""
+            echo "| Check | Result |"
+            echo "|---|---|"
+            echo "| Install dependencies (frozen lockfile) | ${{ steps.install.outcome == 'success' && '✅ passed' || steps.install.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Typecheck (libs + artifacts) | ${{ steps.typecheck.outcome == 'success' && '✅ passed' || steps.typecheck.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Tests — api-server (~1 472 cases) | ${{ steps.test-api.outcome == 'success' && '✅ passed' || steps.test-api.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Tests — trainchat (~55 cases) | ${{ steps.test-frontend.outcome == 'success' && '✅ passed' || steps.test-frontend.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Build — api-server (esbuild) | ${{ steps.build-api.outcome == 'success' && '✅ passed' || steps.build-api.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Build — trainchat (Vite) | ${{ steps.build-frontend.outcome == 'success' && '✅ passed' || steps.build-frontend.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo ""
+            echo "### Intentionally excluded from CI"
+            echo ""
+            echo "These require external services or a live Replit environment."
+            echo "See [TESTING.md](TESTING.md) for how to run each manually."
+            echo ""
+            echo "| Check | Reason excluded | How to run |"
+            echo "|---|---|---|"
+            echo "| OpenAI scenario replay | Live OpenAI key + running server | \`pnpm --filter @workspace/api-server scenario-replay\` in Replit |"
+            echo "| DR-0025 integration test | Live PostgreSQL | \`pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts\` in Replit |"
+            echo "| Stripe webhook e2e | Live Stripe key | Manual — Stripe Dashboard → Developers → Webhooks |"
+            echo "| SendGrid email delivery | Live SendGrid key | Manual — submit support form, check inbox |"
+            echo "| Session / cookie behavior | Replit HTTPS proxy required | Manual — open Replit preview, log in, refresh |"
+            echo "| Autoscale behavior | Replit deployment required | Manual — deploy to Replit, test under load |"
+          } >> "$GITHUB_STEP_SUMMARY"
