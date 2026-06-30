@@ -21,10 +21,10 @@ records that may be partly aspirational (see *Documentation Governance*).
 > implementation docs in `docs/`. Claims are now tagged **[accurate]**, **[drifted → corrected
 > here]**, or **[aspirational/known-divergence]**. Material gaps found during Version 2 are
 > corrected inline below and catalogued in **§11 Known Divergences**, which links each to its
-> Discrepancy Register entry (`docs/documentation-governance.md §5`). Three divergences are
-> high-severity (`DR-0007`, `DR-0011`, `DR-0025`) and are flagged in place. Per governance, code
-> issues (e.g. the merge data loss) are *documented* here but still require an engineering fix —
-> documenting a bug does not close it.
+> Discrepancy Register entry (`docs/documentation-governance.md §5`). Two divergences remain
+> high-severity (`DR-0007`, `DR-0011`) and are flagged in place. Per governance, code
+> issues are *documented* here but still require an engineering fix —
+> documenting a bug does not close it. `DR-0025` (merge data loss) was fixed and verified 2026-06-30.
 
 ---
 
@@ -43,10 +43,12 @@ These are the load-bearing principles. Every subsystem below is an expression of
 4. **Safety and verification are gates, not suggestions.** Generated output passes through
    deterministic validation gates before a user sees it. Gates *warn, log, and let the
    responsible agent decide* — they do not silently rewrite.
-5. **Anonymous-user-first.** Every visitor is a real account from first byte. ⚠️ *Identity-merge is
-   partial:* on registration the merge moves only conversations + training_systems and **deletes the
-   anon user**, cascade-dropping their memory/profile/readiness/logs — see §5 and `DR-0025` (a
-   correctness gap, not yet fixed). A *legacy* guest-session system also still runs alongside this
+5. **Anonymous-user-first.** Every visitor is a real account from first byte. Identity-merge runs
+   inside a DB transaction: all child tables (memories, profiles, readiness, logs, sessions,
+   programs) are reassigned to the target user before the anonymous row is deleted — cascade fires
+   on an empty set. Conflict policy: `user_profiles` preserves target; `neural_profiles` merges
+   additively (XP/sessions additive, scores max, milestones union). Fixed and integration-verified
+   2026-06-30 (`DR-0025` resolved). A *legacy* guest-session system also still runs alongside this
    (§2, `DR-0035`).
 6. **Auditability over cleverness.** Mutations, routing, research approvals, and learning signals are
    logged as structured, replayable records. *Realized via* an append-only `system_change_log` +
@@ -298,12 +300,14 @@ signals (recent pain/fatigue/adherence) → block structure → original intent 
 `buildAdaptationContext`, alongside performance signals) into the context block, so durable safety
 facts can override a conflicting scheduled prescription. This is genuinely wired and well-built.
 
-⚠️ **Memory does NOT fully merge on signup (`DR-0025`, high).** `mergeAnonymousToRegistered` moves
-only conversations + training_systems and then deletes the anonymous `users` row — which
-**cascade-deletes** that user's `user_memories`, `atlas_memories`, `neural_profiles`, `user_profiles`,
-`readiness_entries`, `session_logs`, `exercise_logs`. On the anon-logs-into-existing-account path,
-that accumulated data is **silently lost**. This is a probable bug; documenting it here does not fix
-it (see §11).
+**Memory fully merges on signup (`DR-0025` resolved 2026-06-30).** `mergeAnonymousToRegistered` runs
+inside a single DB transaction: all 12 child tables (`user_memories`, `atlas_memories`,
+`neural_profiles`, `user_profiles`, `readiness_entries`, `session_feedback`, `session_logs`,
+`exercise_logs`, `active_sessions`, `pending_clarifications`, `saved_programs`,
+`password_reset_tokens`) are reassigned to the target user before the anonymous `users` row is
+deleted. Cascade fires on an empty set — no data is lost. Conflict policy: `user_profiles` keeps
+target's row; `neural_profiles` merges additively (XP and session counts additive, scores take max,
+milestones unioned). Integration-verified against live DB: 61 assertions, 0 failures.
 
 ---
 
@@ -475,8 +479,8 @@ validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies
 (`DR-0005`, `DR-0016`, `DR-0019`, `DR-0021`, `DR-0022`, `DR-0027`, `DR-0028`, `DR-0030`, `DR-0034`).
 
 **B. Open — require an engineering decision or fix (documenting them here does NOT close them):**
-- 🔴 **`DR-0025` (high) — anonymous→registered merge data loss.** Probable bug; decide fix vs intended
-  and, if intended, define which data is meant to survive.
+- ✅ **`DR-0025` (high) — anonymous→registered merge data loss. RESOLVED 2026-06-30.** All child
+  tables migrated in a transaction before anonymous user delete. Integration-verified (61/61).
 - 🔴 **`DR-0011` (high) — unwired persona registry / inlined Coach identity.** Wire the registry or
   delete it; until then `lib/ai.ts` is the only source of the Coach prompt.
 - 🟠 **`DR-0012` — unwired behavioral/progression intelligence.** Wire or remove.
