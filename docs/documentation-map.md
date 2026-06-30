@@ -69,15 +69,15 @@ codebase and to a `CLAUDE.md` section. All are ⚪ **PLANNED / L0–L1** until V
   (all subsystems verified; one reconciled to L4).
 - **CLAUDE.md reconciliation:** v1.1 pass complete (2026-06-29) — see the **Reconciliation ledger**
   in `documentation-governance.md §5`. **30 entries → `resolved`** (doc-vs-code drift corrected in
-  CLAUDE.md); **11 → `reconciling`** (documented in CLAUDE.md §11, awaiting code fix), incl. both
-  high items `DR-0011`, `DR-0025`.
+  CLAUDE.md); **10 → `reconciling`** (documented in CLAUDE.md §11, awaiting code fix), incl. high
+  item `DR-0011`. `DR-0025` resolved 2026-06-30 (anonymous merge data loss — fixed and integration-verified).
 - **Discrepancy Register:** 41 entries (`DR-0001` low; `DR-0002`–`DR-0006` `db-schema`;
   `DR-0007`–`DR-0010` `contract-spine`; `DR-0011`–`DR-0015` `ai-agents`; `DR-0016`–`DR-0019`
   `mutation-pipeline`; `DR-0020`–`DR-0023` `context-pipeline`; `DR-0024`–`DR-0026` `memory`;
   `DR-0027`–`DR-0028` `research`; `DR-0029`–`DR-0031` `exercise-programming`; `DR-0032`–`DR-0034`
   `adaptation-loop`; `DR-0035`–`DR-0037` `identity-billing`; `DR-0038`–`DR-0039` `external-api`;
-  `DR-0040`–`DR-0041` `frontend`) — see `docs/documentation-governance.md §5`. **3 `high`-severity:**
-  `DR-0007`, `DR-0011`, `DR-0025`.
+  `DR-0040`–`DR-0041` `frontend`) — see `docs/documentation-governance.md §5`. **2 `high`-severity
+  open:** `DR-0007`, `DR-0011`. `DR-0025` resolved.
 
 ## 5. Maintenance
 
