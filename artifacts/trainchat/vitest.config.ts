@@ -18,6 +18,15 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     globals: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      reportsDirectory: "coverage",
+      // No `include` here — setting include forces all-file scanning (all-files baseline
+      // is ~0.6% for trainchat). "Imported files" mode gives ~65%, which is meaningful
+      // because it only covers the 3 files the 2 test suites actually import.
+      // See TESTING.md §13 for baseline numbers and the roadmap to thresholds.
+    },
   },
   resolve: {
     alias: {

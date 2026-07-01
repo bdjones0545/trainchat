@@ -22,8 +22,9 @@
 10. [Testing the External API](#10-testing-the-external-api)
 11. [What Must Pass Before Deployment](#11-what-must-pass-before-deployment)
 12. [AI Agent Testing Rules](#12-ai-agent-testing-rules)
-13. [Known Coverage Gaps](#13-known-coverage-gaps)
-14. [Recommended Next Tests](#14-recommended-next-tests)
+13. [Coverage Measurement](#13-coverage-measurement)
+14. [Known Coverage Gaps](#14-known-coverage-gaps)
+15. [Recommended Next Tests](#15-recommended-next-tests)
 
 ---
 
@@ -115,6 +116,8 @@ repository without external services. Check the `.github/workflows/ci.yml` badge
 | TypeScript — libs + all artifacts | `pnpm typecheck` |
 | Unit tests — api-server (~1,472 cases) | `pnpm --filter @workspace/api-server run test` |
 | Unit tests — trainchat (~55 cases) | `pnpm --filter @workspace/trainchat run test` |
+| Coverage — api-server (informational, non-blocking) | `pnpm --filter @workspace/api-server run test:coverage` |
+| Coverage — trainchat (informational, non-blocking) | `pnpm --filter @workspace/trainchat run test:coverage` |
 | Build — api-server (esbuild) | `pnpm --filter @workspace/api-server run build` |
 | Build — trainchat (Vite) | `pnpm --filter @workspace/trainchat run build` |
 
@@ -143,15 +146,21 @@ pnpm --filter @workspace/api-server exec vitest run --reporter=verbose
 
 # Watch mode (re-runs on file change — useful during development)
 pnpm --filter @workspace/api-server exec vitest
+
+# With coverage report (prints text summary, writes coverage/index.html)
+pnpm --filter @workspace/api-server run test:coverage
 ```
 
-Expected: all ~1,472 cases pass. Runtime: ~10 seconds.
+Expected: all ~1,472 cases pass. Runtime: ~10 seconds. Coverage run adds ~10–15 seconds.
 
 ### Frontend component tests
 
 ```bash
 # Run frontend component tests
 pnpm --filter @workspace/trainchat test
+
+# With coverage report
+pnpm --filter @workspace/trainchat run test:coverage
 ```
 
 Expected: 55 cases pass. Runtime: ~15 seconds.
@@ -606,6 +615,8 @@ to `main` should not proceed while CI is red. CI covers:
 - `pnpm typecheck` (all libs + artifacts)
 - Unit tests — api-server (~1,472 cases)
 - Unit tests — trainchat (~55 cases)
+- Coverage report — api-server (informational, `continue-on-error: true`)
+- Coverage report — trainchat (informational, `continue-on-error: true`)
 - Build — api-server (esbuild)
 - Build — trainchat (Vite with `PORT=3000 BASE_PATH=/`)
 
@@ -722,7 +733,83 @@ When writing new unit tests in this repo:
 
 ---
 
-## 13. Known Coverage Gaps
+## 13. Coverage Measurement
+
+Coverage is measured with `@vitest/coverage-v8` (V8 native instrumentation, no Babel transforms).
+Both packages are configured in their respective `vitest.config.ts` files.
+
+### How to run coverage locally
+
+```bash
+# api-server — prints a text table, writes coverage/index.html (open in browser)
+pnpm --filter @workspace/api-server run test:coverage
+
+# trainchat
+pnpm --filter @workspace/trainchat run test:coverage
+
+# Both at once
+pnpm --filter @workspace/api-server run test:coverage && pnpm --filter @workspace/trainchat run test:coverage
+```
+
+Coverage reports are written to `artifacts/<package>/coverage/`. The HTML report
+(`coverage/index.html`) shows line-by-line coverage when opened in a browser. The
+`coverage/coverage-summary.json` file is machine-readable.
+
+### Baseline (measured 2026-07-01)
+
+Coverage is measured against files actually imported during tests ("imported-files" mode).
+This is more actionable than "all-files" mode, which inflates the denominator with
+scaffolding code that has no tests yet.
+
+| Package | Statements | Branches | Functions | Lines | Measured files |
+|---|---|---|---|---|---|
+| `@workspace/api-server` | **27.6%** | 21.2% | 28.5% | **28.1%** | ~55 files imported |
+| `@workspace/trainchat` | **65.3%** | 68.3% | 48.0% | **67.0%** | 3 files imported |
+
+**Important context for these numbers:**
+
+- **api-server 28%** is the coverage of the ~55 files that tests actually import. The codebase has
+  hundreds of source files; "all-files" coverage is ~8.5%. Most untested files are large generation
+  pipeline modules (`edit-intent-service.ts` ~5,000 lines, `training-system-service.ts` ~2,800
+  lines) that require a live DB + AI to exercise.
+- **trainchat 65%** looks healthy but is measured against only 3 files (121 statements). The
+  frontend has ~500 source files; "all-files" coverage is ~0.6%. The high percentage reflects
+  that the 2 existing test files are thorough for what they cover — not that the frontend is
+  broadly tested.
+- The 6 DATABASE_URL failures in api-server (pre-existing) do not affect coverage numbers; those
+  test files fail at import time before any lines are counted.
+
+### What coverage means and does not mean
+
+Coverage tells you which lines of code were *executed* during tests. It does not tell you:
+
+- Whether the behavior is *correct* (a line can be executed and still have a bug)
+- Whether *all meaningful inputs* were exercised (branch coverage is more useful than line coverage)
+- Whether *integration paths* are safe (unit tests mock dependencies; the real interaction is untested)
+
+For TrainChat, the highest-risk untested areas are not random coverage gaps — they are specific
+pipelines that cannot be safely unit-tested without mocking away the entire point of the code
+(the SSE chat pipeline, the DB mutation path, the Stripe webhook flow). See §14 for the gap map
+and §15 for the prioritized test roadmap.
+
+### CI behavior
+
+Coverage steps run in CI with `continue-on-error: true`. They generate reports and print
+summaries to the step log but **never block a merge**. No threshold enforcement is in place yet.
+
+### Recommended next coverage targets
+
+Thresholds will be introduced once the high-priority missing test suites (§15, Priorities 1–4)
+are added. At that point realistic targets are:
+
+| Package | Target statements | Target lines | Notes |
+|---|---|---|---|
+| `@workspace/api-server` | ≥ 45% | ≥ 45% | Auth routes + session config will add ~5–10% |
+| `@workspace/trainchat` | ≥ 70% | ≥ 70% | Measured against imported files; real all-files target is ≥ 5% |
+
+---
+
+## 14. Known Coverage Gaps — What Is Not Tested
 
 These are areas where test coverage is absent or thin. They represent the highest risk for
 introducing regressions.
@@ -783,7 +870,7 @@ have no automated tests.
 
 ---
 
-## 14. Recommended Next Tests
+## 15. Recommended Next Tests
 
 Prioritized by production risk:
 

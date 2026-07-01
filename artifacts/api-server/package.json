@@ -11,6 +11,7 @@
     "seed:products": "pnpm exec tsx scripts/seed-products.ts",
     "reset:dev-programs": "pnpm exec tsx scripts/reset-dev-programs.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "scenario-replay": "pnpm exec tsx scenario-replay.ts"
   },
   "dependencies": {
@@ -42,12 +43,13 @@
     "@types/express": "^5.0.6",
     "@types/node": "catalog:",
     "@types/node-cron": "^3.0.11",
+    "@vitest/coverage-v8": "^4.1.9",
     "bcryptjs": "^3.0.3",
     "esbuild": "^0.27.3",
     "esbuild-plugin-pino": "^2.3.3",
     "pino-pretty": "^13",
     "thread-stream": "3.1.0",
     "tsx": "catalog:",
-    "vitest": "^4.1.4"
+    "vitest": "^4.1.9"
   }
 }

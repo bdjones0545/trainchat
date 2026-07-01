@@ -112,7 +112,25 @@ jobs:
         id: test-frontend
         run: pnpm --filter @workspace/trainchat run test
 
-      # ── 7. Build verification ────────────────────────────────────────────────
+      # ── 7. Coverage report (informational) ──────────────────────────────────
+      #
+      # Generates coverage summaries and prints them to the step log.
+      # continue-on-error: true — coverage never blocks CI; it is a signal, not
+      # a gate. No thresholds are enforced until coverage baselines improve.
+      # Baseline (2026-07-01): api-server ~28% lines (imported), trainchat ~67%.
+      # See TESTING.md §Coverage for the roadmap to enforcement.
+
+      - name: Coverage — @workspace/api-server
+        id: coverage-api
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server run test:coverage
+
+      - name: Coverage — @workspace/trainchat
+        id: coverage-frontend
+        continue-on-error: true
+        run: pnpm --filter @workspace/trainchat run test:coverage
+
+      # ── 8. Build verification ────────────────────────────────────────────────
       #
       # api-server: esbuild bundles src/ → dist/index.mjs. No env vars needed.
       #
@@ -166,6 +184,8 @@ jobs:
             echo "| Typecheck (libs + artifacts) | ${{ steps.typecheck.outcome == 'success' && '✅ passed' || steps.typecheck.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo "| Tests — api-server (~1 472 cases) | ${{ steps.test-api.outcome == 'success' && '✅ passed' || steps.test-api.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo "| Tests — trainchat (~55 cases) | ${{ steps.test-frontend.outcome == 'success' && '✅ passed' || steps.test-frontend.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Coverage — api-server (informational) | ${{ steps.coverage-api.outcome == 'success' && '✅ generated' || steps.coverage-api.outcome == 'skipped' && '⏭️ skipped' || '⚠️ failed (non-blocking)' }} |"
+            echo "| Coverage — trainchat (informational) | ${{ steps.coverage-frontend.outcome == 'success' && '✅ generated' || steps.coverage-frontend.outcome == 'skipped' && '⏭️ skipped' || '⚠️ failed (non-blocking)' }} |"
             echo "| Build — api-server (esbuild) | ${{ steps.build-api.outcome == 'success' && '✅ passed' || steps.build-api.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo "| Build — trainchat (Vite) | ${{ steps.build-frontend.outcome == 'success' && '✅ passed' || steps.build-frontend.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo ""
