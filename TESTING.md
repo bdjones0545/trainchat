@@ -111,6 +111,7 @@ repository without external services. Check the `.github/workflows/ci.yml` badge
 | Check | Command |
 |---|---|
 | Frozen lockfile (pnpm-lock.yaml in sync) | `pnpm install --frozen-lockfile` |
+| Dependency audit (high/critical advisories) | `pnpm audit --audit-level=high` |
 | TypeScript — libs + all artifacts | `pnpm typecheck` |
 | Unit tests — api-server (~1,472 cases) | `pnpm --filter @workspace/api-server run test` |
 | Unit tests — trainchat (~55 cases) | `pnpm --filter @workspace/trainchat run test` |
@@ -601,6 +602,7 @@ The GitHub Actions CI workflow runs automatically on every PR and push to `main`
 to `main` should not proceed while CI is red. CI covers:
 
 - `pnpm install --frozen-lockfile` (lockfile discipline)
+- `pnpm audit --audit-level=high` (dependency vulnerability gate — fails on un-acknowledged HIGH/critical advisories; medium/low are reported but do not block)
 - `pnpm typecheck` (all libs + artifacts)
 - Unit tests — api-server (~1,472 cases)
 - Unit tests — trainchat (~55 cases)

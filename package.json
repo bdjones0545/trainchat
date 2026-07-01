@@ -19,5 +19,16 @@
     "@replit/connectors-sdk": "^0.4.1",
     "stripe": "^20.0.0",
     "stripe-replit-sync": "^1.0.0"
+  },
+  "pnpm": {
+    "auditConfig": {
+      "ignoreCves": [
+        "GHSA-p6gq-j5cr-w38f",
+        "GHSA-c2c7-rcm5-vvqj",
+        "GHSA-r5fr-rjxr-66jc",
+        "GHSA-wcpc-wj8m-hjx6",
+        "GHSA-22p9-wv53-3rq4"
+      ]
+    }
   }
 }

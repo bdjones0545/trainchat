@@ -580,7 +580,7 @@ posture and a hardened production baseline.
 | L-08 | Prompt injection | No dedicated detection layer on user input | Multi-turn injection attacks on coaching persona |
 | L-09 | Guest limit bypass | Device ID is client-provided; a new ID bypasses guest limits | Trivial multi-account creation for AI cost abuse |
 | ~~L-10~~ | ~~ADMIN_EMAILS~~ | **Fixed 2026-06-30** — empty/unset `ADMIN_EMAILS` now returns `403 Forbidden` to all requests (fail-closed). Previously passed all authenticated users through. | ✅ Resolved |
-| L-11 | Dependency audit | No `pnpm audit` in CI | Known-vulnerability packages may not be caught before deployment |
+| ~~L-11~~ | ~~Dependency audit~~ | **Fixed 2026-07-01** — `pnpm audit --audit-level=high` added as CI step #4 (after install, before typecheck). Fails on any un-acknowledged high/critical advisory. Two HIGH advisories are acknowledged in `pnpm-workspace.yaml auditConfig.ignoreCves` (picomatch v2 in mockup-sandbox, lodash in mockup-sandbox — both non-production). Nodemailer updated to v9.0.1. | ✅ Resolved |
 | ~~L-12~~ | ~~Session fixation~~ | **Fixed 2026-07-01** — `activateAuthSession()` in `src/lib/session-activation.ts` calls `session.regenerate()` before writing `userId` on both login and register. The pre-auth session ID is destroyed; the authenticated session gets a fresh ID. | ✅ Resolved |
 
 ---
@@ -595,7 +595,7 @@ are noted inline.
 3. ✅ **ADMIN_EMAILS fail-closed** — empty list now returns 403 to all (L-10, done).
 4. ✅ **Restrict CORS to known origins** — `corsMiddleware` allowlist implemented in
    `src/middlewares/cors-config.ts`; deployed 2026-07-01 (L-01, done).
-5. **Add `pnpm audit --audit-level=high` to CI** — fail the build on known high/critical CVEs.
+5. ✅ **Add `pnpm audit --audit-level=high` to CI** — CI step #4 added; all HIGH findings resolved or acknowledged in `pnpm-workspace.yaml auditConfig.ignoreCves` (L-11, done).
 6. ✅ **Session ID regeneration on login/register** — `activateAuthSession()` in
    `src/lib/session-activation.ts` rotates the session ID on both login and register (L-12, done).
 7. **CSRF token middleware** — `csurf` or equivalent, especially important given

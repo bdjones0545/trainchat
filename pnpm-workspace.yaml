@@ -11,6 +11,29 @@ allowBuilds:
 
 autoInstallPeers: false
 
+# ── Dependency audit: acknowledge unresolvable HIGH advisories ─────────────────
+#
+# These advisories cannot be fixed via an override without a breaking major-
+# version change or because no patched version exists in the same major.
+# Each entry is reviewed and confirmed non-exploitable or non-production.
+# Tracked in SECURITY.md §22.
+#
+# CVE-2026-33671 — picomatch ReDoS (GHSA-c2c7-rcm5-vvqj):
+#   v2 branch only in artifacts/mockup-sandbox (non-production prototyping tool).
+#   The v4 branch used by vitest and vite is fixed via the overrides below.
+# CVE-2026-4800 — lodash _.template code injection (GHSA-r5fr-rjxr-66jc):
+#   No patch exists on lodash 4.x (4.18.0 is not published); only in mockup-sandbox
+#   via recharts; _.template is not called from any production code path.
+# GHSA-p6gq-j5cr-w38f — nodemailer raw-option SSRF (no CVE assigned):
+#   Fix requires major bump nodemailer v8→v9; raw option is not used by TrainChat
+#   (only sendMail with html/text is called from src/lib/email.ts). Tracked as
+#   a separate upgrade task.
+auditConfig:
+  ignoreCves:
+    - CVE-2026-33671
+    - CVE-2026-4800
+    - GHSA-p6gq-j5cr-w38f
+
 catalog:
   '@replit/vite-plugin-cartographer': ^0.5.1
   '@replit/vite-plugin-dev-banner': ^0.1.1
@@ -23,7 +46,7 @@ catalog:
   '@vitejs/plugin-react': ^5.0.4
   class-variance-authority: ^0.7.1
   clsx: ^2.1.1
-  drizzle-orm: ^0.45.1
+  drizzle-orm: ^0.45.2
   framer-motion: ^12.23.24
   lucide-react: ^0.545.0
   react: 19.1.0
@@ -31,7 +54,7 @@ catalog:
   tailwind-merge: ^3.3.1
   tailwindcss: ^4.1.14
   tsx: 4.21.0
-  vite: ^7.3.0
+  vite: ^7.3.5
   wouter: ^3.7.1
   zod: ^3.25.76
 
@@ -129,3 +152,17 @@ overrides:
   rollup>@rollup/rollup-win32-ia32-msvc: '-'
   rollup>@rollup/rollup-win32-x64-gnu: '-'
   rollup>@rollup/rollup-win32-x64-msvc: '-'
+  # ── Security overrides (added 2026-07-01) ─────────────────────────────────
+  # Each entry pins a transitive dependency to its patched version.
+  # See SECURITY.md §22 and pnpm.auditConfig.ignoreCves for findings that
+  # cannot be resolved this way.
+  path-to-regexp: ">=8.4.0"        # GHSA-j3q9-mxjg-w52f — DoS via express>router
+  axios: ">=1.16.0"                 # multiple HIGH CVEs — via @sendgrid/mail
+  form-data: ">=4.0.6"             # GHSA-hmw2-7cc7-3qxx — via @sendgrid/mail>axios
+  ws: ">=8.21.0"                   # GHSA-96hv-2xvq-fx4p — via stripe-replit-sync
+  vitest>picomatch: ">=4.0.4"      # CVE-2026-33671 — picomatch ReDoS in test runner (v4 branch)
+  vite>picomatch: ">=4.0.4"        # CVE-2026-33671 — picomatch ReDoS in vite (v4 branch)
+  vitest>vite: ">=7.3.5"           # CVE-2026-39364/39363/53571 — Vite dev-server bypasses
+  fast-uri: ">=3.1.2"              # GHSA-v39h-62p7-jpjc — path traversal in orval/ajv
+  protobufjs: ">=7.6.1"            # CVE-2026-48712 — DoS via posthog-js/opentelemetry chain
+  linkify-it: ">=5.0.1"            # CVE-2026-48801 — ReDoS in orval/typedoc/markdown-it

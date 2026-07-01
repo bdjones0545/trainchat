@@ -74,7 +74,18 @@ jobs:
         id: install
         run: pnpm install --frozen-lockfile
 
-      # ── 4. Typecheck ─────────────────────────────────────────────────────────
+      # ── 4. Dependency audit ──────────────────────────────────────────────────
+      #
+      # Fails on any high- or critical-severity advisory that is not explicitly
+      # acknowledged in pnpm-workspace.yaml auditConfig.ignoreCves.
+      # Medium/low advisories are reported but do not block CI.
+      # See SECURITY.md §22 for the triage rationale behind each ignored entry.
+
+      - name: Dependency audit
+        id: audit
+        run: pnpm audit --audit-level=high
+
+      # ── 5. Typecheck ─────────────────────────────────────────────────────────
       #
       # pnpm typecheck runs two passes:
       #   1. tsc --build   — compiles lib packages (db, api-zod, api-client-react)
@@ -88,7 +99,7 @@ jobs:
         id: typecheck
         run: pnpm typecheck
 
-      # ── 5. Unit tests ────────────────────────────────────────────────────────
+      # ── 6. Unit tests ────────────────────────────────────────────────────────
       #
       # Both test suites run against mocked dependencies — no live DB, no OpenAI,
       # no Stripe, no network I/O required.
@@ -101,7 +112,7 @@ jobs:
         id: test-frontend
         run: pnpm --filter @workspace/trainchat run test
 
-      # ── 6. Build verification ────────────────────────────────────────────────
+      # ── 7. Build verification ────────────────────────────────────────────────
       #
       # api-server: esbuild bundles src/ → dist/index.mjs. No env vars needed.
       #
@@ -124,7 +135,7 @@ jobs:
           PORT: '3000'
           BASE_PATH: /
 
-      # ── 7. Job summary ───────────────────────────────────────────────────────
+      # ── 8. Job summary ───────────────────────────────────────────────────────
       #
       # Always runs — reports pass/fail for every check even when earlier
       # steps have failed. Visible in the GitHub Actions UI summary tab.
@@ -151,6 +162,7 @@ jobs:
             echo "| Check | Result |"
             echo "|---|---|"
             echo "| Install dependencies (frozen lockfile) | ${{ steps.install.outcome == 'success' && '✅ passed' || steps.install.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
+            echo "| Dependency audit (high/critical) | ${{ steps.audit.outcome == 'success' && '✅ passed' || steps.audit.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo "| Typecheck (libs + artifacts) | ${{ steps.typecheck.outcome == 'success' && '✅ passed' || steps.typecheck.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo "| Tests — api-server (~1 472 cases) | ${{ steps.test-api.outcome == 'success' && '✅ passed' || steps.test-api.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
             echo "| Tests — trainchat (~55 cases) | ${{ steps.test-frontend.outcome == 'success' && '✅ passed' || steps.test-frontend.outcome == 'skipped' && '⏭️ skipped' || '❌ failed' }} |"
