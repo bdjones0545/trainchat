@@ -420,3 +420,116 @@ describe("L-01 — CORS origin allowlist", () => {
     expect(caughtError?.message).toMatch(/not in the allowlist/);
   });
 });
+
+// ─── L-12: Session fixation prevention ───────────────────────────────────────
+//
+// activateAuthSession() is the pure helper under test. It wraps
+// session.regenerate() + session.userId assignment + session.save() so that
+// the session ID is rotated before authenticated state is committed.
+//
+// We test via a mock SessionLike that records the order in which operations
+// occur, which lets us assert the critical invariant: regenerate fires first,
+// userId is set inside the regenerate callback, and save fires last.
+
+describe("L-12 — session fixation prevention (activateAuthSession)", () => {
+  function makeOrderedSession() {
+    const callOrder: string[] = [];
+    let _userId: number | undefined;
+
+    const session = {
+      get userId() { return _userId; },
+      set userId(val: number | undefined) {
+        callOrder.push(`set:userId=${val}`);
+        _userId = val;
+      },
+      regenerate: vi.fn((cb: (err?: unknown) => void) => {
+        callOrder.push("regenerate");
+        cb();
+      }),
+      save: vi.fn((cb: (err?: unknown) => void) => {
+        callOrder.push("save");
+        cb();
+      }),
+    };
+
+    return { session, callOrder };
+  }
+
+  it("calls regenerate before setting userId", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const { session, callOrder } = makeOrderedSession();
+
+    await activateAuthSession(session, 99);
+
+    const regenerateIdx = callOrder.indexOf("regenerate");
+    const userIdIdx = callOrder.findIndex((s) => s.startsWith("set:userId"));
+    expect(regenerateIdx).toBeGreaterThanOrEqual(0);
+    expect(userIdIdx).toBeGreaterThan(regenerateIdx);
+  });
+
+  it("sets userId before calling save", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const { session, callOrder } = makeOrderedSession();
+
+    await activateAuthSession(session, 99);
+
+    const userIdIdx = callOrder.findIndex((s) => s.startsWith("set:userId"));
+    const saveIdx = callOrder.indexOf("save");
+    expect(userIdIdx).toBeGreaterThanOrEqual(0);
+    expect(saveIdx).toBeGreaterThan(userIdIdx);
+  });
+
+  it("sets the correct userId on the session", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const { session } = makeOrderedSession();
+
+    await activateAuthSession(session, 42);
+
+    expect(session.userId).toBe(42);
+  });
+
+  it("full call order is: regenerate → set:userId → save", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const { session, callOrder } = makeOrderedSession();
+
+    await activateAuthSession(session, 7);
+
+    expect(callOrder).toEqual(["regenerate", "set:userId=7", "save"]);
+  });
+
+  it("rejects if regenerate passes an error", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const session = {
+      userId: undefined as number | undefined,
+      regenerate: vi.fn((cb: (err?: unknown) => void) => cb(new Error("store error"))),
+      save: vi.fn(),
+    };
+
+    await expect(activateAuthSession(session, 1)).rejects.toThrow("store error");
+    expect(session.save).not.toHaveBeenCalled();
+    expect(session.userId).toBeUndefined();
+  });
+
+  it("rejects if save passes an error", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const session = {
+      userId: undefined as number | undefined,
+      regenerate: vi.fn((cb: (err?: unknown) => void) => cb()),
+      save: vi.fn((cb: (err?: unknown) => void) => cb(new Error("save failed"))),
+    };
+
+    await expect(activateAuthSession(session, 5)).rejects.toThrow("save failed");
+  });
+
+  it("does not set userId when regenerate errors (pre-auth state is clean)", async () => {
+    const { activateAuthSession } = await import("../session-activation");
+    const session = {
+      userId: undefined as number | undefined,
+      regenerate: vi.fn((cb: (err?: unknown) => void) => cb(new Error("store error"))),
+      save: vi.fn(),
+    };
+
+    await expect(activateAuthSession(session, 99)).rejects.toThrow();
+    expect(session.userId).toBeUndefined();
+  });
+});

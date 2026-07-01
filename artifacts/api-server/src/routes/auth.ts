@@ -9,6 +9,7 @@ import { requireAuth } from "../middlewares/auth";
 import { authRateLimiter } from "../middlewares/auth-rate-limiter";
 import { logger } from "../lib/logger";
 import { mergeAnonymousToRegistered } from "../lib/anonymousMerge";
+import { activateAuthSession } from "../lib/session-activation";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 import { sendWelcomeEmail, sendPasswordResetEmail } from "../lib/email";
 
@@ -241,10 +242,10 @@ router.post("/auth/register", authRateLimiter, async (req, res): Promise<void> =
       logger.info({ userId: user.id }, "auth/register: new registered account created");
     }
 
-    req.session.userId = user.id;
-    await new Promise<void>((resolve, reject) =>
-      req.session.save((err) => (err ? reject(err) : resolve())),
-    );
+    // Regenerate session ID before writing auth state (session fixation prevention).
+    // activateAuthSession destroys the pre-auth session and issues a new ID, then
+    // sets userId and saves in a single write to the new session store record.
+    await activateAuthSession(req.session, user.id);
 
     // Send welcome email — fire-and-forget, never blocks the response
     if (user.email) {
@@ -299,10 +300,8 @@ router.post("/auth/login", authRateLimiter, async (req, res): Promise<void> => {
     return;
   }
 
-  req.session.userId = user.id;
-  await new Promise<void>((resolve, reject) =>
-    req.session.save((err) => (err ? reject(err) : resolve())),
-  );
+  // Regenerate session ID before writing auth state (session fixation prevention).
+  await activateAuthSession(req.session, user.id);
 
   const onboardingComplete = await resolveOnboardingComplete(user.id, user.onboardingComplete);
 

@@ -581,7 +581,7 @@ posture and a hardened production baseline.
 | L-09 | Guest limit bypass | Device ID is client-provided; a new ID bypasses guest limits | Trivial multi-account creation for AI cost abuse |
 | ~~L-10~~ | ~~ADMIN_EMAILS~~ | **Fixed 2026-06-30** — empty/unset `ADMIN_EMAILS` now returns `403 Forbidden` to all requests (fail-closed). Previously passed all authenticated users through. | ✅ Resolved |
 | L-11 | Dependency audit | No `pnpm audit` in CI | Known-vulnerability packages may not be caught before deployment |
-| L-12 | Session fixation | No explicit session ID regeneration after login/registration | Session fixation if pre-login session ID is known |
+| ~~L-12~~ | ~~Session fixation~~ | **Fixed 2026-07-01** — `activateAuthSession()` in `src/lib/session-activation.ts` calls `session.regenerate()` before writing `userId` on both login and register. The pre-auth session ID is destroyed; the authenticated session gets a fresh ID. | ✅ Resolved |
 
 ---
 
@@ -596,8 +596,8 @@ are noted inline.
 4. ✅ **Restrict CORS to known origins** — `corsMiddleware` allowlist implemented in
    `src/middlewares/cors-config.ts`; deployed 2026-07-01 (L-01, done).
 5. **Add `pnpm audit --audit-level=high` to CI** — fail the build on known high/critical CVEs.
-6. **Session ID regeneration on login** — call `req.session.regenerate()` after successful
-   authentication to prevent session fixation.
+6. ✅ **Session ID regeneration on login/register** — `activateAuthSession()` in
+   `src/lib/session-activation.ts` rotates the session ID on both login and register (L-12, done).
 7. **CSRF token middleware** — `csurf` or equivalent, especially important given
    `sameSite: "none"` in production.
 8. **Structural body redaction in Pino** — add a `redact` array entry for common body fields
