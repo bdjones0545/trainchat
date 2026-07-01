@@ -1,3 +1,8 @@
+// Sentry MUST be the first import. It instruments Node.js module loading via
+// OpenTelemetry; importing it after Express or other dependencies would miss
+// automatic HTTP and database instrumentation.
+import { Sentry, sentryEnabled } from "./lib/sentry";
+
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runMigrations } from "stripe-replit-sync";
@@ -21,6 +26,24 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// ─── Process-level exception handlers ────────────────────────────────────────
+//
+// Node.js does not propagate unhandled exceptions or rejections through Express
+// error middleware. Without these handlers, a thrown error in an async startup
+// task or a rejected Promise crashes the process silently in some environments.
+
+process.on("uncaughtException", (err) => {
+  logger.error({ err }, "[Process] Uncaught exception — shutting down");
+  if (sentryEnabled) Sentry.captureException(err);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  logger.error({ reason }, "[Process] Unhandled promise rejection");
+  if (sentryEnabled) Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
+  // Do not exit — unhandled rejections in background jobs should not crash the server
+});
 
 // ─── TASK 3: Billing configuration validation ─────────────────────────────────
 //

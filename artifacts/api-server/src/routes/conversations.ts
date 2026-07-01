@@ -3,6 +3,7 @@ import { db, conversationsTable, messagesTable, neuralProfilesTable, trainingSys
 import { eq, desc, count, and } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
+import { captureWithTags } from "../lib/sentry";
 import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
 // getLastMonthlyPlan moved to program-build-service (Phase 2 extraction — no longer called directly here)
 import { classifyIntent, logIntentSummary, extractConstraints, detectSport, type IntentResult, type ExtractedConstraints } from "../lib/intent";
@@ -2857,6 +2858,9 @@ Keep it helpful and intelligent, never promotional.`;
       { aiErr: aiErrNonSSE?.message, is429 },
       "[NonSSE/AIFallback] generateAIResponse threw — returning graceful error"
     );
+    if (!is429) {
+      captureWithTags(aiErrNonSSE, { subsystem: "ai_coach", feature: "generate_response", endpoint: "non_sse" });
+    }
     const [fallbackMsg] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
     }).returning();
@@ -5227,6 +5231,9 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       { aiErr: aiErrSSE?.message, is429 },
       "[SSE/AIFallback] generateAIResponse threw — returning graceful error to client"
     );
+    if (!is429) {
+      captureWithTags(aiErrSSE, { subsystem: "ai_coach", feature: "generate_response", endpoint: "sse" });
+    }
     // Emit structured error event so the frontend can set stream phase to "error"
     // before the complete event closes the stream.
     emit({ type: "error", message: sseErrContent, code: is429 ? "RATE_LIMITED_UPSTREAM" : "AI_ERROR" });

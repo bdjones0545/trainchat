@@ -72,6 +72,10 @@ async function buildAll() {
       "googleapis",
       "firebase-admin",
       "@parcel/watcher",
+      // Sentry v8 uses OpenTelemetry instrumentation that patches Node.js module
+      // loading — it must be loaded from node_modules at runtime, not bundled.
+      "@sentry/node",
+      "@sentry/core",
       "@sentry/profiling-node",
       "@tree-sitter/*",
       "aws-sdk",

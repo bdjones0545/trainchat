@@ -336,6 +336,78 @@ Set `RESEARCH_DISCOVERY_ENABLED=true` to enable automated PubMed/Semantic Schola
 
 Optional: `PUBMED_API_KEY` and `SEMANTIC_SCHOLAR_API_KEY` for higher rate limits.
 
+### Sentry Error Tracking
+
+Sentry is fully optional. The server behaves identically with or without `SENTRY_DSN`. When the variable is absent the Sentry module is a complete no-op.
+
+#### Setup
+
+1. **Create a Sentry project**
+   - Sign in to [sentry.io](https://sentry.io) → New Project → Node.js
+   - Copy the DSN from Settings → Projects → `<project>` → Client Keys → DSN
+
+2. **Set the environment variables** in Replit Secrets (Tools → Secrets):
+
+   | Variable | Required? | Description |
+   |---|---|---|
+   | `SENTRY_DSN` | Required to enable | Full DSN URL from the Sentry dashboard |
+   | `SENTRY_ENVIRONMENT` | Optional | `production`, `staging`, or `development`. Defaults to `NODE_ENV`. |
+   | `SENTRY_RELEASE` | Optional | Git SHA or version string to correlate errors with deploys. |
+   | `SENTRY_TRACES_SAMPLE_RATE` | Optional | Float 0.0–1.0 for performance tracing. Default `0.0` (off). |
+
+3. **Restart the server** after setting the variables.
+
+#### What is captured
+
+- Unhandled exceptions (`process.on('uncaughtException')`)
+- Unhandled promise rejections (`process.on('unhandledRejection')`)
+- Express route errors passed to `next(err)` or thrown in route handlers
+- AI Coach errors (non-SSE and SSE paths in `conversations.ts`)
+- Stripe webhook processing failures (`/api/stripe/webhook`)
+- All events are tagged with `subsystem`, `endpoint`, `feature`, `request_id`, and `user_id`
+
+#### What is never captured
+
+The `beforeSend` hook in `src/lib/sentry.ts` strips the following before any event leaves the process:
+
+- `Authorization` header
+- `Cookie` / `Set-Cookie` headers
+- `Stripe-Signature` header
+- `X-Api-Key` header
+- Any request body field whose key contains: `password`, `secret`, `token`, `apikey`, `stripe`, `openai`, `credential`, `sessionid`
+
+#### Verifying installation
+
+Once `SENTRY_DSN` is set and the server is running, send a controlled test event:
+
+```bash
+# Development / non-production only (requires DEBUG_RESET_ENABLED=true or non-production NODE_ENV)
+curl -X POST https://<your-repl-domain>/api/debug/sentry-test
+```
+
+The response will confirm whether Sentry is enabled. Then check the Sentry dashboard for an event named `SentryVerificationError`. The endpoint is guarded by the same `requireDebugEnabled` middleware as all `/api/debug/*` routes — it is blocked in production unless `DEBUG_RESET_ENABLED=true` is explicitly set, which should never be done in production.
+
+#### Release tracking
+
+To correlate errors with specific deployments:
+
+```bash
+# Set SENTRY_RELEASE to the git SHA before building
+export SENTRY_RELEASE=$(git rev-parse --short HEAD)
+```
+
+Or set `SENTRY_RELEASE` in Replit Secrets to a static release identifier and update it after each production deploy.
+
+#### Common troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No events in Sentry | `SENTRY_DSN` missing or wrong | Check the DSN in Replit Secrets; confirm it matches the Sentry project |
+| Events appear in wrong project | Wrong DSN | Each Sentry project has its own DSN — don't mix staging and production |
+| `sentryEnabled: false` from `/api/debug/sentry-test` | DSN absent or `NODE_ENV=test` | Set `SENTRY_DSN` and restart; ensure `NODE_ENV` is not `test` |
+| Sensitive data visible in Sentry | Unexpected field name | Add the key pattern to `SENSITIVE_KEY_SUBSTRINGS` in `src/lib/sentry.ts` |
+| High Sentry quota usage | `SENTRY_TRACES_SAMPLE_RATE` > 0 | Set to `0.0` to disable performance tracing and only capture errors |
+
 ---
 
 ## 10. Post-Merge Script

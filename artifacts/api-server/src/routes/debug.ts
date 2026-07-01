@@ -12,6 +12,7 @@
 
 import { Router, type IRouter } from "express";
 import { z } from "zod";
+import { Sentry, sentryEnabled, captureWithTags } from "../lib/sentry";
 import {
   db,
   usersTable,
@@ -287,6 +288,46 @@ router.post("/debug/reset-anonymous", requireDebugEnabled, requireAuth, async (r
     logger.error({ err, userId }, "debug/reset-anonymous: failed");
     res.status(500).json({ error: "Reset failed" });
   }
+});
+
+// ─── Sentry verification endpoint ────────────────────────────────────────────
+//
+// POST /api/debug/sentry-test
+//
+// Sends a controlled test exception to Sentry. Use during deployment to verify
+// the DSN is configured and events are arriving. Blocked in production unless
+// DEBUG_RESET_ENABLED=true is explicitly set — do NOT enable that in production.
+//
+// To verify: call this endpoint, then check the Sentry dashboard for an event
+// titled "[SentryTest] Deployment verification exception". Remove the call and
+// disable DEBUG_RESET_ENABLED when verified.
+//
+// Example (development):
+//   curl -X POST http://localhost:3000/api/debug/sentry-test
+//
+router.post("/sentry-test", requireDebugEnabled, (_req, res) => {
+  if (!sentryEnabled) {
+    res.status(200).json({
+      ok: false,
+      reason: "SENTRY_DSN is not configured — set it to enable error tracking.",
+    });
+    return;
+  }
+
+  const testError = new Error("[SentryTest] Deployment verification exception");
+  testError.name = "SentryVerificationError";
+  captureWithTags(testError, { subsystem: "debug", feature: "sentry_verification" });
+
+  // Also send a test message so it appears as a separate breadcrumb type
+  Sentry.captureMessage("[SentryTest] Verification message from /api/debug/sentry-test", "info");
+
+  logger.info("[SentryTest] Verification event sent to Sentry");
+  res.status(200).json({
+    ok: true,
+    message: "Test exception sent to Sentry. Check the Sentry dashboard for SentryVerificationError.",
+    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV ?? "development",
+    release: process.env.SENTRY_RELEASE ?? "(not set)",
+  });
 });
 
 export default router;
