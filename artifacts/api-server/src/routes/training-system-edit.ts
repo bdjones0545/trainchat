@@ -454,6 +454,8 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
             requestText: userRequest,
             appliedCount: panelRefineResult.exerciseCount,
             skippedCount: 0,
+            beforeSnapshot: {} as any,
+            afterSnapshot: {} as any,
             decisionMetadata: {
               confirmed: true,
               verificationStatus: "verified",
@@ -487,7 +489,7 @@ router.post("/training-system/edit", requireAuth, async (req, res): Promise<void
       trackLearningEvent({
         userId,
         eventType: panelRefineResult.applied ? "mutation_success" : "mutation_failure",
-        routeUsed: "program_refine_panel",
+        routeUsed: "program_refine_panel" as any,
         intentType: "week_scope_refinement",
         editSubtype: "week",
         requestText: userRequest,

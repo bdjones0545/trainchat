@@ -34,6 +34,7 @@ function makeHardConstraints(overrides: Partial<HardConstraints> = {}): HardCons
     bannedItems: [],
     dislikedItems: [],
     painRegions: [],
+    monitorRegions: [],
     sport: null,
     ...overrides,
   };
@@ -46,10 +47,12 @@ function makeProgram(exerciseNames: string[]): ProgramStructure {
     days: [
       {
         name: "Day 1",
+        dayNumber: 1,
         exercises: exerciseNames.map((name) => ({
           name,
           sets: 3,
           reps: "8-10",
+          rest: "",
           notes: "",
         })),
       },
@@ -115,8 +118,8 @@ describe("isConstraintAlreadySatisfied", () => {
       programName: "Multi-day",
       description: "",
       days: [
-        { name: "Day 1", exercises: [{ name: "Back Squat", sets: 3, reps: "5", notes: "" }] },
-        { name: "Day 2", exercises: [{ name: "Belt Squat", sets: 3, reps: "8", notes: "" }] },
+        { name: "Day 1", dayNumber: 1, exercises: [{ name: "Back Squat", sets: 3, reps: "5", rest: "", notes: "" }] },
+        { name: "Day 2", dayNumber: 2, exercises: [{ name: "Belt Squat", sets: 3, reps: "8", rest: "", notes: "" }] },
       ],
     };
     expect(

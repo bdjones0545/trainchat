@@ -89,7 +89,7 @@ function Section({
   collapsible = false,
 }: {
   title: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   children: React.ReactNode;
   collapsible?: boolean;
 }) {
@@ -118,7 +118,7 @@ function Section({
 
 // ─── DNA row ─────────────────────────────────────────────────────────────────
 
-function DNARow({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string }) {
+function DNARow({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
   return (
     <div className="flex items-start gap-2.5 py-2 border-b border-border/50 last:border-0">
       <Icon className="w-3.5 h-3.5 text-muted-foreground/60 flex-shrink-0 mt-0.5" />

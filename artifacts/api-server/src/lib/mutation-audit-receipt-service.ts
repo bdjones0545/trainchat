@@ -213,9 +213,9 @@ export async function writeAuditReceipt(
         after: delta.after,
         changedExercises: params.changedExercises ?? [],
         beforeProgramSnapshot:
-          (params.beforeProgramSnapshot ?? params.beforeSnapshot) as Record<string, unknown>,
+          (params.beforeProgramSnapshot ?? params.beforeSnapshot) as unknown as Record<string, unknown>,
         afterProgramSnapshot:
-          (params.afterProgramSnapshot ?? params.afterSnapshot) as Record<string, unknown>,
+          (params.afterProgramSnapshot ?? params.afterSnapshot) as unknown as Record<string, unknown>,
         persistedConstraints: params.persistedConstraints ?? [],
         verificationStatus: params.verificationStatus,
         repairAttempted: params.repairAttempted ?? false,

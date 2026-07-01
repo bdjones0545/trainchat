@@ -219,10 +219,10 @@ export function buildExtendedFingerprint(params: BuildExtendedFingerprintParams)
 
   const days: DayFingerprint[] = dayTemplates.map((dt) => {
     const primarySlot = SLOT_BY_DAY_PATTERN[dt.primaryPattern] ?? "bilateral_squat_strength";
-    const primaryEx = slotSelections[primarySlot] ?? slotSelections["bilateral_squat_strength"] ?? "";
+    const primaryEx = (slotSelections[primarySlot] ?? slotSelections["bilateral_squat_strength"] ?? "") as string;
     const primaryFamily = primaryEx ? getExerciseFamily(primaryEx) : "heavy_bilateral_squat";
     const secondarySlot = dt.primaryPattern.includes("upper") ? "upper_pull_primary" : "unilateral_lower";
-    const secondaryEx = slotSelections[secondarySlot];
+    const secondaryEx = slotSelections[secondarySlot] as string | undefined;
     const secondaryFamily = secondaryEx ? getExerciseFamily(secondaryEx) : undefined;
     return {
       dayIndex: dt.dayIndex,
@@ -256,7 +256,7 @@ export function buildExtendedFingerprint(params: BuildExtendedFingerprintParams)
   const primaryExercisesBySlot: Record<string, string> = {};
   const primaryFamiliesBySlot: Record<string, string> = {};
   for (const slot of PRIMARY_SLOTS) {
-    const ex = slotSelections[slot];
+    const ex = slotSelections[slot] as string | undefined;
     if (ex) {
       primaryExercisesBySlot[slot] = ex;
       primaryFamiliesBySlot[slot] = getExerciseFamily(ex);
@@ -266,13 +266,13 @@ export function buildExtendedFingerprint(params: BuildExtendedFingerprintParams)
   const allFamilies = Object.values(primaryFamiliesBySlot);
   const allExercises = Object.values(primaryExercisesBySlot).filter(Boolean);
 
-  const topPrimaryExercises = [
+  const topPrimaryExercises = ([
     slotSelections["bilateral_squat_strength"],
     slotSelections["bilateral_hinge_strength"],
     slotSelections["lower_power"],
     slotSelections["upper_push_primary"],
     slotSelections["upper_pull_primary"],
-  ].filter(Boolean).slice(0, 5);
+  ] as (string | undefined)[]).filter(Boolean).slice(0, 5) as string[];
 
   const topPrimaryFamilies = topPrimaryExercises.map((ex) => getExerciseFamily(ex));
 

@@ -453,7 +453,11 @@ export function selectSpecialPopExercises(
 
   return {
     lower_power,
+    lower_power_d2: lower_power,
+    lower_power_d3: lower_power,
+    lower_power_d4: lower_power,
     bilateral_squat_strength,
+    bilateral_squat_strength_d2: bilateral_squat_strength,
     bilateral_hinge_strength,
     unilateral_lower,
     unilateral_lower_alt,

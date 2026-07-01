@@ -70,7 +70,7 @@ type CardTheme = {
   container: string;
   statusBadge: string;
   icon: string;
-  Icon: React.ElementType;
+  Icon: React.ComponentType<{ className?: string }>;
 };
 
 function getTheme(status: BlockStatus): CardTheme {

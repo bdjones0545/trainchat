@@ -298,7 +298,7 @@ async function persistGeneratedAddCandidate(params: {
 
     await db.insert(globalLearningEventsTable).values({
       userId: null,
-      eventType: "exercise_addition_candidate_generated",
+      eventType: "exercise_addition_candidate_generated" as any,
       routeUsed: "openai",
       intentType: "add_exercise",
       editSubtype: "duplicate_safe_ai_backstop",

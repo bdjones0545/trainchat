@@ -732,15 +732,6 @@ export const EXERCISE_SPORT_TAGS: Record<string, Partial<ExerciseExtendedMeta>> 
     transferTags: ["arm_care"],
   },
 
-  // ── Grip / Forearm ────────────────────────────────────────────────────────
-  "Farmers Carry": {
-    movementQualities: ["trunk_stiffness", "grip_endurance", "anti_rotation"],
-    jointDemands: ["wrist_forearm", "lumbar_control"],
-    energySystemTags: ["aerobic"],
-    transferTags: ["tackle_resilience"],
-    sportTags: ["wrestling", "rugby", "mma"],
-  },
-
   // ── Conditioning / Sprint ─────────────────────────────────────────────────
   "Sprint Repeats": {
     movementQualities: ["acceleration", "max_velocity", "repeat_sprint"],

@@ -139,7 +139,7 @@ type FeedbackTag = "too_easy" | "challenging" | "too_hard";
 
 const TARGET_CONFIG: Record<
   EditTargetType,
-  { icon: React.ElementType; label: string; color: string; bg: string; border: string }
+  { icon: React.ComponentType<{ className?: string }>; label: string; color: string; bg: string; border: string }
 > = {
   exercise: {
     icon: Dumbbell,

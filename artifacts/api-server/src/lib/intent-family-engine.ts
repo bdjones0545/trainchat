@@ -1427,7 +1427,7 @@ function resolveTargetScope(lower: string): ScopeResult {
 // Each family maps to a real transformation bundle.
 // minimumStructuralChanges: number of REAL structural changes required to pass validation.
 
-const TRANSFORMATION_BUNDLES: Record<IntentFamily, TransformationBundle> = {
+const TRANSFORMATION_BUNDLES = {
 
   increase_difficulty: {
     intentFamily: "increase_difficulty",
@@ -2633,7 +2633,7 @@ RULES:
     aiDirective: "FRESH PROGRAM BUILD: Generate a completely new program from scratch based on the user's request. Ignore any existing program structure.",
     scopeGuidance: "Full program — fresh generation from scratch.",
   },
-};
+} as unknown as Record<IntentFamily, TransformationBundle>;
 
 // ─── Transformation Result Validation ────────────────────────────────────────
 

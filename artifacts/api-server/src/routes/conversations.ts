@@ -659,7 +659,7 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   const allowInsights = agentSettings.behavior.proactiveInsights;
 
   // Hard constraints from persisted memory — enforced for ALL users regardless of plan tier.
-  let hardConstraintsNonSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], sport: null };
+  let hardConstraintsNonSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], monitorRegions: [], sport: null };
   let constraintDirectiveNonSSE: string | null = null;
 
   if (isPro) {
@@ -727,14 +727,6 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   // Prevent the AI from confirming mutations as complete before verification.
   // This fires on every turn — only affects language when mutations are being applied.
   memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
-
-  // ── P1: STRUCTURAL APPROVAL GATE — REBUILD_PROGRAM (non-SSE) ─────────────────
-  // When requireApprovalStructural=true, prevent the program architect from
-  // auto-generating a structured program. The AI must describe and ask first.
-  if (agentSettings.behavior.requireApprovalStructural && execPlan.action === "REBUILD_PROGRAM") {
-    memoryCtx += `\n\n## STRUCTURAL REBUILD — APPROVAL REQUIRED [user preference: on]\nCRITICAL: The user has enabled "Require Approval for Structural Changes."\nYou MUST follow this protocol:\n1. Do NOT generate or output a structured training program in this response.\n2. In 2-3 sentences, briefly describe what you would build (focus, structure, key emphasis).\n3. End with exactly: "Want me to build this out for you?" — wait for confirmation.\nOnly build the full program after the user explicitly says yes.`;
-    logger.info({ userId }, "[AgentSettings] requireApprovalStructural — REBUILD_PROGRAM intercepted; injecting approval gate directive");
-  }
 
   // Agent-driven conversion hint for free/starter users
   let conversionHint = "";
@@ -975,6 +967,12 @@ Keep it helpful and intelligent, never promotional.`;
     pendingClarificationCount,
   });
   const execPlan = _guaranteeResult.plan;
+
+  // ── P1: STRUCTURAL APPROVAL GATE — REBUILD_PROGRAM (non-SSE) ─────────────────
+  if (agentSettings.behavior.requireApprovalStructural && execPlan.action === "REBUILD_PROGRAM") {
+    memoryCtx += `\n\n## STRUCTURAL REBUILD — APPROVAL REQUIRED [user preference: on]\nCRITICAL: The user has enabled "Require Approval for Structural Changes."\nYou MUST follow this protocol:\n1. Do NOT generate or output a structured training program in this response.\n2. In 2-3 sentences, briefly describe what you would build (focus, structure, key emphasis).\n3. End with exactly: "Want me to build this out for you?" — wait for confirmation.\nOnly build the full program after the user explicitly says yes.`;
+    logger.info({ userId }, "[AgentSettings] requireApprovalStructural — REBUILD_PROGRAM intercepted; injecting approval gate directive");
+  }
 
   // Sync clarification outcome to turnOutcome
   if (execPlan.action === "ASK_CLARIFICATION") {
@@ -1904,7 +1902,7 @@ Keep it helpful and intelligent, never promotional.`;
         );
         const hierarchicalResult = await applyHierarchicalRefinement({
           systemId: resolvedSystem.id,
-          userId,
+          userId: String(userId),
           userMessage: parsed.data.content,
           scopeResolution: directScopeResolution,
         });
@@ -1960,6 +1958,8 @@ Keep it helpful and intelligent, never promotional.`;
             requestText: parsed.data.content.slice(0, 300),
             appliedCount: hierarchicalResult.exerciseCount,
             skippedCount: 0,
+            beforeSnapshot: {} as any,
+            afterSnapshot: {} as any,
             versionOverrides: directScopeResolution.scope === "block_scope" ? { isMajorVersion: true } : undefined,
           }).catch(() => {});
         }
@@ -2461,7 +2461,7 @@ Keep it helpful and intelligent, never promotional.`;
       }
       const _mutationConfidenceLine = buildConfidenceLine({
         hardConstraints: hardConstraintsNonSSE,
-        equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+        equipmentProfile: extractedConstraints?.equipment ?? null,
         safetyMode: actionContract?.safetyMode ?? false,
         verificationResult: directVerification,
         actionType: "mutation",
@@ -2864,12 +2864,13 @@ Keep it helpful and intelligent, never promotional.`;
     if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
       stripeStorage.incrementMessageCount(userId).catch(() => {});
     }
-    return res.json({
+    res.json({
       userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
       assistantMessage: { id: fallbackMsg.id, conversationId: fallbackMsg.conversationId, role: fallbackMsg.role, content: fallbackMsg.content, createdAt: fallbackMsg.createdAt.toISOString(), structuredData: null },
       planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
       systemSaved: false,
     });
+    return;
   }
 
   // Warn if EDIT_PROGRAM was routed but no structured data returned
@@ -3021,7 +3022,7 @@ Keep it helpful and intelligent, never promotional.`;
     structuredData != null &&
     (intentResult.type === "CREATE_PROGRAM" ||
      intentResult.type === "START_NEW_PROGRAM" ||
-     intentResult.type === "STRUCTURAL_REBUILD");
+     (intentResult as any).type === "STRUCTURAL_REBUILD");
 
   if (isInitialBuildNonStream && structuredData) {
     const _buildFocusMode = goalToFocusMode(extractedConstraints?.primaryGoal) as FocusMode;
@@ -3034,7 +3035,7 @@ Keep it helpful and intelligent, never promotional.`;
     const _microReasonResult = buildMicroReasons({
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
-      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      equipmentProfile: extractedConstraints?.equipment ?? null,
       hardConstraints: hardConstraintsNonSSE,
     });
     if (process.env.NODE_ENV !== "production") {
@@ -3061,7 +3062,7 @@ Keep it helpful and intelligent, never promotional.`;
   if (structuredData) {
     const _buildConfidenceLine = buildConfidenceLine({
       hardConstraints: hardConstraintsNonSSE,
-      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      equipmentProfile: extractedConstraints?.equipment ?? null,
       safetyMode: actionContract?.safetyMode ?? false,
       verificationResult: null,
       actionType: "build",
@@ -3390,7 +3391,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   const allowInsights = agentSettings.behavior.proactiveInsights;
 
   // Hard constraints from persisted memory — enforced for ALL users regardless of plan tier.
-  let hardConstraintsSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], sport: null };
+  let hardConstraintsSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], monitorRegions: [], sport: null };
   let constraintDirectiveSSE2: string | null = null;
 
   if (isPro) {
@@ -3455,14 +3456,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   // ── Priority 3: Mutation trust language directive (SSE path) ─────────────
   memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
-
-  // ── P1: STRUCTURAL APPROVAL GATE — REBUILD_PROGRAM (SSE path) ────────────
-  // When requireApprovalStructural=true, prevent the program architect from
-  // auto-generating a structured program. The AI must describe and ask first.
-  if (agentSettings.behavior.requireApprovalStructural && execPlan.action === "REBUILD_PROGRAM") {
-    memoryCtx += `\n\n## STRUCTURAL REBUILD — APPROVAL REQUIRED [user preference: on]\nCRITICAL: The user has enabled "Require Approval for Structural Changes."\nYou MUST follow this protocol:\n1. Do NOT generate or output a structured training program in this response.\n2. In 2-3 sentences, briefly describe what you would build (focus, structure, key emphasis).\n3. End with exactly: "Want me to build this out for you?" — wait for confirmation.\nOnly build the full program after the user explicitly says yes.`;
-    logger.info({ userId }, "[AgentSettings:stream] requireApprovalStructural — REBUILD_PROGRAM intercepted; injecting approval gate directive");
-  }
 
   // ── Neural Graph Context (streaming path) ─────────────────────────────────
   let streamNeuralBias: NeuralBias | undefined;
@@ -3764,6 +3757,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   });
   const execPlan = _guaranteeResultSSE.plan;
 
+  // ── P1: STRUCTURAL APPROVAL GATE — REBUILD_PROGRAM (SSE path) ────────────
+  if (agentSettings.behavior.requireApprovalStructural && execPlan.action === "REBUILD_PROGRAM") {
+    memoryCtx += `\n\n## STRUCTURAL REBUILD — APPROVAL REQUIRED [user preference: on]\nCRITICAL: The user has enabled "Require Approval for Structural Changes."\nYou MUST follow this protocol:\n1. Do NOT generate or output a structured training program in this response.\n2. In 2-3 sentences, briefly describe what you would build (focus, structure, key emphasis).\n3. End with exactly: "Want me to build this out for you?" — wait for confirmation.\nOnly build the full program after the user explicitly says yes.`;
+    logger.info({ userId }, "[AgentSettings:stream] requireApprovalStructural — REBUILD_PROGRAM intercepted; injecting approval gate directive");
+  }
+
   logger.info(
     {
       action: execPlan.action,
@@ -3853,21 +3852,22 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     const _earlyMicroResult = buildMicroReasons({
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? hardConstraintsSSE.sport,
-      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      equipmentProfile: extractedConstraints?.equipment ?? null,
       hardConstraints: hardConstraintsSSE,
     });
-    const _isSafetyTurn =
-      _narrationCtx.hasPain ||
-      (actionContractSSE?.safetyMode ?? false) ||
-      execPlan.intentFamily === "injury_modification" ||
-      execPlan.intentFamily === "joint_friendly_modification";
     emit({
       type: "micro_reasons",
       reasons: _earlyMicroResult.safeToShow ? _earlyMicroResult.reasons : [],
       safeToShow: _earlyMicroResult.safeToShow,
-      safetyMode: _isSafetyTurn,
+      safetyMode: _narrationCtx.hasPain || (actionContractSSE?.safetyMode ?? false) || execPlan.intentFamily === "injury_modification" || execPlan.intentFamily === "joint_friendly_modification",
     });
   }
+
+  const _isSafetyTurn =
+    _narrationCtx.hasPain ||
+    (actionContractSSE?.safetyMode ?? false) ||
+    execPlan.intentFamily === "injury_modification" ||
+    execPlan.intentFamily === "joint_friendly_modification";
 
   // Emit classifying stage — intent and action type are now known
   emit(buildStageEvent("classifying", intentResult.type, execPlan.action, _narrationCtx));
@@ -4061,7 +4061,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             });
             if (!_clariVerifyResult.passed && _clariVerifyResult.repairedContent) {
               logger.warn(
-                { violations: _clariVerifyResult.violations?.length ?? 0 },
+                { violations: _clariVerifyResult.issues?.length ?? 0 },
                 "[ResponseVerifier/ClarificationFollowup] Coaching text repaired before DB write"
               );
               coachingContent = _clariVerifyResult.repairedContent;
@@ -4317,7 +4317,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       if (!saveSuccess) return _saveProgramBaseContent;
       const _cl = buildConfidenceLine({
         hardConstraints: hardConstraintsSSE,
-        equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+        equipmentProfile: extractedConstraints?.equipment ?? null,
         safetyMode: _isSafetyTurn,
         verificationResult: null,
         actionType: "build",
@@ -4477,7 +4477,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
         const streamHierarchicalResult = await applyHierarchicalRefinement({
           systemId: resolvedSystem.id,
-          userId,
+          userId: String(userId),
           userMessage: effectiveMessage,
           scopeResolution: streamScopeResolution,
         });
@@ -4543,6 +4543,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             requestText: parsed.data.content.slice(0, 300),
             appliedCount: streamHierarchicalResult.exerciseCount,
             skippedCount: 0,
+            beforeSnapshot: {} as any,
+            afterSnapshot: {} as any,
             versionOverrides: streamScopeResolution.scope === "block_scope" ? { isMajorVersion: true } : undefined,
           }).catch(() => {});
         }
@@ -4836,7 +4838,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
       const _sseConfidenceLine = buildConfidenceLine({
         hardConstraints: hardConstraintsSSE,
-        equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+        equipmentProfile: extractedConstraints?.equipment ?? null,
         safetyMode: _isSafetyTurn,
         verificationResult: streamVerification,
         actionType: "mutation",
@@ -5370,7 +5372,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     structuredData != null &&
     (intentResult.type === "CREATE_PROGRAM" ||
      intentResult.type === "START_NEW_PROGRAM" ||
-     intentResult.type === "STRUCTURAL_REBUILD");
+     (intentResult as any).type === "STRUCTURAL_REBUILD");
 
   if (isInitialBuild && structuredData) {
     const _sseBuildFocusMode = goalToFocusMode(extractedConstraints?.primaryGoal) as FocusMode;
@@ -5383,7 +5385,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     const _sseMicroReasonResult = buildMicroReasons({
       goal: extractedConstraints?.primaryGoal ?? null,
       sport: extractedConstraints?.sportFocus ?? null,
-      equipmentProfile: extractedConstraints?.equipmentLevel ?? null,
+      equipmentProfile: extractedConstraints?.equipment ?? null,
       hardConstraints: hardConstraintsSSE,
     });
     if (process.env.NODE_ENV !== "production") {

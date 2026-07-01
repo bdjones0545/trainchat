@@ -3402,14 +3402,14 @@ DENSITY RULE — NON-NEGOTIABLE:
     });
     // Apply variation mandate enforcement to the fallback program (same guardrail as the OpenAI path).
     if (isBuildIntent && fallbackResult.structuredData && lockedExerciseSelections) {
-      const enforced = enforceVariationMandateOnProgram(fallbackResult.structuredData, lockedExerciseSelections);
-      if (enforced && enforced !== fallbackResult.structuredData) {
+      const enforced = enforceVariationMandateOnProgram(fallbackResult.structuredData as unknown as Parameters<typeof enforceVariationMandateOnProgram>[0], lockedExerciseSelections);
+      if (enforced && (enforced as unknown) !== (fallbackResult.structuredData as unknown)) {
         if (process.env.NODE_ENV !== "production") {
           const pre = fallbackResult.structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
-          const post = (enforced as typeof fallbackResult.structuredData).days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
+          const post = (enforced as unknown as typeof fallbackResult.structuredData).days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
           console.log("[BuildAudit:PostEnforcement]", JSON.stringify({ enforcementApplied: true, path: "fallback", day1Before: pre, day1After: post }));
         }
-        return { ...fallbackResult, structuredData: enforced as typeof fallbackResult.structuredData };
+        return { ...fallbackResult, structuredData: enforced as unknown as typeof fallbackResult.structuredData };
       } else if (process.env.NODE_ENV !== "production") {
         const day1 = fallbackResult.structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
         console.log("[BuildAudit:PostEnforcement]", JSON.stringify({ enforcementApplied: false, path: "fallback", reason: "no_prohibited_defaults_found", day1 }));
@@ -3423,7 +3423,7 @@ DENSITY RULE — NON-NEGOTIABLE:
     msgs: { role: "system" | "user" | "assistant"; content: string }[],
     maxTok: number,
     attempt = 0,
-  ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null; openAIMs?: number }> => {
+  ): Promise<{ cleanContent: string; structuredData: ProgramStructure | null; truncated?: boolean; openAIMs?: number }> => {
     // Reduced from 2 → 1 retry. Retry cascade (truncation + constraint + quality) can
     // chain to 5+ AI calls. Only retry on true 429/5xx — not on parse failures.
     const maxRetries = 1;
@@ -4000,7 +4000,7 @@ Return the FULL program now.`;
     // age-appropriate alternatives. This is a hard code-layer guarantee that
     // runs AFTER the AI generates the program, before it is saved.
     if (structuredData && userMessage) {
-      structuredData = sanitizeOlderAdultProgram(structuredData as Record<string, unknown>, userMessage) as ProgramStructure;
+      structuredData = sanitizeOlderAdultProgram(structuredData as unknown as Record<string, unknown>, userMessage) as ProgramStructure;
     }
 
     if (isBuildIntent && structuredData && process.env.NODE_ENV !== "production") {
@@ -4504,9 +4504,9 @@ Output the corrected program JSON and a brief calm confirmation.`;
     // a slotSelection earlier in this call.
     if (isBuildIntent && structuredData && lockedExerciseSelections) {
       const preDay1 = structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
-      const enforced = enforceVariationMandateOnProgram(structuredData, lockedExerciseSelections);
-      if (enforced && enforced !== structuredData) {
-        structuredData = enforced as typeof structuredData;
+      const enforced = enforceVariationMandateOnProgram(structuredData as unknown as Parameters<typeof enforceVariationMandateOnProgram>[0], lockedExerciseSelections);
+      if (enforced && (enforced as unknown) !== (structuredData as unknown)) {
+        structuredData = enforced as unknown as typeof structuredData;
         logger.info(
           { hasSelections: true },
           "[VariationEnforcer] Post-generation enforcement applied — prohibited defaults replaced"
@@ -4526,7 +4526,7 @@ Output the corrected program JSON and a brief calm confirmation.`;
       } else if (process.env.NODE_ENV !== "production") {
         console.log("[BuildAudit:PostEnforcement]", JSON.stringify({
           enforcementApplied: false,
-          reason: enforced === structuredData ? "no_prohibited_defaults_found" : "enforcer_returned_null",
+          reason: (enforced as unknown) === (structuredData as unknown) ? "no_prohibited_defaults_found" : "enforcer_returned_null",
           day1: preDay1,
         }));
       }
@@ -4688,7 +4688,7 @@ Output the corrected program JSON and a brief calm confirmation.`;
         if (structuredData?.days && Array.isArray(structuredData.days)) {
           const depthAudits: SpeedSessionDepthAudit[] = [];
           const expandedDays = structuredData.days.map((day: { name?: string; exercises?: Array<{ name: string; sets?: number; reps?: string; rest?: string; notes?: string }> }, idx: number) => {
-            const { expanded, audit } = expandSpeedSessionIfTooThin(day, idx);
+            const { expanded, audit } = expandSpeedSessionIfTooThin(day as Parameters<typeof expandSpeedSessionIfTooThin>[0], idx);
             depthAudits.push(audit);
             return expanded;
           });
@@ -4948,7 +4948,7 @@ Output the corrected program JSON and a brief calm confirmation.`;
       if (focusMode === "strength" && structuredData?.days && Array.isArray(structuredData.days)) {
         const strengthDepthAudits: StrengthSessionDepthAudit[] = [];
         const expandedDays = structuredData.days.map((day: { name?: string; exercises?: Array<{ name: string; classification?: string; sets?: number; reps?: string; rest?: string; notes?: string }> }, idx: number) => {
-          const { expanded, audit } = expandStrengthSessionIfTooThin(day, idx);
+          const { expanded, audit } = expandStrengthSessionIfTooThin(day as Parameters<typeof expandStrengthSessionIfTooThin>[0], idx);
           strengthDepthAudits.push(audit);
           return expanded;
         });

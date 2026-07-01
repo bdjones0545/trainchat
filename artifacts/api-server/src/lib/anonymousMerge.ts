@@ -111,8 +111,8 @@ export async function mergeAnonymousToRegistered(
     return EMPTY_RESULT;
   }
 
-  // tx has the same interface as db; explicit cast resolves implicit-any when lib/db is unbuilt
-  const result = await db.transaction(async (tx: typeof db) => {
+  // tx has the same interface as db for DML; cast to any to satisfy Drizzle's PgTransaction type
+  const result = await db.transaction(async (tx: any) => {
     // ── Step 1: Reassign all simple child tables ─────────────────────────────
     // No unique constraints on userId in these tables — a plain UPDATE is safe.
     // Executed sequentially to stay within a single transaction connection.

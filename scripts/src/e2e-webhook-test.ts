@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import crypto from "crypto";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", { apiVersion: "2023-10-16" });
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", { apiVersion: "2025-02-24.acacia" });
 const secret = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 const webhookUrl = "http://localhost:80/api/stripe/webhook";
 

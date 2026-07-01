@@ -73,7 +73,7 @@ interface AdaptationSummaryCardProps {
 
 const MODE_CONFIG: Record<
   AdaptationMode,
-  { label: string; icon: React.ElementType; color: string; bg: string; border: string }
+  { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bg: string; border: string }
 > = {
   TRAIN_AS_PLANNED: {
     label: "Ready to Train",

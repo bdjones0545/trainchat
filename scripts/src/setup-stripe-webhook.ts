@@ -6,7 +6,7 @@ if (!secretKey) {
   process.exit(1);
 }
 
-const stripe = new Stripe(secretKey, { apiVersion: "2025-03-31.basil" });
+const stripe = new Stripe(secretKey, { apiVersion: "2025-02-24.acacia" });
 
 const domains = process.env.REPLIT_DOMAINS?.split(",") ?? [];
 const domain = domains[0];

@@ -282,7 +282,7 @@ export function buildFailSafeUserMessage(resolution: Pick<FailSafeResolution, "t
 
 export function attachFailSafeMetadata<T extends Record<string, any>>(data: T | null | undefined, resolution: FailSafeResolution): T | null | undefined {
   if (!data || !resolution.triggered) return data;
-  data._failSafe = {
+  (data as Record<string, unknown>)._failSafe = {
     categories: resolution.categories,
     severity: resolution.severity,
     strategy: resolution.strategy,

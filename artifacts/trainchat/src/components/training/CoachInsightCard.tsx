@@ -40,7 +40,7 @@ type CardTheme = {
   icon: string;
   badge: string;
   badgeLabel: string;
-  Icon: React.ElementType;
+  Icon: React.ComponentType<{ className?: string }>;
 };
 
 function getTheme(status: RecommendationStatus): CardTheme {

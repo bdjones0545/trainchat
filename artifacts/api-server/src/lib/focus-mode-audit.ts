@@ -32,23 +32,23 @@ export interface CrossContaminationAuditEvent {
 // ─── Audit Functions ──────────────────────────────────────────────────────────
 
 export function logFocusModeAudit(event: FocusModeAuditEvent): void {
-  logger.info("[FocusModeAudit]", {
+  logger.info({
     ...event,
     timestamp: new Date().toISOString(),
-  });
+  }, "[FocusModeAudit]");
 }
 
 export function logCrossContaminationAudit(event: CrossContaminationAuditEvent): void {
   if (event.blocked) {
-    logger.warn("[CrossContaminationAudit] BLOCKED cross-mode access", {
+    logger.warn({
       ...event,
       timestamp: new Date().toISOString(),
-    });
+    }, "[CrossContaminationAudit] BLOCKED cross-mode access");
   } else {
-    logger.error("[CrossContaminationAudit] UNBLOCKED cross-mode access detected", {
+    logger.error({
       ...event,
       timestamp: new Date().toISOString(),
-    });
+    }, "[CrossContaminationAudit] UNBLOCKED cross-mode access detected");
   }
 }
 
@@ -61,7 +61,7 @@ export function resolveFocusMode(rawValue: unknown): FocusMode {
     return rawValue;
   }
   if (rawValue) {
-    logger.warn("[FocusModeAudit] Invalid focusMode received — falling back to strength", { received: rawValue });
+    logger.warn({ received: rawValue }, "[FocusModeAudit] Invalid focusMode received — falling back to strength");
   }
   return "strength";
 }

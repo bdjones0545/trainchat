@@ -3960,7 +3960,7 @@ export default function LiveProgramPanel({
     );
   }
 
-  const tabs: { id: Tab; label: string; subtitle: string; icon: React.ElementType }[] = [
+  const tabs: { id: Tab; label: string; subtitle: string; icon: React.ComponentType<{ className?: string }> }[] = [
     { id: "program",       label: "Program",       subtitle: "Current build · live",        icon: Dumbbell  },
     { id: "adapted",       label: "Adapted",       subtitle: "What your system changed",    icon: RefreshCw },
     { id: "changes",       label: "Changes",        subtitle: "What changed & why",          icon: Activity  },

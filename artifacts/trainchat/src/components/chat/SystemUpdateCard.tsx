@@ -40,7 +40,7 @@ interface StatusConfig {
   footerHover: string;
   footerBorder: string;
   label: string;
-  Icon: React.ElementType;
+  Icon: React.ComponentType<{ className?: string }>;
   subNote?: string;
 }
 

@@ -267,7 +267,7 @@ describe("Test 6: Audit receipt appears when available", () => {
     // The buildCompleteEvent helper in conversations.ts sends:
     // auditReceipt: opts.auditReceiptVal ?? null
     // When contract enforcement was skipped, auditReceiptVal is undefined → null.
-    const simulatedCompletePayload = { auditReceipt: undefined ?? null };
+    const simulatedCompletePayload = { auditReceipt: null };
     expect(simulatedCompletePayload.auditReceipt).toBeNull();
   });
 });

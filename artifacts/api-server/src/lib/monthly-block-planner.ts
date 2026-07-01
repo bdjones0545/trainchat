@@ -458,8 +458,8 @@ export function buildMonthlyBlockPlan(
   if (process.env.NODE_ENV !== "production") {
     console.log("[BuildAudit:MonthlyBlock]", JSON.stringify({
       blockType,
-      displayName: plan.displayName,
-      primaryAdaptation: plan.primaryAdaptation,
+      displayName: (plan as any).displayName,
+      primaryAdaptation: (plan as any).primaryAdaptation,
       volumeProfile: plan.volumeProfile,
       intensityProfile: plan.intensityProfile,
       neuralDemandProfile: plan.neuralDemandProfile,
@@ -670,8 +670,8 @@ export function buildSpeedMonthlyBlockPlan(
   if (process.env.NODE_ENV !== "production") {
     console.log("[BuildAudit:SpeedMonthlyBlock]", JSON.stringify({
       blockType,
-      displayName: plan.displayName,
-      primaryAdaptation: plan.primaryAdaptation,
+      displayName: (plan as any).displayName,
+      primaryAdaptation: (plan as any).primaryAdaptation,
       sport: sport ?? "none",
       goal: goal ?? "none",
       seed: Number(seed.toFixed(4)),
@@ -1118,8 +1118,8 @@ export function buildMobilityMonthlyBlockPlan(
   if (process.env.NODE_ENV !== "production") {
     console.log("[BuildAudit:MobilityMonthlyBlock]", JSON.stringify({
       blockType,
-      displayName: plan.displayName,
-      primaryAdaptation: plan.primaryAdaptation,
+      displayName: (plan as any).displayName,
+      primaryAdaptation: (plan as any).primaryAdaptation,
       sport: sport ?? "none",
       goal: goal ?? "none",
       seed: Number(seed.toFixed(4)),

@@ -73,7 +73,7 @@ interface Props {
 // ─── Type config ──────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<PredictionType, {
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   bgColor: string;
   borderColor: string;

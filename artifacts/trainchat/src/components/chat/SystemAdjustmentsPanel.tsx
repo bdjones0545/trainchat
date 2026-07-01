@@ -91,7 +91,7 @@ function getEventIcon(eventType: string): IconName {
   }
 }
 
-const ICON_MAP: Record<IconName, React.ElementType> = {
+const ICON_MAP: Record<IconName, React.ComponentType<{ className?: string }>> = {
   Shield: Shield,
   TrendingDown: TrendingDown,
   TrendingUp: TrendingUp,

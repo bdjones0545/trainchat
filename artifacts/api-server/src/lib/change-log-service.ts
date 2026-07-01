@@ -160,7 +160,7 @@ export async function createChangeLogEntry(params: CreateChangeLogParams): Promi
       .values({
         userId: params.userId,
         trainingSystemId: params.trainingSystemId,
-        source: params.source ?? "ai_edit",
+        source: (params.source ?? "ai_edit") as "ai_edit" | "quick_action" | "initialize" | "restore" | "auto_adjust" | "proactive_agent" | "workout_feedback",
         intent: params.intent,
         scope: params.scope,
         changeSummary: params.changeSummary,

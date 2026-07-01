@@ -20,7 +20,7 @@ function ScoreRow({
   labels,
 }: {
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   score: number;
   setScore: (v: number) => void;
   labels: string[];

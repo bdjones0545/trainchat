@@ -9,6 +9,7 @@ function makeConstraints(overrides: Partial<HardConstraints> = {}): HardConstrai
     bannedItems: [],
     dislikedItems: [],
     painRegions: [],
+    monitorRegions: [],
     sport: null,
     ...overrides,
   };

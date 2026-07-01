@@ -85,7 +85,7 @@ export type DosageType = "reps" | "seconds" | "breaths" | "distance" | "rounds";
 
 // ─── Intensity Level ─────────────────────────────────────────────────────────
 
-export type IntensityLevel = "passive" | "low" | "moderate" | "challenging";
+export type IntensityLevel = "passive" | "low" | "moderate" | "challenging" | "high";
 
 // ─── Movement Support Exercise Entry ─────────────────────────────────────────
 

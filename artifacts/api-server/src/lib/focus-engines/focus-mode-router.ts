@@ -61,13 +61,13 @@ export function buildFocusModePromptContext(
   const engine = getEngineForMode(focusMode);
   const context = engine.buildPromptContext(userMessage, goal, sport, experience);
 
-  logger.info(`[FocusModeRouter] Context built`, {
+  logger.info({
     focusMode,
     engineUsed: engine.label,
     contextLength: context.length,
     goal: goal ?? "none",
     sport: sport ?? "none",
-  });
+  }, `[FocusModeRouter] Context built`);
 
   return context;
 }
@@ -101,12 +101,12 @@ export function validateMemoryNamespace(
   const expected = getFocusModeMemoryNamespace(focusMode);
 
   if (memoryNamespace !== expected && memoryNamespace !== "global") {
-    logger.warn(`[CrossContaminationAudit]`, {
+    logger.warn({
       focusMode,
       attemptedReadFromWrongNamespace: memoryNamespace,
       expectedNamespace: expected,
       blocked: true,
-    });
+    }, `[CrossContaminationAudit]`);
     return false;
   }
 

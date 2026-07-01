@@ -59,6 +59,9 @@ export type PlayerPosition =
   | "hitter_field"    // baseball
   | "midfielder"      // soccer / lacrosse
   | "defender"        // soccer / hockey / lacrosse
+  | "setter"          // volleyball
+  | "libero"          // volleyball
+  | "hitter"          // volleyball
   | null;
 
 export interface PhysicalQuality {

@@ -249,7 +249,7 @@ export async function applyNextSessionAdjustment(userId: number, focusMode?: str
 
   // Next session = next scheduled day after today, or first of the week if none left
   const nextSession =
-    sessions.find((s) => s.dayOfWeek > todayDow) ?? sessions[0] ?? null;
+    sessions.find((s) => (s.dayOfWeek ?? -1) > todayDow) ?? sessions[0] ?? null;
 
   if (!nextSession) return;
 

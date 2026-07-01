@@ -76,7 +76,7 @@ interface ChangeDetailDrawerProps {
 
 // ─── Source config ────────────────────────────────────────────────────────────
 
-const SOURCE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string; border: string }> = {
+const SOURCE_CONFIG: Record<string, { label: string; icon: React.ComponentType<{ className?: string }>; color: string; bg: string; border: string }> = {
   ai_edit:      { label: "AI Coach",     icon: Sparkles,     color: "text-primary",      bg: "bg-primary/10",      border: "border-primary/20"      },
   quick_action: { label: "Quick Action", icon: Zap,          color: "text-orange-400",   bg: "bg-orange-400/10",   border: "border-orange-400/20"   },
   restore:      { label: "Restore",      icon: History,      color: "text-purple-400",   bg: "bg-purple-400/10",   border: "border-purple-400/20"   },
@@ -84,7 +84,7 @@ const SOURCE_CONFIG: Record<string, { label: string; icon: React.ElementType; co
   auto_adjust:  { label: "Auto Adjust",  icon: Sparkles,     color: "text-blue-400",     bg: "bg-blue-400/10",     border: "border-blue-400/20"     },
 };
 
-const SCOPE_ICON: Record<string, React.ElementType> = {
+const SCOPE_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
   exercise: Dumbbell,
   session:  Layers,
   week:     Calendar,

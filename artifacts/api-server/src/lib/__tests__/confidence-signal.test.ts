@@ -22,6 +22,7 @@ function makeHC(overrides: Partial<HardConstraints> = {}): HardConstraints {
     bannedItems: [],
     dislikedItems: [],
     painRegions: [],
+    monitorRegions: [],
     sport: null,
     ...overrides,
   };

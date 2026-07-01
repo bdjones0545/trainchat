@@ -821,7 +821,7 @@ describe("remapPrescriptionIfNeeded — with context", () => {
       context: { exercisePosition: "late", readiness: "low" },
     });
     // late: −1 set, low readiness: −1 set more
-    expect(result.prescription ?? result.sets).toBeDefined();
+    expect(result.sets).toBeDefined();
     expect(result.sets).toBeLessThanOrEqual(3);
     expect(result.appliedModifiers).toContain("position:late");
     expect(result.appliedModifiers).toContain("readiness:reduced_sets");

@@ -37,7 +37,7 @@ interface Props {
 
 const CATEGORY_CONFIG: Record<string, {
   label: string;
-  icon: React.ElementType;
+  icon: React.ComponentType<{ className?: string }>;
   color: string;
   description: string;
 }> = {
