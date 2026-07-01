@@ -25,6 +25,7 @@ import { db, researchDocumentsTable, researchPaperCandidatesTable, researchDisco
 import type { ResearchCategory } from "@workspace/db";
 import { eq, or, sql, desc } from "drizzle-orm";
 import { logger } from "../lib/logger";
+import { captureWithTags } from "../lib/sentry";
 import { reviewResearchCandidate } from "./research-librarian-agent";
 import type { ResearchCandidate } from "./research-librarian-agent";
 
@@ -589,6 +590,7 @@ export async function runDiscovery(opts?: {
           storedCandidateIds.push(inserted.id);
         } catch (err: any) {
           logger.error({ err: err.message, title: paper.title }, "[ResearchDiscovery] error storing candidate");
+          captureWithTags(err, { subsystem: "research_discovery", feature: "store_candidate" });
           stats.errors.push(`store_error: ${paper.title.substring(0, 60)} — ${err.message}`);
         }
       }
@@ -663,6 +665,7 @@ export async function runDiscovery(opts?: {
           await sleep(300);
         } catch (err: any) {
           logger.error({ err: err.message, candidateId }, "[ResearchDiscovery] librarian error");
+          captureWithTags(err, { subsystem: "research_discovery", feature: "librarian_review" });
           stats.errors.push(`librarian_error: candidate#${candidateId} — ${err.message}`);
         }
       }
@@ -691,6 +694,7 @@ export async function runDiscovery(opts?: {
     return { runId, status: "completed", stats, duration };
   } catch (err: any) {
     logger.error({ err: err.message, runId }, "[ResearchDiscovery] run failed");
+    captureWithTags(err, { subsystem: "research_discovery", feature: "run_fatal" });
     stats.errors.push(`fatal: ${err.message}`);
 
     await db
@@ -740,10 +744,12 @@ export function startDiscoveryScheduler(): void {
         logger.info("[ResearchDiscovery] scheduled run triggered (overdue)");
         runDiscovery().catch((err: Error) => {
           logger.error({ err: err.message }, "[ResearchDiscovery] scheduled run error");
+          captureWithTags(err, { subsystem: "research_discovery", feature: "scheduled_run" });
         });
       }
     } catch (err: any) {
       logger.error({ err: err.message }, "[ResearchDiscovery] scheduler check error");
+      captureWithTags(err, { subsystem: "research_discovery", feature: "scheduler_check" });
     }
   };
 

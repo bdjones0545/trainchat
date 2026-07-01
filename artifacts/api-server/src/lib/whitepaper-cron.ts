@@ -2,6 +2,7 @@ import cron from "node-cron";
 import { db, whitepaperTopicQueueTable, whitepaperPublicationsTable, whitepaperSettingsTable } from "@workspace/db";
 import { eq, and, lte, asc, or, isNull } from "drizzle-orm";
 import { logger } from "./logger";
+import { captureWithTags } from "./sentry";
 import { generateWhitepaper } from "./whitepaper-generator";
 import type { WhitepaperTopicStatus } from "@workspace/db";
 
@@ -125,6 +126,7 @@ export async function runDailyWhitepaperJob(): Promise<void> {
       { err, topicId: topic.id, slug: topic.slug },
       "[whitepaper-cron] Generation failed — topic reset to queued",
     );
+    captureWithTags(err, { subsystem: "whitepaper_cron", feature: "generation" });
   }
 }
 
@@ -139,6 +141,7 @@ export function startWhitepaperCron(): void {
   cronTask = cron.schedule("0 6 * * *", () => {
     runDailyWhitepaperJob().catch((err) => {
       logger.error({ err }, "[whitepaper-cron] Unhandled error in daily job");
+      captureWithTags(err, { subsystem: "whitepaper_cron", feature: "scheduled_run" });
     });
   });
 

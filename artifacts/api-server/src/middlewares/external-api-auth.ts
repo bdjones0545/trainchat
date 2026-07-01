@@ -23,6 +23,7 @@ import { eq } from "drizzle-orm";
 import type { ExternalApiKey, ExternalApiPermission } from "@workspace/db";
 import { checkRateLimit } from "../lib/external-api-rate-limiter";
 import { logger } from "../lib/logger";
+import { Sentry, sentryEnabled } from "../lib/sentry";
 
 declare global {
   namespace Express {
@@ -145,6 +146,28 @@ export function validateExternalApiKey(requiredPermissions: ExternalApiPermissio
     // ── Attach key to request ─────────────────────────────────────────────────
     req.apiKey = apiKey;
     req.apiKeyId = apiKey.id;
+
+    // ── Sentry context for external API requests ──────────────────────────────
+    // Tag the Sentry scope with the API key's DB record ID so errors can be
+    // traced to a specific key holder without exposing the raw key value.
+    if (sentryEnabled) {
+      Sentry.withScope((scope) => {
+        scope.setTag("auth_type", "external_api_key");
+        scope.setTag("api_key_id", String(apiKey.id));
+        if (apiKey.orgId) scope.setTag("org_id", apiKey.orgId);
+        if (apiKey.createdBy !== null && apiKey.createdBy !== undefined) {
+          scope.setUser({ id: String(apiKey.createdBy) });
+          scope.setTag("user_id", String(apiKey.createdBy));
+        }
+        scope.setContext("external_api", {
+          keyId: apiKey.id,
+          orgId: apiKey.orgId ?? null,
+          endpoint: req.path,
+          method: req.method,
+          // Never include: rawKey, keyHash, prefix, name (could fingerprint the key)
+        });
+      });
+    }
 
     // ── Update lastUsedAt + log request (non-blocking) ────────────────────────
     const originalJson = res.json.bind(res);

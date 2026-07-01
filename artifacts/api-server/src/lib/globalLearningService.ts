@@ -32,6 +32,7 @@ import type {
 } from "@workspace/db";
 import { eq, and, gte, sql, desc, count, inArray } from "drizzle-orm";
 import { logger } from "./logger";
+import { captureWithTags } from "./sentry";
 
 // ─── Public Types ──────────────────────────────────────────────────────────────
 
@@ -315,6 +316,7 @@ export async function trackLearningEvent(
     await db.insert(globalLearningEventsTable).values(row);
   } catch (err) {
     logger.warn({ err }, "[GlobalLearning] Failed to track learning event — suppressed");
+    captureWithTags(err, { subsystem: "global_learning", feature: "track_event" });
   }
 }
 

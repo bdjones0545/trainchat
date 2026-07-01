@@ -18,6 +18,7 @@ import { getUncachableStripeClient } from "./stripeClient";
 import { stripeStorage } from "./stripeStorage";
 import { buildSyncPayload, normalizePlanStatus } from "./webhookHandlers";
 import { logger } from "./logger";
+import { captureWithTags } from "./sentry";
 
 // How many days past currentPeriodEnd before we force-reconcile a past_due user.
 // Default: 14 days — aligns with Stripe's maximum smart retry window.
@@ -53,6 +54,7 @@ async function reconcileStalePastDueUsers(): Promise<void> {
       );
   } catch (err) {
     logger.error({ err }, "[BillingReconciliation] DB query failed — skipping run");
+    captureWithTags(err, { subsystem: "billing_reconciliation", feature: "db_query" });
     return;
   }
 
@@ -110,6 +112,7 @@ async function reconcileStalePastDueUsers(): Promise<void> {
           await stripeStorage.revokeUserSubscription(user.id);
         } catch (revokeErr) {
           logger.error({ revokeErr, userId: user.id }, "[BillingReconciliation] Failed to revoke missing subscription");
+          captureWithTags(revokeErr, { subsystem: "billing_reconciliation", feature: "revoke_subscription" });
         }
       } else {
         // Log other errors but continue processing remaining users
@@ -117,6 +120,7 @@ async function reconcileStalePastDueUsers(): Promise<void> {
           { err, userId: user.id, subscriptionId },
           "[BillingReconciliation] Failed to reconcile user — will retry next run"
         );
+        captureWithTags(err, { subsystem: "billing_reconciliation", feature: "stripe_sync" });
       }
     }
   }
@@ -141,6 +145,7 @@ export function startBillingReconciliation(): void {
   setTimeout(() => {
     reconcileStalePastDueUsers().catch((err) => {
       logger.error({ err }, "[BillingReconciliation] Initial run failed");
+      captureWithTags(err, { subsystem: "billing_reconciliation", feature: "initial_run" });
     });
   }, 30_000); // 30-second delay on startup
 
@@ -148,6 +153,7 @@ export function startBillingReconciliation(): void {
   _reconciliationTimer = setInterval(() => {
     reconcileStalePastDueUsers().catch((err) => {
       logger.error({ err }, "[BillingReconciliation] Scheduled run failed");
+      captureWithTags(err, { subsystem: "billing_reconciliation", feature: "scheduled_run" });
     });
   }, RECONCILIATION_INTERVAL_MS);
 
