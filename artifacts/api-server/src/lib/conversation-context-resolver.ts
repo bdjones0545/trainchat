@@ -284,7 +284,7 @@ export function storeMutationReference(
   const state = getOrCreate(conversationId);
   state.lastMutationReference = {
     ...ref,
-    turnsRemaining: 30,
+    turnsRemaining: MAX_TURNS,
     createdAt: new Date(),
   };
   logger.info(

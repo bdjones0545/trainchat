@@ -267,7 +267,7 @@ describe("verifyResponseAlignment", () => {
           extractedConstraints: null,
         })
       );
-      expect(result.repairedContent).toMatch(/couldn't confirm|try again|Check the Program/i);
+      expect(result.repairedContent).toMatch(/didn't change|tell me exactly|try again|couldn't confirm/i);
     });
 
     it("does not flag when mutation succeeded (mutationApplied=true)", () => {
