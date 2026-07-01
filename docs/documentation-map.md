@@ -32,6 +32,7 @@ Legend used below: see `docs/documentation-status-legend.md` (status) and
 | `ONBOARDING.md` | New-engineer/AI-agent start-here guide: reading order, setup, traps | 🟢 VERIFIED |
 | `TESTING.md` | Test strategy, inventory, coverage gaps, per-suite procedures | 🟢 VERIFIED |
 | `DEPLOYMENT.md` | Deployment lifecycle, env vars, rollback, post-deploy verification | 🟢 VERIFIED |
+| `SECURITY.md` | Threat model, auth/session/CORS/rate-limiting/Sentry scrubbing posture, known gaps, AI agent security guidelines, responsible disclosure | 🟢 VERIFIED |
 | `.env.example` | All 44 env vars with required/optional/Replit-injected status | 🟢 VERIFIED |
 | `docs/_template.md` | Implementation-doc template + verification frontmatter | 🟢 VERIFIED |
 | `docs/documentation-map.md` | This index | 🟢 VERIFIED |
