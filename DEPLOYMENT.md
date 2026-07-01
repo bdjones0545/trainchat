@@ -144,7 +144,7 @@ Set all secrets in the **Replit Secrets panel** (`Tools → Secrets`). Values in
 | `BASE_PATH` | Replit-injected during frontend build | Required by all Vite configs (`artifacts/trainchat/`, `artifacts/mockup-sandbox/`, whitepaper prototypes). Throws at build time if missing. Not needed at API server runtime. |
 | `WEBHOOK_URL` | None | Override for Stripe webhook URL in the `stripe:setup-products` script only. Not used by the API server at runtime. |
 | `ADMIN_SECRET` | Set in `.replit [userenv.production]` | Bearer token for `/api/admin/*` routes. |
-| `ADMIN_EMAILS` | None | Comma-separated list of admin email addresses. |
+| `ADMIN_EMAILS` | None | Comma-separated list of admin email addresses. **If empty or unset, all admin routes return 403 (fail-closed).** Set this to grant admin access. |
 | `LOG_LEVEL` | `info` | Pino log level (`trace`, `debug`, `info`, `warn`, `error`). |
 | `NODE_ENV` | `development` | Set to `production` in production. Affects cookie security and debug route availability. |
 | `DEBUG_RESET_ENABLED` | `false` | Set to `true` only in non-production to enable `/api/debug/*` routes. Never set in production. |

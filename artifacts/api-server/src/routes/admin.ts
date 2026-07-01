@@ -47,15 +47,19 @@ async function requireAdmin(req: any, res: any, next: any) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  if (ADMIN_EMAILS.length > 0) {
-    const [user] = await db
-      .select({ email: usersTable.email })
-      .from(usersTable)
-      .where(eq(usersTable.id, req.session.userId));
-    if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
+  // An empty ADMIN_EMAILS list denies everyone. This prevents the misconfigured-
+  // environment footgun where an unset env var silently grants all users admin access.
+  if (ADMIN_EMAILS.length === 0) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  const [user] = await db
+    .select({ email: usersTable.email })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.session.userId));
+  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
   }
   next();
 }

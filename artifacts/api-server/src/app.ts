@@ -1,5 +1,6 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
@@ -16,6 +17,14 @@ const app: Express = express();
 // correctly in production. Without this, Express sees all connections as HTTP
 // even though they arrive over HTTPS via the proxy.
 app.set("trust proxy", 1);
+
+// Security headers via Helmet. Applied globally before any route handler.
+// CSP is disabled because the API server serves JSON only — no HTML documents.
+// crossOriginEmbedderPolicy is disabled to avoid breaking Replit's preview iframe.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 
 // Attach a unique request ID to every request before any other middleware runs.
 // The ID is written to the X-Request-ID response header and added to the Sentry

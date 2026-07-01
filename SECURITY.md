@@ -109,8 +109,8 @@ Admin routes use two independent checks applied in order:
 2. **`requireAdmin`** — the user's email (fetched from DB, not from the session) must appear in
    the `ADMIN_EMAILS` environment variable (comma-separated list).
 
-If `ADMIN_EMAILS` is empty the second check is skipped (all authenticated users become admins).
-**This must never be empty in production.** See §15.
+If `ADMIN_EMAILS` is empty or unset, `requireAdmin` returns `403 Forbidden` to all requests.
+An unconfigured admin list denies everyone — it does not open the admin panel. See §15.
 
 ### Seeders and plan manipulation (separate check)
 
@@ -200,16 +200,26 @@ setup. However, the open CORS policy is a hardening gap. See §21.
 - **Limitation:** In-memory store. Under Replit autoscale with multiple instances, each instance
   has its own counter — the effective limit is `60 × instance_count`. See `DR-0038` in CLAUDE.md.
 
+### Auth routes (login / register / forgot-password)
+
+- **Mechanism:** `express-rate-limit` v8 (`src/middlewares/auth-rate-limiter.ts`), applied per
+  request source IP.
+- **Limit:** 20 requests per 15-minute rolling window per IP.
+- **Headers returned:** `RateLimit-*` (draft-8 standard headers; no legacy `X-RateLimit-*`).
+- **429 response:** JSON `{ error: "Too many requests...", reason: "rate_limited" }`.
+- **Test environment:** Automatically disabled via `skip: () => NODE_ENV === "test"`.
+- **Real IP:** Correct because `app.set("trust proxy", 1)` is set — the limiter reads the real
+  client IP from `X-Forwarded-For` rather than the Replit proxy address.
+- **Applied to:** `POST /api/auth/login`, `POST /api/auth/register`,
+  `POST /api/auth/forgot-password`.
+
 ### Regular API (session-authenticated)
 
-No application-level rate limiting is applied to session-authenticated routes. Protection at
-this layer relies on:
+No application-level rate limiting is applied to session-authenticated routes beyond the auth
+routes above. Protection at this layer relies on:
 - Replit infrastructure-level DDoS protection.
 - Guest program generation limits (1 program per device, 8 chat messages before signup).
 - Session-scoped data isolation (no single request can affect other users at scale).
-
-**Gap:** There is no per-user or per-IP rate limiter on auth routes (login, password reset,
-register). Brute-force on the login endpoint is not rate-limited. See §21.
 
 ### Guest limits
 
@@ -363,9 +373,10 @@ All admin panel routes use `requireAuth` + `requireAdmin` middleware in sequence
 - `requireAdmin` fetches the user's email from the database (not trusted from session) and
   checks it against `ADMIN_EMAILS` (env var, comma-separated).
 
-**Critical:** If `ADMIN_EMAILS` is empty or unset, `requireAdmin` passes all authenticated
-users through. **This must be set to a comma-separated list of administrator email addresses
-in all production environments.**
+If `ADMIN_EMAILS` is empty or unset, `requireAdmin` returns `403 Forbidden` — it denies
+everyone rather than granting open access. This fail-closed posture means a misconfigured
+environment locks out admins rather than granting them to all users. Set `ADMIN_EMAILS` to a
+comma-separated list of administrator email addresses to unlock the admin panel.
 
 ### Header-key routes (operational scripts)
 
@@ -538,14 +549,14 @@ posture and a hardened production baseline.
 |---|---|---|---|
 | L-01 | CORS | `origin: true` reflects all origins with credentials | Any origin can make credentialed API requests |
 | L-02 | CSRF | No CSRF token; relies on `sameSite` and `Content-Type` checks | Residual CSRF risk with `sameSite: "none"` in production |
-| L-03 | Auth rate limiting | No rate limit on `/api/auth/login`, `/api/auth/register`, `/api/auth/forgot-password` | Brute-force and credential-stuffing attacks |
+| ~~L-03~~ | ~~Auth rate limiting~~ | **Fixed 2026-06-30** — `express-rate-limit` applied to `/api/auth/login`, `/api/auth/register`, `/api/auth/forgot-password`; 20 req/15 min per IP | ✅ Resolved |
 | L-04 | External API rate limit | In-memory per-instance; not shared across autoscale instances | Effective limit is `60 × instance_count` under autoscale |
-| L-05 | Helmet | No `helmet` middleware; no `Content-Security-Policy`, `X-Frame-Options`, `X-Content-Type-Options` headers | Clickjacking, MIME sniffing, XSS amplification |
+| ~~L-05~~ | ~~Helmet~~ | **Fixed 2026-06-30** — `helmet` added to `app.ts`; sets `X-Content-Type-Options`, `X-Frame-Options`, `X-DNS-Prefetch-Control`, `Strict-Transport-Security`, etc. CSP and COEP disabled (JSON-only API). | ✅ Resolved |
 | L-06 | Body validation | Input validation coverage is partial across routes; some routes read `req.body` without a schema parse | Type confusion, unexpected field injection |
 | L-07 | Pino body redaction | No structural redaction of request bodies in Pino logs | Sensitive fields in body may appear in log output if logged directly |
 | L-08 | Prompt injection | No dedicated detection layer on user input | Multi-turn injection attacks on coaching persona |
 | L-09 | Guest limit bypass | Device ID is client-provided; a new ID bypasses guest limits | Trivial multi-account creation for AI cost abuse |
-| L-10 | ADMIN_EMAILS | If unset or empty, all authenticated users gain admin access | Full admin panel exposure if env var is misconfigured |
+| ~~L-10~~ | ~~ADMIN_EMAILS~~ | **Fixed 2026-06-30** — empty/unset `ADMIN_EMAILS` now returns `403 Forbidden` to all requests (fail-closed). Previously passed all authenticated users through. | ✅ Resolved |
 | L-11 | Dependency audit | No `pnpm audit` in CI | Known-vulnerability packages may not be caught before deployment |
 | L-12 | Session fixation | No explicit session ID regeneration after login/registration | Session fixation if pre-login session ID is known |
 
@@ -553,28 +564,26 @@ posture and a hardened production baseline.
 
 ## 22. Future Security Improvements
 
-Ordered by estimated risk reduction:
+Ordered by estimated risk reduction. Items completed in the first hardening pass (2026-06-30)
+are noted inline.
 
-1. **Add `helmet`** — one-line import, sets `CSP`, `X-Frame-Options`, `X-Content-Type-Options`,
-   `Strict-Transport-Security`, and other security headers automatically.
-2. **Restrict CORS to known origins** — replace `origin: true` with an allowlist of
+1. ✅ **Helmet security headers** — `helmet` added to `app.ts` (L-05, done).
+2. ✅ **Auth route rate limiting** — `express-rate-limit` on login/register/forgot-password (L-03, done).
+3. ✅ **ADMIN_EMAILS fail-closed** — empty list now returns 403 to all (L-10, done).
+4. **Restrict CORS to known origins** — replace `origin: true` with an allowlist of
    `*.trainchat.ai` and Replit domain patterns.
-3. **Rate-limit auth routes** — add a per-IP rate limiter on `/api/auth/login`,
-   `/api/auth/register`, and `/api/auth/forgot-password` (100 requests/15 min suggested).
-4. **Add `pnpm audit --audit-level=high` to CI** — fail the build on known high/critical CVEs.
-5. **Session ID regeneration on login** — call `req.session.regenerate()` after successful
+5. **Add `pnpm audit --audit-level=high` to CI** — fail the build on known high/critical CVEs.
+6. **Session ID regeneration on login** — call `req.session.regenerate()` after successful
    authentication to prevent session fixation.
-6. **CSRF token middleware** — `csurf` or equivalent, especially important given
+7. **CSRF token middleware** — `csurf` or equivalent, especially important given
    `sameSite: "none"` in production.
-7. **Structural body redaction in Pino** — add a `redact` array entry for common body fields
+8. **Structural body redaction in Pino** — add a `redact` array entry for common body fields
    (`req.body.password`, `req.body.apiKey`, etc.) to catch direct body logging.
-8. **Shared rate limit store** — move the external API rate limiter from in-memory to Redis or
+9. **Shared rate limit store** — move the external API rate limiter from in-memory to Redis or
    PostgreSQL to enforce limits correctly under autoscale.
-9. **Prompt injection detection** — add a lightweight classifier or regex guard on user
-   messages that contain phrases like "ignore instructions", "print your system prompt",
-   "act as", etc., and log them for monitoring.
-10. **ADMIN_EMAILS startup check** — throw (or at minimum warn loudly) on startup if
-    `NODE_ENV === "production"` and `ADMIN_EMAILS` is empty.
+10. **Prompt injection detection** — add a lightweight classifier or regex guard on user
+    messages that contain phrases like "ignore instructions", "print your system prompt",
+    "act as", etc., and log them for monitoring.
 
 ---
 

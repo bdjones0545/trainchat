@@ -14,8 +14,8 @@
     "scenario-replay": "pnpm exec tsx scenario-replay.ts"
   },
   "dependencies": {
-    "@sentry/node": "^8",
     "@sendgrid/mail": "^8.1.6",
+    "@sentry/node": "^8",
     "@types/connect-pg-simple": "^7.0.3",
     "@types/express-session": "^1.18.2",
     "@types/nodemailer": "^8.0.0",
@@ -26,7 +26,9 @@
     "cors": "^2",
     "drizzle-orm": "catalog:",
     "express": "^5",
+    "express-rate-limit": "^8.5.2",
     "express-session": "^1.19.0",
+    "helmet": "^8.2.0",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.5",
     "pino": "^9",

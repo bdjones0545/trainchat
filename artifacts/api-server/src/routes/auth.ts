@@ -6,6 +6,7 @@ import { db, usersTable, userProfilesTable, passwordResetTokensTable } from "@wo
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { RegisterBody, LoginBody } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
+import { authRateLimiter } from "../middlewares/auth-rate-limiter";
 import { logger } from "../lib/logger";
 import { mergeAnonymousToRegistered } from "../lib/anonymousMerge";
 import { getUncachableStripeClient } from "../lib/stripeClient";
@@ -168,7 +169,7 @@ router.post("/auth/bootstrap", async (req, res): Promise<void> => {
  * anonymous user, upgrades that anonymous user in-place (no data loss).
  * If deviceId matches a non-anonymous user, creates a fresh account.
  */
-router.post("/auth/register", async (req, res): Promise<void> => {
+router.post("/auth/register", authRateLimiter, async (req, res): Promise<void> => {
   const parsed = RegisterBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -265,7 +266,7 @@ router.post("/auth/register", async (req, res): Promise<void> => {
  * Standard credential login. If the request includes a deviceId that matches
  * an anonymous user with data, merges that data into the authenticated account.
  */
-router.post("/auth/login", async (req, res): Promise<void> => {
+router.post("/auth/login", authRateLimiter, async (req, res): Promise<void> => {
   const parsed = LoginBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -526,7 +527,7 @@ function isRateLimited(email: string): boolean {
  * Accepts an email address and sends a password reset link if the account exists.
  * Always returns the same generic response to prevent user enumeration.
  */
-router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+router.post("/auth/forgot-password", authRateLimiter, async (req, res): Promise<void> => {
   const parsed = z.object({ email: z.string().email() }).safeParse(req.body);
 
   if (!parsed.success) {
