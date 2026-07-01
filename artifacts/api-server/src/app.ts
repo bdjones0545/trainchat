@@ -1,5 +1,4 @@
 import express, { type Express, type Request, type Response, type NextFunction } from "express";
-import cors from "cors";
 import helmet from "helmet";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -10,6 +9,7 @@ import { db, usersTable } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { startWhitepaperCron } from "./lib/whitepaper-cron";
 import { Sentry, sentryEnabled, captureWithTags, setSentryUser, generateRequestId } from "./lib/sentry";
+import { corsMiddleware } from "./middlewares/cors-config";
 
 const app: Express = express();
 
@@ -56,7 +56,7 @@ app.use(
   }),
 );
 
-app.use(cors({ origin: true, credentials: true }));
+app.use(corsMiddleware);
 
 app.post(
   "/api/stripe/webhook",

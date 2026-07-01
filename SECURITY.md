@@ -171,21 +171,44 @@ residual risk. See §21 (Future Improvements).
 
 ## 8. CORS Policy
 
+**Fixed 2026-07-01 (L-01 resolved).** CORS now uses an explicit origin allowlist via
+`src/middlewares/cors-config.ts`.
+
 ```typescript
-// src/app.ts
-app.use(cors({ origin: true, credentials: true }));
+// src/middlewares/cors-config.ts
+export const corsMiddleware = cors({
+  origin(requestOrigin, callback) {
+    if (!requestOrigin) { callback(null, true); return; } // server-to-server
+    allowedOrigins.has(requestOrigin)
+      ? callback(null, true)
+      : callback(new Error(`CORS: origin '${requestOrigin}' is not in the allowlist`));
+  },
+  credentials: true,
+});
 ```
 
-**Current posture:** `origin: true` reflects all origins with `Access-Control-Allow-Origin`.
-Combined with `credentials: true`, this means cookies are sent on cross-origin requests from
-any origin.
+**Allowlist construction (evaluated at server start):**
 
-**Risk:** This is permissive. An `allowlist` of known origins (`trainchat.ai`, Replit domains)
-would be more restrictive.
+| Source | Origins added |
+|---|---|
+| Hardcoded | `https://trainchat.ai`, `https://www.trainchat.ai` |
+| `CLIENT_URL` env var | The configured URL (trailing slash stripped) |
+| `APP_URL` env var | The configured URL (trailing slash stripped) |
+| `REPLIT_DOMAINS` env var | Each comma-separated domain prefixed with `https://` |
+| `REPLIT_DEV_DOMAIN` env var | Prefixed with `https://` |
+| Non-production only | `http://localhost:{3000,5173,4173,8080}` and `127.0.0.1` equivalents |
 
-**Mitigating context:** TrainChat runs on Replit where the frontend and backend share a domain
-or known subdomains. The session cookie's `sameSite: "none"` is required to work in this
-setup. However, the open CORS policy is a hardening gap. See §21.
+**No-origin requests (server-to-server):** Stripe webhooks, `curl`, health-check tools, and
+external API clients do not send an `Origin` header. These are allowed unconditionally — the
+browser is absent and CORS headers are irrelevant.
+
+**Remaining assumptions:**
+- The allowlist is static (evaluated at module load / server start). A restart is required to
+  pick up env-var changes — consistent with all other env-backed config in the codebase.
+- `sameSite: "none"` is still required for the Replit reverse-proxy setup; the CORS restriction
+  reduces but does not eliminate residual CSRF risk without a token (L-02).
+- Under Replit autoscale, all instances evaluate the same env vars and produce identical
+  allowlists — no cross-instance inconsistency.
 
 ---
 
@@ -547,7 +570,7 @@ posture and a hardened production baseline.
 
 | # | Area | Limitation | Risk |
 |---|---|---|---|
-| L-01 | CORS | `origin: true` reflects all origins with credentials | Any origin can make credentialed API requests |
+| ~~L-01~~ | ~~CORS~~ | **Fixed 2026-07-01** — `corsMiddleware` in `src/middlewares/cors-config.ts` restricts to an allowlist of `trainchat.ai`, Replit domains, and `CLIENT_URL`/`APP_URL`. Unknown origins receive an error; no-origin requests (server-to-server) are allowed unconditionally. | ✅ Resolved |
 | L-02 | CSRF | No CSRF token; relies on `sameSite` and `Content-Type` checks | Residual CSRF risk with `sameSite: "none"` in production |
 | ~~L-03~~ | ~~Auth rate limiting~~ | **Fixed 2026-06-30** — `express-rate-limit` applied to `/api/auth/login`, `/api/auth/register`, `/api/auth/forgot-password`; 20 req/15 min per IP | ✅ Resolved |
 | L-04 | External API rate limit | In-memory per-instance; not shared across autoscale instances | Effective limit is `60 × instance_count` under autoscale |
@@ -570,8 +593,8 @@ are noted inline.
 1. ✅ **Helmet security headers** — `helmet` added to `app.ts` (L-05, done).
 2. ✅ **Auth route rate limiting** — `express-rate-limit` on login/register/forgot-password (L-03, done).
 3. ✅ **ADMIN_EMAILS fail-closed** — empty list now returns 403 to all (L-10, done).
-4. **Restrict CORS to known origins** — replace `origin: true` with an allowlist of
-   `*.trainchat.ai` and Replit domain patterns.
+4. ✅ **Restrict CORS to known origins** — `corsMiddleware` allowlist implemented in
+   `src/middlewares/cors-config.ts`; deployed 2026-07-01 (L-01, done).
 5. **Add `pnpm audit --audit-level=high` to CI** — fail the build on known high/critical CVEs.
 6. **Session ID regeneration on login** — call `req.session.regenerate()` after successful
    authentication to prevent session fixation.

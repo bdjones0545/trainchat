@@ -273,3 +273,150 @@ describe("L-10 — requireAdmin blocks access when ADMIN_EMAILS is empty", () =>
     expect(statusCodes).toContain(403);
   });
 });
+
+// ─── L-01: CORS allowlist ────────────────────────────────────────────────────
+//
+// buildAllowedOrigins() is the pure function under test — it reads process.env
+// at call time, so each test can control the env it receives without touching
+// the module-level constant. The corsMiddleware itself is an integration of
+// that allowlist with the `cors` package; its behaviour is covered here via
+// the origin callback extracted from the exported middleware factory.
+
+describe("L-01 — CORS origin allowlist", () => {
+  const originalEnv = { ...process.env };
+
+  afterEach(() => {
+    // Restore env after each test
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) delete process.env[key];
+    }
+    Object.assign(process.env, originalEnv);
+  });
+
+  it("always includes https://trainchat.ai and https://www.trainchat.ai", async () => {
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("https://trainchat.ai")).toBe(true);
+    expect(origins.has("https://www.trainchat.ai")).toBe(true);
+  });
+
+  it("includes CLIENT_URL when set", async () => {
+    process.env.CLIENT_URL = "https://app.example.com";
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("https://app.example.com")).toBe(true);
+  });
+
+  it("strips trailing slash from CLIENT_URL", async () => {
+    process.env.CLIENT_URL = "https://app.example.com/";
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("https://app.example.com")).toBe(true);
+    expect(origins.has("https://app.example.com/")).toBe(false);
+  });
+
+  it("includes each domain from REPLIT_DOMAINS as https://", async () => {
+    process.env.REPLIT_DOMAINS = "my-repl.repl.co,other-repl.repl.co";
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("https://my-repl.repl.co")).toBe(true);
+    expect(origins.has("https://other-repl.repl.co")).toBe(true);
+  });
+
+  it("includes REPLIT_DEV_DOMAIN as https://", async () => {
+    process.env.REPLIT_DEV_DOMAIN = "dev-tunnel.repl.co";
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("https://dev-tunnel.repl.co")).toBe(true);
+  });
+
+  it("includes localhost origins when NODE_ENV is not production", async () => {
+    process.env.NODE_ENV = "development";
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("http://localhost:5173")).toBe(true);
+    expect(origins.has("http://localhost:3000")).toBe(true);
+  });
+
+  it("does NOT include localhost origins when NODE_ENV is production", async () => {
+    process.env.NODE_ENV = "production";
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("http://localhost:5173")).toBe(false);
+    expect(origins.has("http://localhost:3000")).toBe(false);
+  });
+
+  it("does not include arbitrary unknown origins", async () => {
+    const { buildAllowedOrigins } = await import("../../middlewares/cors-config");
+    const origins = buildAllowedOrigins();
+    expect(origins.has("https://evil.example.com")).toBe(false);
+    expect(origins.has("https://trainchat.ai.evil.com")).toBe(false);
+  });
+
+  it("allows requests with no Origin header (server-to-server)", async () => {
+    const { corsMiddleware } = await import("../../middlewares/cors-config");
+    // Extract the origin callback by invoking corsMiddleware with no Origin
+    const headers: Record<string, string> = {};
+    const req = { headers: {}, method: "GET" } as any;
+    const res = {
+      setHeader: (name: string, value: string) => { headers[name.toLowerCase()] = value; },
+      getHeader: (name: string) => headers[name.toLowerCase()],
+      removeHeader: (_: string) => {},
+      end: vi.fn(),
+    } as any;
+    const next = vi.fn();
+
+    await new Promise<void>((resolve) => {
+      corsMiddleware(req, res, () => { next(); resolve(); });
+    });
+
+    expect(next).toHaveBeenCalledOnce();
+  });
+
+  it("allows an allowed origin via the full middleware", async () => {
+    const { corsMiddleware } = await import("../../middlewares/cors-config");
+    const headers: Record<string, string> = {};
+    const req = {
+      headers: { origin: "https://trainchat.ai" },
+      method: "GET",
+    } as any;
+    const res = {
+      setHeader: (name: string, value: string) => { headers[name.toLowerCase()] = value; },
+      getHeader: (name: string) => headers[name.toLowerCase()],
+      removeHeader: (_: string) => {},
+      end: vi.fn(),
+    } as any;
+    const next = vi.fn();
+
+    await new Promise<void>((resolve) => {
+      corsMiddleware(req, res, () => { next(); resolve(); });
+    });
+
+    expect(next).toHaveBeenCalledOnce();
+    expect(headers["access-control-allow-origin"]).toBe("https://trainchat.ai");
+  });
+
+  it("blocks an unknown origin via the full middleware", async () => {
+    const { corsMiddleware } = await import("../../middlewares/cors-config");
+    const req = {
+      headers: { origin: "https://attacker.evil.com" },
+      method: "GET",
+    } as any;
+    const res = {
+      setHeader: vi.fn(),
+      getHeader: vi.fn(),
+      removeHeader: vi.fn(),
+      end: vi.fn(),
+    } as any;
+    let caughtError: Error | undefined;
+    const next = vi.fn((err?: unknown) => {
+      if (err instanceof Error) caughtError = err;
+    });
+
+    await new Promise<void>((resolve) => {
+      corsMiddleware(req, res, (err?: unknown) => { next(err); resolve(); });
+    });
+
+    expect(caughtError?.message).toMatch(/not in the allowlist/);
+  });
+});
