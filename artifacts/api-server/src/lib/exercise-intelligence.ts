@@ -19,7 +19,6 @@
 // This module is a SECONDARY fallback only.
 //
 // Used by:
-//   - mutation-engine.ts          (fallback swap/add when DB has no candidate)
 //   - exercise-redistribution.ts  (replacement and addition logic)
 //   - ai.ts                       (atomic edit guidance)
 //

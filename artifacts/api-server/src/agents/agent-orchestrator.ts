@@ -28,7 +28,7 @@
 //
 // Internal persona names (Coach Atlas / Architect Vale / Dr. Sable) are for
 // dev/admin logs only. They must NEVER appear in user-facing responses.
-// See: src/agents/agent-personas.ts for full persona definitions.
+// Coach identity is hardcoded inline in lib/ai.ts.
 //
 // This module provides:
 //   1. Typed handoff contracts between agents

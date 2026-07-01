@@ -481,14 +481,17 @@ validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies
 **B. Open — require an engineering decision or fix (documenting them here does NOT close them):**
 - ✅ **`DR-0025` (high) — anonymous→registered merge data loss. RESOLVED 2026-06-30.** All child
   tables migrated in a transaction before anonymous user delete. Integration-verified (61/61).
-- 🔴 **`DR-0011` (high) — unwired persona registry / inlined Coach identity.** Wire the registry or
-  delete it; until then `lib/ai.ts` is the only source of the Coach prompt.
+- ✅ **`DR-0011` (high) — unwired persona registry / inlined Coach identity. RESOLVED 2026-06-30.**
+  `agent-personas.ts` deleted (0 runtime consumers); Coach identity remains hardcoded in `lib/ai.ts`
+  (documented as intended). `agent-orchestrator.ts` comment updated to reflect this.
 - 🟠 **`DR-0012` — unwired behavioral/progression intelligence.** Wire or remove.
 - 🟠 **`DR-0006` — no DB transactions** around multi-table writes. Accept (audit-based) or introduce.
 - 🟠 **`DR-0020` / `DR-0038` — in-memory state under autoscale** (context resolver, rate limiter).
   Move to a shared store if horizontal scaling is real.
-- 🟠 **`DR-0018` — dual mutation engines** (and the broader dual-systems pattern: program models,
-  guest, memory, billing). Decide retire-legacy vs document-coexistence — the highest-leverage call.
+- ✅ **`DR-0018` — dual mutation engines. RESOLVED 2026-06-30.** `mutation-engine.ts` deleted (976
+  lines, 0 consumers). Primary pipeline is `edit-intent-service` + `edit-engine` +
+  `mutation-execution-service`. Legacy `programs.ts` CRUD route also deleted (0 frontend callers);
+  unused `GET /billing/subscription` and `POST /billing/create-portal-session` removed.
 - 🟠 **`DR-0003` / `DR-0004` — type-mismatched soft references** (`user_id`/`conversation_id` text).
 - 🟠 **`DR-0032` — split adaptation apply model** (check-in confirmed vs session-log auto-apply).
 

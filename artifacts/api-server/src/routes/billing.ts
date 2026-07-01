@@ -8,7 +8,6 @@ import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 import { stripeStorage } from "../lib/stripeStorage";
-import { getUserPlanInfo } from "../lib/planGating";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -150,70 +149,6 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
     res.json({ url: session.url });
   } catch (err: any) {
     logger.error({ err }, "[BillingRouter] /billing/create-checkout-session error");
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── GET /api/billing/subscription ───────────────────────────────────────────
-//
-// Returns subscription state for the authenticated user.
-
-router.get("/billing/subscription", requireAuth, async (req: any, res): Promise<void> => {
-  try {
-    const userId = req.session.userId!;
-    const planInfo = await getUserPlanInfo(userId);
-    const user = await stripeStorage.getUser(userId);
-
-    res.json({
-      tier: planInfo.plan,
-      status: planInfo.planStatus,
-      billingInterval: planInfo.billingInterval,
-      currentPeriodEnd: planInfo.currentPeriodEnd,
-      cancelAtPeriodEnd: planInfo.cancelAtPeriodEnd,
-      hasActiveAccess: planInfo.hasActiveAccess,
-      stripeCustomerIdExists: !!user?.stripeCustomerId,
-    });
-  } catch (err: any) {
-    logger.error({ err }, "[BillingRouter] /billing/subscription error");
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── POST /api/billing/create-portal-session ──────────────────────────────────
-//
-// Creates a Stripe Billing Portal session for the authenticated user.
-// Returns { url } for frontend redirect.
-
-router.post("/billing/create-portal-session", requireAuth, async (req: any, res): Promise<void> => {
-  try {
-    const userId = req.session.userId!;
-    const user = await stripeStorage.getUser(userId);
-
-    if (!user?.stripeCustomerId) {
-      res.status(400).json({
-        error: "No billing account found. Please subscribe first.",
-      });
-      return;
-    }
-
-    const clientUrl =
-      process.env.CLIENT_URL ||
-      (process.env.REPLIT_DOMAINS
-        ? `https://${process.env.REPLIT_DOMAINS.split(",")[0]}`
-        : `${req.protocol}://${req.get("host")}`);
-
-    const returnUrl = `${clientUrl}/billing`;
-
-    const stripe = await getUncachableStripeClient();
-    const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
-      return_url: returnUrl,
-    });
-
-    logger.info({ userId }, "[BillingRouter] Billing portal session created");
-    res.json({ url: session.url });
-  } catch (err: any) {
-    logger.error({ err }, "[BillingRouter] /billing/create-portal-session error");
     res.status(500).json({ error: err.message });
   }
 });
