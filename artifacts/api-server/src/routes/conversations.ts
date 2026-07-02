@@ -107,27 +107,12 @@ import { buildSessionLogContext } from "../lib/session-log-adaptation-analyzer";
 import { buildCompleteEvent } from "../services/streaming-response-service";
 import { saveOrUpdateProgram } from "../services/program-build-service";
 import { interpretMutationRequest } from "../services/mutation-execution-service";
+import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 
 const router: IRouter = Router();
 
 // ─── In-Memory Rate Limiter (SSE message endpoint) ────────────────────────────
-// Max 30 messages per authenticated user per 60-second window.
-// Uses a simple sliding window: timestamps are stored per userId, old ones pruned
-// on each check. No external dependency required.
-const _sseRateMap = new Map<string, number[]>();
-const SSE_RATE_LIMIT = 30;
-const SSE_RATE_WINDOW_MS = 60_000;
-
-function checkSseRateLimit(userId: number | string): boolean {
-  const key = String(userId);
-  const now = Date.now();
-  const cutoff = now - SSE_RATE_WINDOW_MS;
-  const timestamps = (_sseRateMap.get(key) ?? []).filter((t) => t > cutoff);
-  if (timestamps.length >= SSE_RATE_LIMIT) return false;
-  timestamps.push(now);
-  _sseRateMap.set(key, timestamps);
-  return true;
-}
+// Moved to ../lib/sse — checkSseRateLimit imported above.
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -3263,24 +3248,10 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   }
 
   // ── SSE setup ─────────────────────────────────────────────────────────────
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
+  setupSseHeaders(res);
 
-  function emit(event: Record<string, unknown>): void {
-    try {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
-    } catch {
-      // client disconnected
-    }
-  }
-
-  function done(event: Record<string, unknown>): void {
-    emit(event);
-    res.end();
-  }
+  const emit = (event: Record<string, unknown>) => sseEmit(res, event);
+  const done = (event: Record<string, unknown>) => sseDone(res, event);
 
   const userId = req.session.userId!;
 
