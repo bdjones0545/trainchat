@@ -108,6 +108,7 @@ import { buildCompleteEvent } from "../services/streaming-response-service";
 import { saveOrUpdateProgram } from "../services/program-build-service";
 import { interpretMutationRequest } from "../services/mutation-execution-service";
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
+import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 
 const router: IRouter = Router();
 
@@ -583,20 +584,8 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
 
   // --- Plan gating ---
   let planInfo = await getUserPlanInfo(userId).catch(() => null);
-  if (planInfo && !planInfo.canSendMessage) {
-    res.status(402).json({
-      error: "MESSAGE_LIMIT_REACHED",
-      code: "PAYWALL",
-      isAnonymous: planInfo.isAnonymous ?? false,
-      message: planInfo.isAnonymous
-        ? `You've used your ${planInfo.messageCount} free interactions. Create your free account to keep training.`
-        : planInfo.plan === "free"
-          ? `You've used your 5 free interactions. Upgrade to keep training with your AI coach.`
-          : `You've reached your monthly message limit. Upgrade to Pro for unlimited access.`,
-      plan: planInfo.plan,
-      messageCount: planInfo.messageCount,
-      messagesRemaining: 0,
-    });
+  if (isPaywallBlocked(planInfo)) {
+    res.status(402).json(buildPaywallHttpBody(planInfo!));
     return;
   }
 
@@ -3268,18 +3257,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   // ── Plan gating ───────────────────────────────────────────────────────────
   let planInfo = await getUserPlanInfo(userId).catch(() => null);
-  if (planInfo && !planInfo.canSendMessage) {
-    done({
-      type: "error",
-      status: 402,
-      code: "PAYWALL",
-      isAnonymous: planInfo.isAnonymous ?? false,
-      message: planInfo.isAnonymous
-        ? `You've used your ${planInfo.messageCount} free interactions. Create your free account to keep training.`
-        : planInfo.plan === "free"
-          ? "You've used your 5 free interactions. Upgrade to keep training with your AI coach."
-          : "You've reached your monthly message limit. Upgrade to Pro for unlimited access.",
-    });
+  if (isPaywallBlocked(planInfo)) {
+    done(buildPaywallSseEvent(planInfo!));
     return;
   }
 
