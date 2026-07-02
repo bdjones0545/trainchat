@@ -21,9 +21,6 @@ import {
   buildTransformPromptHint,
   type TransformRequest,
 } from "../lib/split-transform";
-import { buildAdaptationContext } from "../lib/adaptation";
-import { syncMemoriesFromData, listMemories, buildMemoryContext, extractMemoriesFromMessage } from "../lib/memory";
-import { generateInsights, buildInsightPromptHint } from "../lib/insights";
 import { getUserPlanInfo } from "../lib/planGating";
 import { stripeStorage } from "../lib/stripeStorage";
 import { interpretEditRequest, resolveTargetFromRequest, hasDeiticSessionReference, buildBulkSessionSetsEditPlan } from "../lib/edit-intent-service";
@@ -40,8 +37,6 @@ import type { NarrationContext } from "../lib/stage-narration";
 import { verifyResponseAlignment } from "../lib/response-alignment-verifier";
 import {
   persistConstraintsFromTurn,
-  loadHardConstraints,
-  buildConstraintEnforcementDirective,
   validateAgainstHardConstraints,
   type HardConstraints,
 } from "../lib/constraint-memory";
@@ -102,13 +97,13 @@ import {
   inferExerciseReferenceFromMutation,
   inferSessionReferenceFromMutation,
 } from "../lib/conversation-context-resolver";
-import { buildSessionLogContext } from "../lib/session-log-adaptation-analyzer";
 // ── Phase 2 service imports ───────────────────────────────────────────────────
 import { buildCompleteEvent } from "../services/streaming-response-service";
 import { saveOrUpdateProgram } from "../services/program-build-service";
 import { interpretMutationRequest } from "../services/mutation-execution-service";
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
+import { buildConversationContext } from "../lib/conversation-context-injection";
 
 const router: IRouter = Router();
 
@@ -626,82 +621,22 @@ router.post("/conversations/:id/messages", requireAuth, async (req, res): Promis
   const isPro = planInfo?.features.adaptationContext ?? false;
   const hasMemory = planInfo?.features.memoryContext ?? false;
 
-  let adaptationCtx = "";
-  let memoryCtx = "";
-  let insightHint = "";
-
-  const allowMemory = isPro && agentSettings.behavior.memoryPersonalization;
-  const allowInsights = agentSettings.behavior.proactiveInsights;
-
-  // Hard constraints from persisted memory — enforced for ALL users regardless of plan tier.
-  let hardConstraintsNonSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], monitorRegions: [], sport: null };
-  let constraintDirectiveNonSSE: string | null = null;
-
-  if (isPro) {
-    const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
-    const [adaptation, memories, sessionLogCtx] = await Promise.all([
-      buildAdaptationContext(userId, _sessionFocusMode).catch(() => ({ promptContext: "" })),
-      allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
-      buildSessionLogContext(userId).catch(() => ""),
-    ]);
-    adaptationCtx = adaptation.promptContext;
-    memoryCtx = allowMemory ? buildMemoryContext(memories) : "";
-    if (sessionLogCtx) {
-      memoryCtx += `\n\n${sessionLogCtx}`;
-    }
-    if (allowInsights && allowMemory) {
-      const insights = await generateInsights(userId, memories).catch(() => []);
-      insightHint = buildInsightPromptHint(insights);
-    }
-
-    if (allowMemory) {
-      safeBackground(syncMemoriesFromData(userId), "sync-memories", { userId });
-      safeBackground(extractMemoriesFromMessage(userId, userMessage.content), "extract-memories", { userId });
-    }
-
-    // Extract hard constraints from the already-loaded memories (no extra DB call)
-    hardConstraintsNonSSE = loadHardConstraints(allowMemory ? memories : []);
-    constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
-
-    // ── Priority 5: Cross-conversation continuity opener ─────────────────────
-    // ── Priority 2: Proactive behavioral signal ──────────────────────────────
-    if (allowMemory && memories.length > 0) {
-      const isFirstUserMessage = history.filter((m) => m.role === "user").length === 0;
-      if (isFirstUserMessage) {
-        const highConfMemories = memories.filter((m) => (m as any).confidence >= 3);
-        if (highConfMemories.length > 0) {
-          const OPENER_PRIORITY = ["pain_pattern", "sport_context", "exercise_preference", "adherence_pattern", "volume_response", "training_preference"];
-          const topMemory = [...highConfMemories].sort((a, b) => {
-            const pa = OPENER_PRIORITY.indexOf((a as any).type), pb = OPENER_PRIORITY.indexOf((b as any).type);
-            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
-            return (b as any).confidence - (a as any).confidence;
-          })[0] as any;
-          memoryCtx += `\n\n## RETURNING ATHLETE — PROACTIVE OPENER\nThis is the first message of a new conversation. Before answering, open with one brief, coach-like sentence referencing what you already know about this athlete. Make it feel natural — like a real coach who remembers their client. DO NOT say "Based on my memory" or "I know that you". Examples: "Good to be back — how's that shoulder holding up?" or "We've been building more athletically lately — continuing that direction?" Memory to reference: [${topMemory.type}] "${topMemory.detail}"`;
-        }
-        const behavioralSignals = memories.filter((m) =>
-          (["adherence_pattern", "volume_response", "recovery_pattern"].includes((m as any).type)) &&
-          (m as any).sentiment === "negative" && (m as any).confidence >= 3
-        );
-        if (behavioralSignals.length > 0) {
-          const signal = behavioralSignals[0] as any;
-          memoryCtx += `\n\n## PROACTIVE BEHAVIORAL SIGNAL\nPattern observed: ${signal.detail}. If clearly relevant to what the user is asking today, briefly and naturally surface it before answering. Keep it coaching-toned and concise. Example: "I've noticed [pattern] — want me to factor that in?" Only include if genuinely relevant. Do NOT force it into every response.`;
-        }
-      }
-    }
-  } else {
-    // For non-Pro users: lightweight constraint memory load for hard constraint enforcement
-    const constraintMemories = await listMemories(userId).catch(() => []);
-    hardConstraintsNonSSE = loadHardConstraints(constraintMemories);
-    constraintDirectiveNonSSE = buildConstraintEnforcementDirective(hardConstraintsNonSSE);
-    // Inject recent session logs for all users — grounding the coach in real feedback
-    const sessionLogCtxFree = await buildSessionLogContext(userId).catch(() => "");
-    if (sessionLogCtxFree) memoryCtx += `\n\n${sessionLogCtxFree}`;
-  }
-
-  // ── Priority 3: Mutation trust language directive ─────────────────────────
-  // Prevent the AI from confirming mutations as complete before verification.
-  // This fires on every turn — only affects language when mutations are being applied.
-  memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
+  const nonStreamFocusModeForCtx = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
+  const {
+    adaptationCtx,
+    memoryCtx: _memoryCtxNonSSE,
+    insightHint,
+    hardConstraints: hardConstraintsNonSSE,
+    constraintDirective: constraintDirectiveNonSSE,
+  } = await buildConversationContext({
+    userId,
+    isPro,
+    agentSettings,
+    sessionFocusMode: nonStreamFocusModeForCtx,
+    isFirstUserMessage: history.filter((m) => m.role === "user").length === 0,
+    userMessageContent: userMessage.content,
+  });
+  let memoryCtx = _memoryCtxNonSSE;
 
   // Agent-driven conversion hint for free/starter users
   let conversionHint = "";
@@ -3337,79 +3272,21 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   const isPro = planInfo?.features.adaptationContext ?? false;
   const hasMemory = planInfo?.features.memoryContext ?? false;
 
-  let adaptationCtx = "";
-  let memoryCtx = "";
-  let insightHint = "";
-
-  const allowMemory = isPro && agentSettings.behavior.memoryPersonalization;
-  const allowInsights = agentSettings.behavior.proactiveInsights;
-
-  // Hard constraints from persisted memory — enforced for ALL users regardless of plan tier.
-  let hardConstraintsSSE: HardConstraints = { bannedItems: [], dislikedItems: [], painRegions: [], monitorRegions: [], sport: null };
-  let constraintDirectiveSSE2: string | null = null;
-
-  if (isPro) {
-    const _sessionFocusMode = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
-    const [adaptation, memories, sessionLogCtxSSE] = await Promise.all([
-      buildAdaptationContext(userId, _sessionFocusMode).catch(() => ({ promptContext: "" })),
-      allowMemory ? listMemories(userId).catch(() => []) : Promise.resolve([]),
-      buildSessionLogContext(userId).catch(() => ""),
-    ]);
-    adaptationCtx = adaptation.promptContext;
-    memoryCtx = allowMemory ? buildMemoryContext(memories) : "";
-    if (sessionLogCtxSSE) {
-      memoryCtx += `\n\n${sessionLogCtxSSE}`;
-    }
-    if (allowInsights && allowMemory) {
-      const insights = await generateInsights(userId, memories).catch(() => []);
-      insightHint = buildInsightPromptHint(insights);
-    }
-    if (allowMemory) {
-      safeBackground(syncMemoriesFromData(userId), "sync-memories", { userId });
-      safeBackground(extractMemoriesFromMessage(userId, userMessage.content), "extract-memories", { userId });
-    }
-
-    // Extract hard constraints from the already-loaded memories (no extra DB call)
-    hardConstraintsSSE = loadHardConstraints(allowMemory ? memories : []);
-    constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
-
-    // ── Priority 5: Cross-conversation continuity opener (SSE path) ──────────
-    // ── Priority 2: Proactive behavioral signal (SSE path) ───────────────────
-    if (allowMemory && memories.length > 0) {
-      const isFirstUserMessageSSE = history.filter((m) => m.role === "user").length === 0;
-      if (isFirstUserMessageSSE) {
-        const highConfMemoriesSSE = memories.filter((m) => (m as any).confidence >= 3);
-        if (highConfMemoriesSSE.length > 0) {
-          const OPENER_PRIORITY_SSE = ["pain_pattern", "sport_context", "exercise_preference", "adherence_pattern", "volume_response", "training_preference"];
-          const topMemorySSE = [...highConfMemoriesSSE].sort((a, b) => {
-            const pa = OPENER_PRIORITY_SSE.indexOf((a as any).type), pb = OPENER_PRIORITY_SSE.indexOf((b as any).type);
-            if (pa !== pb) return (pa === -1 ? 999 : pa) - (pb === -1 ? 999 : pb);
-            return (b as any).confidence - (a as any).confidence;
-          })[0] as any;
-          memoryCtx += `\n\n## RETURNING ATHLETE — PROACTIVE OPENER\nThis is the first message of a new conversation. Before answering, open with one brief, coach-like sentence referencing what you already know about this athlete. Make it feel natural — like a real coach who remembers their client. DO NOT say "Based on my memory" or "I know that you". Examples: "Good to be back — how's that shoulder holding up?" or "We've been building more athletically lately — continuing that direction?" Memory to reference: [${topMemorySSE.type}] "${topMemorySSE.detail}"`;
-        }
-        const behavioralSignalsSSE = memories.filter((m) =>
-          (["adherence_pattern", "volume_response", "recovery_pattern"].includes((m as any).type)) &&
-          (m as any).sentiment === "negative" && (m as any).confidence >= 3
-        );
-        if (behavioralSignalsSSE.length > 0) {
-          const signalSSE = behavioralSignalsSSE[0] as any;
-          memoryCtx += `\n\n## PROACTIVE BEHAVIORAL SIGNAL\nPattern observed: ${signalSSE.detail}. If clearly relevant to what the user is asking today, briefly and naturally surface it before answering. Keep it coaching-toned and concise. Example: "I've noticed [pattern] — want me to factor that in?" Only include if genuinely relevant. Do NOT force it into every response.`;
-        }
-      }
-    }
-  } else {
-    // For non-Pro users: lightweight constraint memory load for hard constraint enforcement
-    const constraintMemories = await listMemories(userId).catch(() => []);
-    hardConstraintsSSE = loadHardConstraints(constraintMemories);
-    constraintDirectiveSSE2 = buildConstraintEnforcementDirective(hardConstraintsSSE);
-    // Inject recent session logs for all users — grounding the coach in real feedback
-    const sessionLogCtxFreeSSE = await buildSessionLogContext(userId).catch(() => "");
-    if (sessionLogCtxFreeSSE) memoryCtx += `\n\n${sessionLogCtxFreeSSE}`;
-  }
-
-  // ── Priority 3: Mutation trust language directive (SSE path) ─────────────
-  memoryCtx += `\n\n## MUTATION RESPONSE LANGUAGE\nWhen applying program changes: never use past-tense confirmation ("Done", "I've updated", "Your program has been changed"). Use present-tense or forward-looking language: "Applying that now — see the changes in your program panel" or "On it — the panel will show the update." The verification indicator in the UI confirms success.`;
+  const {
+    adaptationCtx,
+    memoryCtx: _memoryCtxSSE,
+    insightHint,
+    hardConstraints: hardConstraintsSSE,
+    constraintDirective: constraintDirectiveSSE2,
+  } = await buildConversationContext({
+    userId,
+    isPro,
+    agentSettings,
+    sessionFocusMode: streamFocusMode,
+    isFirstUserMessage: history.filter((m) => m.role === "user").length === 0,
+    userMessageContent: userMessage.content,
+  });
+  let memoryCtx = _memoryCtxSSE;
 
   // ── Neural Graph Context (streaming path) ─────────────────────────────────
   let streamNeuralBias: NeuralBias | undefined;
