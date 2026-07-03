@@ -130,6 +130,40 @@ export function shouldBypassEditEngine(
  * @param userMessage       Raw user message content
  * @param focusMode         Active focus mode for the session (null → no mode override)
  */
+// ─── Save-program formatting ──────────────────────────────────────────────────
+
+/**
+ * Computes the base assistant message content and structuredData for a
+ * SAVE_PROGRAM turn. Three outcomes:
+ *
+ * - success          → confirmation with program name
+ * - failure + program exists → system error message
+ * - no program       → "nothing to save yet" message
+ *
+ * The SSE handler appends an optional confidence line to `baseContent` on
+ * success; the non-SSE handler uses `baseContent` directly as `content`.
+ * Both handlers use `structuredData` unchanged for the DB insert.
+ *
+ * @param saveSuccess   Whether `upsertTrainingSystemFromProgram` succeeded
+ * @param programToSave The structured program object (may be null when absent)
+ */
+export function formatSaveProgram(
+  saveSuccess: boolean,
+  // Narrowed to only the field used for message composition; JSON.stringify
+  // accepts the full object at the call site via the `unknown` cast below.
+  programToSave: { programName: string } | null | undefined,
+): { baseContent: string; structuredData: string | null } {
+  const baseContent = saveSuccess
+    ? `Your program "${programToSave!.programName}" has been saved to your training system. You can access it anytime from the Program panel.`
+    : programToSave
+      ? `I wasn't able to save your program due to a system error. Your program hasn't been saved. Please try again in a moment.`
+      : `There's no program ready to save yet. Once I've built your training program, you can ask me to save it and I'll add it to your system.`;
+  return {
+    baseContent,
+    structuredData: programToSave ? JSON.stringify(programToSave) : null,
+  };
+}
+
 // ─── Safety-refusal formatting ────────────────────────────────────────────────
 
 const SAFETY_REFUSAL_DEFAULT =

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal } from "../conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram } from "../conversation-routing";
 import type { AgentSettingsContext } from "../agent-settings-resolver";
 
 // vi.hoisted ensures the mock fn exists before the vi.mock factory runs.
@@ -441,5 +441,79 @@ describe("formatSafetyRefusal", () => {
   it("structuredData contains no other fields beyond _type", () => {
     const parsed = JSON.parse(formatSafetyRefusal(undefined).structuredData);
     expect(Object.keys(parsed)).toEqual(["_type"]);
+  });
+});
+
+// ─── formatSaveProgram ────────────────────────────────────────────────────────
+
+describe("formatSaveProgram", () => {
+  const program = { programName: "12-Week Strength Block", weeks: 12, days: [] };
+
+  // ── baseContent — success ──────────────────────────────────────────────────
+
+  it("success: baseContent includes the program name", () => {
+    const { baseContent } = formatSaveProgram(true, program);
+    expect(baseContent).toContain("12-Week Strength Block");
+  });
+
+  it("success: baseContent mentions 'saved to your training system'", () => {
+    const { baseContent } = formatSaveProgram(true, program);
+    expect(baseContent).toMatch(/saved to your training system/i);
+  });
+
+  // ── baseContent — failure with program ────────────────────────────────────
+
+  it("failure + program present: baseContent is a system-error message", () => {
+    const { baseContent } = formatSaveProgram(false, program);
+    expect(baseContent).toMatch(/wasn't able to save/i);
+  });
+
+  it("failure + program present: baseContent does not include the program name", () => {
+    const { baseContent } = formatSaveProgram(false, program);
+    expect(baseContent).not.toContain("12-Week Strength Block");
+  });
+
+  // ── baseContent — no program ───────────────────────────────────────────────
+
+  it("no program (null): baseContent is a 'nothing to save yet' message", () => {
+    const { baseContent } = formatSaveProgram(false, null);
+    expect(baseContent).toMatch(/no program ready to save/i);
+  });
+
+  it("no program (undefined): baseContent is a 'nothing to save yet' message", () => {
+    const { baseContent } = formatSaveProgram(false, undefined);
+    expect(baseContent).toMatch(/no program ready to save/i);
+  });
+
+  // ── structuredData ─────────────────────────────────────────────────────────
+
+  it("structuredData is the JSON-serialized program when program exists", () => {
+    const { structuredData } = formatSaveProgram(true, program);
+    expect(structuredData).not.toBeNull();
+    expect(JSON.parse(structuredData!)).toMatchObject({ programName: "12-Week Strength Block" });
+  });
+
+  it("structuredData is null when no program", () => {
+    expect(formatSaveProgram(false, null).structuredData).toBeNull();
+    expect(formatSaveProgram(false, undefined).structuredData).toBeNull();
+  });
+
+  it("structuredData is non-null even on failure if program was present", () => {
+    const { structuredData } = formatSaveProgram(false, program);
+    expect(structuredData).not.toBeNull();
+  });
+
+  // ── three outcomes are distinct ────────────────────────────────────────────
+
+  it("success and failure messages are different strings", () => {
+    const success = formatSaveProgram(true, program).baseContent;
+    const failure = formatSaveProgram(false, program).baseContent;
+    expect(success).not.toBe(failure);
+  });
+
+  it("failure-with-program and no-program messages are different strings", () => {
+    const failureWithProgram = formatSaveProgram(false, program).baseContent;
+    const noProgram = formatSaveProgram(false, null).baseContent;
+    expect(failureWithProgram).not.toBe(noProgram);
   });
 });

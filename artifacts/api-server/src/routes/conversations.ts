@@ -104,7 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal } from "../lib/conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -1606,17 +1606,13 @@ Keep it helpful and intelligent, never promotional.`;
       }
     }
 
-    const saveContent = saveSuccess
-      ? `Your program "${programToSave!.programName}" has been saved to your training system. You can access it anytime from the Program panel.`
-      : programToSave
-        ? `I wasn't able to save your program due to a system error. Your program hasn't been saved. Please try again in a moment.`
-        : `There's no program ready to save yet. Once I've built your training program, you can ask me to save it and I'll add it to your system.`;
+    const { baseContent: saveContent, structuredData: saveStructuredData } = formatSaveProgram(saveSuccess, programToSave);
 
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id,
       role: "assistant",
       content: saveContent,
-      structuredData: programToSave ? JSON.stringify(programToSave) : null,
+      structuredData: saveStructuredData,
     }).returning();
 
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
@@ -4077,11 +4073,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
     }
 
-    const _saveProgramBaseContent = saveSuccess
-      ? `Your program "${programToSave!.programName}" has been saved to your training system. You can access it anytime from the Program panel.`
-      : programToSave
-        ? `I wasn't able to save your program due to a system error. Your program hasn't been saved. Please try again in a moment.`
-        : `There's no program ready to save yet. Once I've built your training program, you can ask me to save it and I'll add it to your system.`;
+    const { baseContent: _saveProgramBaseContent, structuredData: saveStructuredData } = formatSaveProgram(saveSuccess, programToSave);
     const saveContent = (() => {
       if (!saveSuccess) return _saveProgramBaseContent;
       const _cl = buildConfidenceLine({
@@ -4096,7 +4088,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     const [assistantMessage] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: saveContent,
-      structuredData: programToSave ? JSON.stringify(programToSave) : null,
+      structuredData: saveStructuredData,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
     if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
