@@ -129,6 +129,22 @@ const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/external/program/:id/history",
+    permission: "retrieve_program",
+    description: "List the append-only version history for a program",
+    body: "",
+  },
+  {
+    method: "POST",
+    path: "/api/external/program/:id/revert",
+    permission: "edit_program",
+    description: "Roll a program back to a prior version snapshot",
+    body: `{
+  "versionId": 12
+}`,
+  },
+  {
+    method: "GET",
     path: "/api/external/exercises",
     permission: "list_exercises",
     description: "Browse the exercise library with search and filters",

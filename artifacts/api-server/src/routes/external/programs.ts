@@ -19,8 +19,13 @@ import { Router } from "express";
 import { z } from "zod/v4";
 import { validateExternalApiKey } from "../../middlewares/external-api-auth";
 import { generateAIResponse, type ProgramStructure } from "../../lib/ai";
-import { db, externalProgramsTable, externalApiKeysTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import {
+  db,
+  externalProgramsTable,
+  externalApiKeysTable,
+  externalProgramVersionsTable,
+} from "@workspace/db";
+import { eq, and, desc } from "drizzle-orm";
 import { getSwapCandidates, findExerciseByName } from "../../lib/exercise-service";
 import { resolveSafeSwapBackstop } from "../../lib/swap-backstop-service";
 import { logger } from "../../lib/logger";
@@ -84,6 +89,10 @@ const ExerciseSwapBodySchema = z.object({
 const ExplainProgramBodySchema = z.object({
   programId: z.coerce.number().int().positive(),
   question: z.string().max(500).optional(),
+});
+
+const RevertProgramBodySchema = z.object({
+  versionId: z.coerce.number().int().positive(),
 });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -476,6 +485,24 @@ router.post(
       }
 
       const updatedProgram = stripInternalFields(aiResponse.structuredData);
+      const changes = aiResponse.changeSummary ?? [];
+
+      // Snapshot-before-edit: append an append-only version row capturing the
+      // program state BEFORE this overwrite, so the edit is auditable and
+      // reversible (Phase 1C). Written only after fail-loud passes, so a failed
+      // edit never leaves a spurious version.
+      const [version] = await db
+        .insert(externalProgramVersionsTable)
+        .values({
+          externalProgramId: programId,
+          apiKeyId: req.apiKeyId ?? null,
+          programSnapshot: currentProgram as unknown as Record<string, unknown>,
+          type: "edit",
+          instruction,
+          scope: scope ?? null,
+          changeSummary: changes as unknown as Record<string, unknown>,
+        })
+        .returning();
 
       await db
         .update(externalProgramsTable)
@@ -488,8 +515,18 @@ router.post(
         buildStandardResponse({
           programId,
           updatedProgram,
-          changes: aiResponse.changeSummary ?? [],
+          changes,
           coachSummary: aiResponse.content,
+          // Additive (Phase 1C) — existing fields above are unchanged.
+          version: version?.id ?? null,
+          changeReceipt: {
+            versionId: version?.id ?? null,
+            type: "edit" as const,
+            instruction,
+            scope: scope ?? null,
+            changes,
+            snapshotAt: version?.createdAt ?? null,
+          },
         }),
       );
     } catch (err) {
@@ -843,6 +880,189 @@ router.get(
     } catch (err) {
       logger.error({ err }, "external-programs: retrieve failed");
       const e = buildErrorResponse("INTERNAL_ERROR", "Failed to retrieve program.");
+      res.status(e.status).json(e.body);
+    }
+  },
+);
+
+// ─── GET /api/external/program/:id/history ───────────────────────────────────
+// Append-only version history for a program (Phase 1C). Ownership-scoped: a
+// non-owned or unknown program returns the standard 404 NOT_FOUND with no
+// existence leak. Full snapshots are omitted from the list (retrieve a specific
+// version by reverting to it); metadata is returned for each version.
+
+router.get(
+  "/external/program/:id/history",
+  validateExternalApiKey(["retrieve_program"]),
+  async (req, res): Promise<void> => {
+    const programId = parseInt(req.params["id"] as string, 10);
+    if (isNaN(programId)) {
+      res.status(400).json({
+        success: false,
+        data: null,
+        meta: null,
+        error: { code: "INVALID_ID", message: "Program ID must be a number." },
+      });
+      return;
+    }
+
+    try {
+      // Ownership gate first — identical 404 for missing and cross-tenant.
+      const owned = await findOwnedProgram(programId, req.apiKey);
+      if (!owned) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: { code: "NOT_FOUND", message: "Program not found." },
+        });
+        return;
+      }
+
+      const versions = await db
+        .select({
+          versionId: externalProgramVersionsTable.id,
+          type: externalProgramVersionsTable.type,
+          instruction: externalProgramVersionsTable.instruction,
+          scope: externalProgramVersionsTable.scope,
+          changeSummary: externalProgramVersionsTable.changeSummary,
+          revertedFromVersionId:
+            externalProgramVersionsTable.revertedFromVersionId,
+          createdAt: externalProgramVersionsTable.createdAt,
+        })
+        .from(externalProgramVersionsTable)
+        .where(eq(externalProgramVersionsTable.externalProgramId, programId))
+        .orderBy(desc(externalProgramVersionsTable.id));
+
+      res.json(
+        buildStandardResponse({
+          programId,
+          versions,
+        }),
+      );
+    } catch (err) {
+      logger.error({ err }, "external-programs: history failed");
+      const e = buildErrorResponse("INTERNAL_ERROR", "Failed to load history.");
+      res.status(e.status).json(e.body);
+    }
+  },
+);
+
+// ─── POST /api/external/program/:id/revert ───────────────────────────────────
+// Restore a program to a prior version snapshot (Phase 1C). Ownership-scoped;
+// the target version must belong to the same owned program. A new "revert"
+// version row is written BEFORE the restore, so a rollback is itself reversible.
+
+router.post(
+  "/external/program/:id/revert",
+  validateExternalApiKey(["edit_program"]),
+  async (req, res): Promise<void> => {
+    const programId = parseInt(req.params["id"] as string, 10);
+    if (isNaN(programId)) {
+      res.status(400).json({
+        success: false,
+        data: null,
+        meta: null,
+        error: { code: "INVALID_ID", message: "Program ID must be a number." },
+      });
+      return;
+    }
+
+    const parsed = RevertProgramBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        data: null,
+        meta: null,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid request body.",
+          details: parsed.error.issues,
+        },
+      });
+      return;
+    }
+
+    const { versionId } = parsed.data;
+
+    try {
+      // Ownership gate — 404 for missing/cross-tenant program.
+      const owned = await findOwnedProgram(programId, req.apiKey);
+      if (!owned) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: { code: "NOT_FOUND", message: "Program not found." },
+        });
+        return;
+      }
+
+      // The version must belong to THIS program. A version id from another
+      // program simply does not match, yielding the same 404 (no leak).
+      const [version] = await db
+        .select()
+        .from(externalProgramVersionsTable)
+        .where(
+          and(
+            eq(externalProgramVersionsTable.id, versionId),
+            eq(externalProgramVersionsTable.externalProgramId, programId),
+          ),
+        )
+        .limit(1);
+
+      if (!version) {
+        res.status(404).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: { code: "NOT_FOUND", message: "Version not found." },
+        });
+        return;
+      }
+
+      // Write a "revert" snapshot of the CURRENT state first, so the rollback
+      // is itself reversible, then restore the selected snapshot.
+      const [revertVersion] = await db
+        .insert(externalProgramVersionsTable)
+        .values({
+          externalProgramId: programId,
+          apiKeyId: req.apiKeyId ?? null,
+          programSnapshot: owned.programData as unknown as Record<string, unknown>,
+          type: "revert",
+          revertedFromVersionId: versionId,
+        })
+        .returning();
+
+      const restoredProgram = stripInternalFields(
+        version.programSnapshot as unknown as ProgramStructure,
+      );
+
+      await db
+        .update(externalProgramsTable)
+        .set({
+          programData: restoredProgram as unknown as Record<string, unknown>,
+        })
+        .where(eq(externalProgramsTable.id, programId));
+
+      res.json(
+        buildStandardResponse({
+          programId,
+          updatedProgram: restoredProgram,
+          revertedFromVersionId: versionId,
+          // Additive receipt/version metadata.
+          version: revertVersion?.id ?? null,
+          changeReceipt: {
+            versionId: revertVersion?.id ?? null,
+            type: "revert" as const,
+            revertedFromVersionId: versionId,
+            snapshotAt: revertVersion?.createdAt ?? null,
+          },
+        }),
+      );
+    } catch (err) {
+      logger.error({ err }, "external-programs: revert failed");
+      const e = buildErrorResponse("INTERNAL_ERROR", "Program revert failed.");
       res.status(e.status).json(e.body);
     }
   },

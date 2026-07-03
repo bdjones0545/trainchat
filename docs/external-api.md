@@ -61,7 +61,7 @@ permissions, rate limiting, request logging, the response envelope, and how the 
 | `middlewares/external-api-auth.ts` (183) | `validateExternalApiKey(perms)` — Bearer `tc_` → SHA-256 hash lookup → active/expiry/permission/rate-limit checks → request logging. `hashApiKey`. |
 | `lib/external-api-rate-limiter.ts` (79) | `checkRateLimit` — **in-memory** sliding window (60 req / 60 s per key), self-pruning. |
 | `routes/external/api-keys.ts` (269) | Key lifecycle: create (requireAuth), list, revoke; per-key usage from `external_api_logs`. |
-| `routes/external/programs.ts` (801) | `generate_program` / `edit_program` / `generate_session` / `exercise_swap` / `explain` / retrieve — reuses `generateAIResponse`; stores to `external_programs`. |
+| `routes/external/programs.ts` | `generate_program` / `edit_program` / `generate_session` / `exercise_swap` / `explain` / retrieve / **history** / **revert** — reuses `generateAIResponse`; stores to `external_programs`; version history in `external_program_versions`. |
 | `routes/external/exercises.ts` (146) | `list_exercises` — exercise library browse. |
 
 ## 3. Isolation model (the namespace boundary)
@@ -121,6 +121,33 @@ It does *not* fall back to persisting the original program and reporting success
 made a failed edit look applied). The success path is unchanged: a valid `structuredData` persists the
 updated blob and returns `{ programId, updatedProgram, changes, coachSummary }`.
 
+### Version history & rollback (Phase 1C)
+
+External programs now carry an **append-only audit trail** in `external_program_versions`
+(`db-schema.md`), giving change-tracking + rollback without yet changing the edit mechanism.
+
+- **Snapshot-before-edit.** `/program/edit` writes one version row capturing the program state
+  **before** the overwrite (after fail-loud passes — a `422` edit writes no version), attributed to
+  the caller's `apiKeyId`, with `type: "edit"`, the `instruction`/`scope`, and the `changeSummary`.
+- **Additive response fields.** The edit success response gains **`version`** (the new version id)
+  and **`changeReceipt`** (`{ versionId, type, instruction, scope, changes, snapshotAt }`) alongside
+  the unchanged `updatedProgram` / `changes` / `coachSummary`. No existing field was renamed or
+  removed.
+- **`GET /program/:id/history`** (`retrieve_program`) — returns version metadata newest-first for an
+  **owned** program; full snapshots are omitted from the list. Ownership-scoped via
+  `findOwnedProgram`; unknown/cross-tenant → `404 NOT_FOUND` (versions never queried, no leak).
+- **`POST /program/:id/revert`** (`edit_program`, body `{ versionId }`) — restores `programData` to
+  the selected snapshot. The target version must belong to **this** owned program (a version id from
+  another program → `404`, no write). A new `type: "revert"` version row is written **before** the
+  restore, so a rollback is itself reversible. Returns `updatedProgram`, `revertedFromVersionId`,
+  and the additive `version` / `changeReceipt`.
+
+**Rollback limitations.** Versions are **whole-program jsonb snapshots**, not per-field diffs — a
+revert replaces the entire program blob (coarse-grained), consistent with the blob store. There is
+**no cross-instance transaction** wrapping the snapshot-write + overwrite (DR-0006 pattern); the
+append-only snapshot is the integrity mechanism. **External edits remain non-surgical** (LLM
+regeneration, not `interpretEditRequest`/`applyEditPlan`) until Phase 2 materialization.
+
 **Ownership scoping (object-level auth).** Every read/edit/explain lookup of `external_programs`
 goes through `findOwnedProgram(programId, req.apiKey)`, which resolves the row **and** its owning
 key's `orgId` in one join. Access is granted only when the program's owning key is the caller's key,
@@ -146,6 +173,7 @@ Registered in `docs/documentation-governance.md §5`. Both are nuances on an oth
 | DR-0038 | In-memory per-instance rate limiter (60/60s) → effective global limit × instance count under autoscale; windows not shared. | code-vs-architecture | medium |
 | DR-0039 | External API uses its own `{success,data,meta,error}` envelope + `/external/docs`; not part of the OpenAPI spec-first contract (no generated client/zod). | doc-vs-code | low |
 | DR-0042 | **RESOLVED 2026-07-03.** `external_programs` reads/edits/explains were scoped by primary key only (cross-tenant IDOR). Now scoped to caller key/org via `findOwnedProgram()`; unauthorized → `404 NOT_FOUND`. Tests: `external-programs-ownership.test.ts`. | code (security) | ~~high~~ resolved |
+| DR-0043 | **RESOLVED 2026-07-03.** External programs had no change tracking or rollback (the internal `system_change_log`/restore parity gap). Phase 1C adds `external_program_versions` (append-only), snapshot-before-edit, `GET /program/:id/history`, and `POST /program/:id/revert`. Edits remain non-surgical until Phase 2. Tests: `external-programs-ownership.test.ts`. | code (parity) | ~~medium~~ resolved |
 
 No open `high`-severity items.
 

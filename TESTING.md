@@ -581,6 +581,28 @@ curl -X POST $DOMAIN/api/external/program/generate \
 # Expected: { "success": true, "data": { "programId": "...", "program": {...} }, "meta": {...} }
 ```
 
+### Test version history and revert (Phase 1C)
+
+```bash
+# Edit a program — the response now includes additive `version` + `changeReceipt`,
+# and a pre-edit snapshot is written to external_program_versions.
+curl -X POST $DOMAIN/api/external/program/edit \
+  -H "Authorization: Bearer $TC_KEY" -H "Content-Type: application/json" \
+  -d '{"programId":42,"instruction":"reduce Friday volume"}'
+# Expected: data has updatedProgram, changes, coachSummary, version, changeReceipt.
+
+# List the append-only history (ownership-scoped; unknown/cross-tenant → 404).
+curl -H "Authorization: Bearer $TC_KEY" $DOMAIN/api/external/program/42/history
+# Expected: { success:true, data:{ programId:42, versions:[ ... newest first ] } }
+
+# Roll back to a prior version (writes a reverse snapshot first, then restores).
+curl -X POST $DOMAIN/api/external/program/42/revert \
+  -H "Authorization: Bearer $TC_KEY" -H "Content-Type: application/json" \
+  -d '{"versionId":12}'
+# Expected: data has updatedProgram (restored), revertedFromVersionId, version, changeReceipt.
+# A versionId from another program → 404 NOT_FOUND (no write).
+```
+
 ### Test rate limiting
 
 ```bash

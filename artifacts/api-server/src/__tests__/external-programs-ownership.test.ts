@@ -35,29 +35,38 @@ import supertest from "supertest";
 // ── Hoisted state & mocks ──────────────────────────────────────────────────────
 
 const { authState, mockDb, mockGenerateAIResponse } = vi.hoisted(() => {
+  // A fluent Drizzle chain that is itself a Promise resolving to `rows`. Every
+  // builder method (.from/.leftJoin/.where/.orderBy/.limit/.values/.returning)
+  // returns the same chain, so any query shape used by the route resolves to
+  // `rows` when awaited.
+  function chainResult(rows: unknown): any {
+    const chain: any = Promise.resolve(rows);
+    for (const m of [
+      "from",
+      "leftJoin",
+      "innerJoin",
+      "where",
+      "orderBy",
+      "groupBy",
+      "limit",
+      "set",
+      "values",
+      "returning",
+    ]) {
+      chain[m] = vi.fn(() => chain);
+    }
+    return chain;
+  }
+
   return {
     // Mutable caller identity injected by the mocked auth middleware.
     authState: { apiKey: null as null | { id: number; orgId: string | null } },
     mockDb: {
       select: vi.fn(),
+      insert: vi.fn(),
       update: vi.fn(),
-      // Test helpers attached below.
-      _selectJoin: (rows: unknown[]) => {
-        const chain: any = {
-          from: vi.fn(() => chain),
-          leftJoin: vi.fn(() => chain),
-          where: vi.fn(() =>
-            Object.assign(Promise.resolve(rows), {
-              limit: vi.fn().mockResolvedValue(rows),
-            }),
-          ),
-          limit: vi.fn().mockResolvedValue(rows),
-        };
-        return chain;
-      },
-      _update: () => ({
-        set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
-      }),
+      // Test helper: build a chain resolving to `rows`.
+      _rows: chainResult,
     },
     mockGenerateAIResponse: vi.fn(),
   };
@@ -67,10 +76,24 @@ vi.mock("@workspace/db", () => ({
   db: mockDb,
   externalProgramsTable: { id: "id", apiKeyId: "apiKeyId", programData: "programData" },
   externalApiKeysTable: { id: "id", orgId: "orgId" },
+  externalProgramVersionsTable: {
+    id: "id",
+    externalProgramId: "externalProgramId",
+    apiKeyId: "apiKeyId",
+    programSnapshot: "programSnapshot",
+    type: "type",
+    instruction: "instruction",
+    scope: "scope",
+    changeSummary: "changeSummary",
+    revertedFromVersionId: "revertedFromVersionId",
+    createdAt: "createdAt",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, val: unknown) => ({ __eq: val })),
+  and: vi.fn((...args: unknown[]) => ({ __and: args })),
+  desc: vi.fn((col: unknown) => ({ __desc: col })),
 }));
 
 // Mock the auth middleware so each test controls the caller identity.
@@ -128,6 +151,9 @@ const OWNED_ROW = {
   ownerOrgId: KEY_A.orgId,
 };
 
+// A version row inserted by snapshot-before-edit / revert (.returning() result).
+const INSERTED_VERSION = { id: 500, createdAt: new Date("2026-02-01T00:00:00Z") };
+
 // The canonical not-found body every denied/missing lookup must return.
 const NOT_FOUND_BODY = {
   success: false,
@@ -146,20 +172,30 @@ async function makeApp() {
   return app;
 }
 
-/** Program row exists in the DB (owned by KEY_A). */
+/**
+ * Default DB wiring: the program exists and is owned by KEY_A. `select` returns
+ * the owned join row (findOwnedProgram); `insert().returning()` yields a version
+ * row; `update` resolves. Tests that need a second, differently-shaped select
+ * (history list, revert version lookup) queue it with `mockReturnValueOnce`
+ * BEFORE the fallback set here is consumed.
+ */
 function programExists() {
-  mockDb.select.mockReturnValue(mockDb._selectJoin([OWNED_ROW]));
-  mockDb.update.mockReturnValue(mockDb._update());
+  mockDb.select.mockReturnValue(mockDb._rows([OWNED_ROW]));
+  mockDb.insert.mockReturnValue(mockDb._rows([INSERTED_VERSION]));
+  mockDb.update.mockReturnValue(mockDb._rows(undefined));
 }
 
 /** No such program id in the DB (join returns nothing). */
 function programMissing() {
-  mockDb.select.mockReturnValue(mockDb._selectJoin([]));
-  mockDb.update.mockReturnValue(mockDb._update());
+  mockDb.select.mockReturnValue(mockDb._rows([]));
+  mockDb.insert.mockReturnValue(mockDb._rows([INSERTED_VERSION]));
+  mockDb.update.mockReturnValue(mockDb._rows(undefined));
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  // resetAllMocks (not clearAllMocks) flushes the mockReturnValueOnce queue,
+  // so a select sequenced in one test can never contaminate the next.
+  vi.resetAllMocks();
   authState.apiKey = null;
   mockGenerateAIResponse.mockResolvedValue({
     structuredData: { ...PROGRAM_DATA },
@@ -355,6 +391,221 @@ describe("external programs — edit fail-loud on no structuredData (Phase 1D)",
     expect(res.status).toBe(404);
     expect(res.body).toEqual(NOT_FOUND_BODY);
     expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Phase 1C — append-only version history + rollback.
+ *
+ *   VER-01  edit writes a pre-overwrite version snapshot, before update, with
+ *           additive version/changeReceipt fields (existing fields intact)
+ *   VER-02  history returns version rows for an owned program
+ *   VER-03  history denied cross-tenant → 404 (versions never queried)
+ *   VER-04  revert restores the selected snapshot into programData
+ *   VER-05  revert writes a new "revert" version row BEFORE restoring
+ *   VER-06  revert denied cross-tenant → 404 (no version row, no update)
+ *   VER-07  revert with a version from another program → 404 (no write)
+ *   VER-08  no-structuredData edit → 422 and NO version row written
+ */
+describe("external programs — version history & revert (Phase 1C)", () => {
+  const OLD_PROGRAM = {
+    programName: "Old Program",
+    description: "prior state",
+    whyItWorks: "prior",
+    progressionStrategy: "linear",
+    intelligenceStatus: {},
+    days: [],
+  };
+
+  it("VER-01: edit snapshots the pre-edit program before overwriting, and adds version + changeReceipt", async () => {
+    mockDb.select.mockReturnValue(mockDb._rows([OWNED_ROW]));
+    const insertChain = mockDb._rows([INSERTED_VERSION]);
+    mockDb.insert.mockReturnValue(insertChain);
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: { ...PROGRAM_DATA },
+      changeSummary: ["Reduced volume"],
+      content: "Done.",
+    });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume", scope: "week" });
+
+    expect(res.status).toBe(200);
+    // A snapshot of the PRE-edit program is written as an "edit" version...
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalProgramId: 100,
+        programSnapshot: PROGRAM_DATA,
+        type: "edit",
+        instruction: "reduce volume",
+        scope: "week",
+      }),
+    );
+    // ...before the program row is overwritten.
+    expect(mockDb.insert.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDb.update.mock.invocationCallOrder[0],
+    );
+    // Existing success fields remain (backwards-compatible)...
+    expect(res.body.data).toHaveProperty("updatedProgram");
+    expect(res.body.data.changes).toEqual(["Reduced volume"]);
+    expect(res.body.data).toHaveProperty("coachSummary");
+    // ...plus the additive version + changeReceipt.
+    expect(res.body.data.version).toBe(INSERTED_VERSION.id);
+    expect(res.body.data.changeReceipt.versionId).toBe(INSERTED_VERSION.id);
+    expect(res.body.data.changeReceipt.type).toBe("edit");
+  });
+
+  it("VER-02: history returns version rows for an owned program", async () => {
+    const VERSIONS = [
+      { versionId: 2, type: "edit", instruction: "b", scope: null, changeSummary: [], createdAt: "2026-02-02" },
+      { versionId: 1, type: "edit", instruction: "a", scope: null, changeSummary: [], createdAt: "2026-02-01" },
+    ];
+    mockDb.select
+      .mockReturnValueOnce(mockDb._rows([OWNED_ROW])) // findOwnedProgram
+      .mockReturnValueOnce(mockDb._rows(VERSIONS)); // version list
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .get("/api/external/program/100/history")
+      .set("Authorization", "Bearer tc_owner");
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.programId).toBe(100);
+    expect(res.body.data.versions).toHaveLength(2);
+    expect(res.body.data.versions[0].versionId).toBe(2);
+  });
+
+  it("VER-03: history denied cross-tenant → 404, versions never queried", async () => {
+    mockDb.select.mockReturnValueOnce(mockDb._rows([OWNED_ROW])); // findOwnedProgram only
+    authState.apiKey = KEY_B_OTHER_ORG;
+
+    const res = await supertest(await makeApp())
+      .get("/api/external/program/100/history")
+      .set("Authorization", "Bearer tc_intruder");
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(NOT_FOUND_BODY);
+    // Only the ownership lookup ran; the version list was never queried.
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
+  });
+
+  it("VER-04: revert restores the selected snapshot into programData", async () => {
+    const VERSION_ROW = { id: 7, externalProgramId: 100, programSnapshot: OLD_PROGRAM, type: "edit" };
+    mockDb.select
+      .mockReturnValueOnce(mockDb._rows([OWNED_ROW])) // findOwnedProgram
+      .mockReturnValueOnce(mockDb._rows([VERSION_ROW])); // target version
+    mockDb.insert.mockReturnValue(mockDb._rows([INSERTED_VERSION]));
+    const updateChain = mockDb._rows(undefined);
+    mockDb.update.mockReturnValue(updateChain);
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 7 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.updatedProgram).toEqual(OLD_PROGRAM);
+    expect(res.body.data.revertedFromVersionId).toBe(7);
+    expect(res.body.data.version).toBe(INSERTED_VERSION.id);
+    // programData is overwritten with the restored snapshot.
+    expect(updateChain.set).toHaveBeenCalledWith(
+      expect.objectContaining({ programData: OLD_PROGRAM }),
+    );
+  });
+
+  it("VER-05: revert writes a new 'revert' version row before restoring", async () => {
+    const VERSION_ROW = { id: 7, externalProgramId: 100, programSnapshot: OLD_PROGRAM, type: "edit" };
+    mockDb.select
+      .mockReturnValueOnce(mockDb._rows([OWNED_ROW]))
+      .mockReturnValueOnce(mockDb._rows([VERSION_ROW]));
+    const insertChain = mockDb._rows([INSERTED_VERSION]);
+    mockDb.insert.mockReturnValue(insertChain);
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 7 });
+
+    expect(res.status).toBe(200);
+    // A "revert" snapshot of the CURRENT program is written...
+    expect(insertChain.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalProgramId: 100,
+        programSnapshot: PROGRAM_DATA, // current state before rollback
+        type: "revert",
+        revertedFromVersionId: 7,
+      }),
+    );
+    // ...before the restore overwrite.
+    expect(mockDb.insert.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDb.update.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("VER-06: revert denied cross-tenant → 404, no version row, no update", async () => {
+    mockDb.select.mockReturnValueOnce(mockDb._rows([OWNED_ROW])); // findOwnedProgram (owned by A)
+    mockDb.insert.mockReturnValue(mockDb._rows([INSERTED_VERSION]));
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    authState.apiKey = KEY_B_OTHER_ORG;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_intruder")
+      .send({ versionId: 7 });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(NOT_FOUND_BODY);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("VER-07: revert with a version from another program → 404, no write", async () => {
+    mockDb.select
+      .mockReturnValueOnce(mockDb._rows([OWNED_ROW])) // findOwnedProgram OK
+      .mockReturnValueOnce(mockDb._rows([])); // version scoped to THIS program → none
+    mockDb.insert.mockReturnValue(mockDb._rows([INSERTED_VERSION]));
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 999 });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("VER-08: no-structuredData edit → 422 and NO version row written", async () => {
+    programExists();
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: null,
+      changeSummary: [],
+      content: "couldn't apply",
+    });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "impossible" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("EDIT_FAILED");
+    // Fail-loud precedes any version write.
+    expect(mockDb.insert).not.toHaveBeenCalled();
     expect(mockDb.update).not.toHaveBeenCalled();
   });
 });

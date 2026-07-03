@@ -152,7 +152,8 @@ microsites (`DR-0041`).
 ## 3. Data Architecture (`@workspace/db`)
 
 Drizzle ORM over PostgreSQL 16; client created from `DATABASE_URL`. Schema lives in
-`lib/db/src/schema/*.ts` (**51 tables across 30 files**), re-exported through `schema/index.ts`.
+`lib/db/src/schema/*.ts` (**52 tables across 30 files** — `external_program_versions` added in
+Phase 1C), re-exported through `schema/index.ts`.
 Schema changes are applied with `drizzle-kit push` (push-based).
 
 > **[drifted → corrected] Schema realities (from `docs/db-schema.md`):**
@@ -500,7 +501,13 @@ validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies
   `findOwnedProgram()` (`routes/external/programs.ts`), scoping to the caller's key or shared `orgId`
   and returning `404 NOT_FOUND` on non-ownership (no existence leak). Regression:
   `external-programs-ownership.test.ts`. (First-party surgical-edit parity for external programs
-  remains open — Phase 1B+.)
+  remains open — Phase 2.)
+- ✅ **`DR-0043` (medium) — external programs had no change tracking / rollback. RESOLVED
+  2026-07-03.** Phase 1C added the append-only `external_program_versions` table, snapshot-before-edit
+  in `/program/edit` (additive `version`/`changeReceipt` response fields), `GET /program/:id/history`,
+  and `POST /program/:id/revert` (writes a reverse snapshot before restoring). Ownership-scoped;
+  cross-tenant/cross-program → `404`. Edits are **still non-surgical** (LLM regeneration) until Phase 2
+  materialization. Tests: `external-programs-ownership.test.ts`.
 
 The **recurring root pattern** behind most of Class B is **"dual coexisting systems + defined-but-
 unwired scaffolding"** — new capability added beside legacy/intended code without retiring or wiring
