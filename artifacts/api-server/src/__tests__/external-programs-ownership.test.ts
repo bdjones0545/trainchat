@@ -274,3 +274,87 @@ describe("external programs — ownership scoping (P0 IDOR)", () => {
     expect(crossTenant.body).toEqual(NOT_FOUND_BODY);
   });
 });
+
+/**
+ * Phase 1D — fail loudly when an edit yields no structured program.
+ *
+ * Previously /program/edit fell back to the unchanged program and reported
+ * success when generateAIResponse returned no structuredData — a false-positive
+ * edit. It must now return 422 EDIT_FAILED and leave programData untouched.
+ *
+ *   EDIT-01  no structuredData → 422 EDIT_FAILED, success:false
+ *   EDIT-02  no structuredData → programData is NOT updated (db.update unused)
+ *   EDIT-03  valid structuredData → 200 with updatedProgram/changes/coachSummary
+ *   EDIT-04  ownership is enforced BEFORE generation (cross-tenant → 404, no AI call)
+ */
+describe("external programs — edit fail-loud on no structuredData (Phase 1D)", () => {
+  it("EDIT-01: no structuredData returns 422 EDIT_FAILED with success:false", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: null,
+      changeSummary: [],
+      content: "I couldn't apply that.",
+    });
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "do something impossible" });
+    expect(res.status).toBe(422);
+    expect(res.body.success).toBe(false);
+    expect(res.body.data).toBeNull();
+    expect(res.body.error.code).toBe("EDIT_FAILED");
+    expect(typeof res.body.error.message).toBe("string");
+  });
+
+  it("EDIT-02: no structuredData leaves programData unchanged (db.update not called)", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: null,
+      changeSummary: [],
+      content: "no-op",
+    });
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "unclear" });
+    expect(res.status).toBe(422);
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("EDIT-03: valid structuredData still returns 200 with the success shape", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    // beforeEach default already returns valid structuredData, but be explicit.
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: { ...PROGRAM_DATA },
+      changeSummary: ["Reduced volume"],
+      content: "Done.",
+    });
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty("updatedProgram");
+    expect(res.body.data).toHaveProperty("changes");
+    expect(res.body.data).toHaveProperty("coachSummary");
+    expect(res.body.data.changes).toEqual(["Reduced volume"]);
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("EDIT-04: ownership is enforced before generation — cross-tenant edit never reaches the AI", async () => {
+    programExists();
+    authState.apiKey = KEY_B_OTHER_ORG;
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_intruder")
+      .send({ programId: 100, instruction: "reduce volume" });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(NOT_FOUND_BODY);
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});

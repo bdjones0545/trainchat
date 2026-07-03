@@ -453,9 +453,29 @@ router.post(
         hasActiveProgram: true,
       });
 
-      const updatedProgram = aiResponse.structuredData
-        ? stripInternalFields(aiResponse.structuredData)
-        : currentProgram;
+      // Fail loudly: if the model returned no structured program, the edit
+      // could not be applied. Do NOT silently persist the unchanged program
+      // and report success — that is a false-positive edit. Leave
+      // external_programs.programData untouched and return 422.
+      if (!aiResponse.structuredData) {
+        logger.warn(
+          { programId },
+          "external-programs: edit produced no structuredData — returning 422",
+        );
+        res.status(422).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: {
+            code: "EDIT_FAILED",
+            message:
+              "The edit could not be applied — the AI did not produce an updated program. The program was left unchanged. Try rephrasing the instruction with more detail.",
+          },
+        });
+        return;
+      }
+
+      const updatedProgram = stripInternalFields(aiResponse.structuredData);
 
       await db
         .update(externalProgramsTable)

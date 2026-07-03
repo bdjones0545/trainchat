@@ -115,6 +115,12 @@ running the structured `interpretEditRequest`/`applyEditPlan` pipeline used by f
 regeneration — consistent with `external_programs` being a blob store, but a different mutation model
 than the internal canonical hierarchy.
 
+**Edits fail loudly (no false-positive edits).** When `generateAIResponse` returns no
+`structuredData`, `/program/edit` returns **`422 EDIT_FAILED`** and leaves `programData` **unchanged**.
+It does *not* fall back to persisting the original program and reporting success (which previously
+made a failed edit look applied). The success path is unchanged: a valid `structuredData` persists the
+updated blob and returns `{ programId, updatedProgram, changes, coachSummary }`.
+
 **Ownership scoping (object-level auth).** Every read/edit/explain lookup of `external_programs`
 goes through `findOwnedProgram(programId, req.apiKey)`, which resolves the row **and** its owning
 key's `orgId` in one join. Access is granted only when the program's owning key is the caller's key,

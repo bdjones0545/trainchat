@@ -158,6 +158,7 @@ const ERRORS = [
   { code: "VALIDATION_ERROR", status: 400, description: "Request body or query params failed schema validation" },
   { code: "NOT_FOUND", status: 404, description: "Requested resource does not exist" },
   { code: "GENERATION_FAILED", status: 422, description: "AI did not produce structured output — add more detail" },
+  { code: "EDIT_FAILED", status: 422, description: "Edit produced no updated program — the program was left unchanged; rephrase the instruction" },
   { code: "INTERNAL_ERROR", status: 500, description: "Unexpected server-side failure" },
 ];
 
