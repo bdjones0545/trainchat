@@ -1128,3 +1128,274 @@ describe("POST /conversations/:id/messages/stream — AI failure", () => {
     expect(res.text).toContain("data: ");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 5C — Mutation-routing switch branch smoke tests
+//
+// Covers all ten routing branches so extraction work has a safety net.
+// These tests verify observable outcomes only — no internal implementation
+// details are asserted. Production behavior must not change.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("POST /conversations/:id/messages — mutation-routing branches (Phase 5C)", () => {
+  // Standard DB setup for non-SSE handler: convo check → existing-messages count
+  // (triggers auto-title update) → history load.
+  function setupNonSse() {
+    let call = 0;
+    mockDb.select.mockImplementation(() => {
+      call++;
+      if (call === 1) return mockDb._select([CONVO]);  // conversation ownership
+      if (call === 2) return mockDb._select([MSG]);    // existing-messages count
+      if (call === 3) return mockDb._select([MSG]);    // history load
+      return mockDb._select([]);
+    });
+    mockDb.insert.mockReturnValue(mockDb._insert([MSG]));
+    mockDb.update.mockReturnValue(mockDb._update());
+  }
+
+  // ── TC-C40: ASK_CLARIFICATION ───────────────────────────────────────────────
+  // Execution planner returns a clarification question. Handler must skip the AI
+  // call entirely and return the pre-formed question in the response.
+
+  it("TC-C40: ASK_CLARIFICATION — returns clarification question without AI call", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "ASK_CLARIFICATION",
+      intentFamily: "volume_adjustment",
+      scope: {},
+      mutation: null,
+      clarification: { question: "Which day would you like to adjust?", pendingAspect: "target_day" },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "change something" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.actionDebug?.planAction).toBe("ASK_CLARIFICATION");
+    expect(res.body.actionDebug?.clarificationSource).toBe("execution_planner");
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C41: ACTION_CHOICE_CARD ──────────────────────────────────────────────
+  // Planner returns a structured choice card (ambiguous destructive target). Handler
+  // must persist the card and return it in the response without an AI call.
+
+  it("TC-C41: ACTION_CHOICE_CARD — choice card returned in response, no AI call", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "ACTION_CHOICE_CARD",
+      intentFamily: null,
+      scope: {},
+      mutation: null,
+      choiceCard: {
+        prompt: "Which exercise would you like to replace?",
+        choices: [
+          { label: "Squat", value: "squat" },
+          { label: "Deadlift", value: "deadlift" },
+        ],
+      },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "replace that" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.actionDebug?.planAction).toBe("ACTION_CHOICE_CARD");
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C42: SAFETY_REFUSAL ──────────────────────────────────────────────────
+  // Planner refuses request. Handler must persist the refusal message and return
+  // it — no AI call, no edit engine.
+
+  it("TC-C42: SAFETY_REFUSAL — refusal message returned in response, no AI call", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "SAFETY_REFUSAL",
+      intentFamily: null,
+      scope: {},
+      mutation: null,
+      safetyRefusal: { message: "I can't design sessions intended to cause injury." },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "make it painful" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.actionDebug?.planAction).toBe("SAFETY_REFUSAL");
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C43: suggest_only gate ───────────────────────────────────────────────
+  // When executionPermission is "suggest_only", APPLY_MUTATION bypasses the edit
+  // engine. With no active program the handler returns the "build first" message.
+
+  it("TC-C43: APPLY_MUTATION + suggest_only — edit engine not called, no crash", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "APPLY_MUTATION",
+      intentFamily: "volume_adjustment",
+      scope: { type: "session" },
+      mutation: { type: "progression" },
+    });
+    mockResolveAgentSettingsContext.mockResolvedValue({
+      ...DEFAULT_AGENT_SETTINGS,
+      behavior: { ...DEFAULT_AGENT_SETTINGS.behavior, executionPermission: "suggest_only" },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "increase my sets" });
+
+    expect(res.status).toBe(200);
+    expect(mockInterpretMutationRequest).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C44: requireApprovalDeload gate ─────────────────────────────────────
+  // Deload/recovery-focus intents with requireApprovalDeload=true must not run
+  // the edit engine. No crash; edit engine not called.
+
+  it("TC-C44: APPLY_MUTATION + requireApprovalDeload + deload intentFamily — edit engine not called", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "APPLY_MUTATION",
+      intentFamily: "fatigue_management",
+      scope: { type: "session" },
+      mutation: { type: "regression" },
+    });
+    mockResolveAgentSettingsContext.mockResolvedValue({
+      ...DEFAULT_AGENT_SETTINGS,
+      behavior: { ...DEFAULT_AGENT_SETTINGS.behavior, requireApprovalDeload: true },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "give me a deload week" });
+
+    expect(res.status).toBe(200);
+    expect(mockInterpretMutationRequest).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C45: requireApprovalStructural gate (APPLY_MUTATION) ────────────────
+  // Structural mutations (add/remove/swap) with requireApprovalStructural=true
+  // must not run the edit engine.
+
+  it("TC-C45: APPLY_MUTATION + requireApprovalStructural + structural mutation — edit engine not called", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "APPLY_MUTATION",
+      intentFamily: "volume_adjustment",
+      scope: { type: "session" },
+      mutation: { type: "add" },
+    });
+    mockResolveAgentSettingsContext.mockResolvedValue({
+      ...DEFAULT_AGENT_SETTINGS,
+      behavior: { ...DEFAULT_AGENT_SETTINGS.behavior, requireApprovalStructural: true },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "add an exercise" });
+
+    expect(res.status).toBe(200);
+    expect(mockInterpretMutationRequest).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C46: REBUILD_PROGRAM smoke ──────────────────────────────────────────
+  // REBUILD_PROGRAM falls through the switch to the standard AI path. Handler
+  // must call generateAIResponse and return a valid response. With
+  // requireApprovalStructural, an approval directive is injected into memoryCtx.
+
+  it("TC-C46: REBUILD_PROGRAM + requireApprovalStructural — AI called, no crash", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "REBUILD_PROGRAM",
+      intentFamily: null,
+      scope: {},
+      mutation: null,
+    });
+    mockResolveAgentSettingsContext.mockResolvedValue({
+      ...DEFAULT_AGENT_SETTINGS,
+      behavior: { ...DEFAULT_AGENT_SETTINGS.behavior, requireApprovalStructural: true },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "build me a new program" });
+
+    expect(res.status).toBe(200);
+    expect(mockGenerateAIResponse).toHaveBeenCalled();
+    expect(res.body.assistantMessage).toMatchObject({ role: "assistant" });
+  });
+
+  // ── TC-C47: SAVE_PROGRAM smoke (no program in history) ─────────────────────
+  // intentResult.type === "SAVE_PROGRAM" with no latestStructuredProgram must
+  // return a truthful "no program" message without calling generateAIResponse.
+
+  it("TC-C47: SAVE_PROGRAM with no program in history — no AI call, save skipped", async () => {
+    setupNonSse();
+    // History contains MSG which has structuredData: null → latestStructuredProgram = null
+    const { classifyIntent } = await import("../lib/intent");
+    vi.mocked(classifyIntent).mockReturnValueOnce({ type: "SAVE_PROGRAM", confidence: "high" });
+    const { upsertTrainingSystemFromProgram } = await import("../lib/training-system-service");
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "save my program" });
+
+    expect(res.status).toBe(200);
+    // SAVE_PROGRAM branch reached: response includes systemSaved field
+    expect(res.body).toHaveProperty("systemSaved", false);
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+    // upsertTrainingSystemFromProgram not called when there is no program to save
+    expect(vi.mocked(upsertTrainingSystemFromProgram)).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C48: APPLY_MUTATION happy-path smoke (no active program) ─────────────
+  // APPLY_MUTATION with no active system or chat program must return the "build
+  // first" message without calling the edit engine.
+
+  it("TC-C48: APPLY_MUTATION + no active program — no-program early exit, edit engine not called", async () => {
+    setupNonSse();
+    mockBuildExecutionPlan.mockResolvedValue({
+      action: "APPLY_MUTATION",
+      intentFamily: "volume_adjustment",
+      scope: { type: "session" },
+      mutation: { type: "progression" },
+    });
+    // activeSystem defaults to null; MSG has no structuredData → latestStructuredProgram = null
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "increase my bench sets" });
+
+    expect(res.status).toBe(200);
+    // No-program early exit includes systemSaved: false (not the AI path's planInfo-only shape)
+    expect(res.body).toHaveProperty("systemSaved", false);
+    expect(mockInterpretMutationRequest).not.toHaveBeenCalled();
+  });
+
+  // ── TC-C49: Routing reconciliation guard ────────────────────────────────────
+  // When the intent classifier says "mutation" (EDIT_PROGRAM) but the execution
+  // planner chose GUIDANCE or NO_OP, the guard fires. Handler must return a
+  // clarification response rather than silently routing to the AI with an edit
+  // intent the planner declined to act on.
+
+  it("TC-C49: routing reconciliation guard — EDIT_PROGRAM intent + GUIDANCE plan → reconciliation response", async () => {
+    setupNonSse();
+    const { classifyIntent } = await import("../lib/intent");
+    vi.mocked(classifyIntent).mockReturnValueOnce({ type: "EDIT_PROGRAM", confidence: "high" });
+    // execPlan defaults to GUIDANCE (the beforeEach default)
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "change my sets" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.actionDebug?.reconciliationBlocked).toBe(true);
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+  });
+});
