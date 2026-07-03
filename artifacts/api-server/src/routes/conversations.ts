@@ -104,7 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine } from "../lib/conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -1419,18 +1419,13 @@ Keep it helpful and intelligent, never promotional.`;
 
     // Write pending clarification state so the next reply can resume the correct intent.
     // Always write here — we are inside case "ASK_CLARIFICATION" so the plan is always a question.
-    // FIX 1 (non-SSE): When execPlan.intentFamily is "clarification_required" (the fallback value),
-    // re-run normalizeToIntentFamily to recover the actual intent. Using the fallback value would
-    // store "clarification_required" in the DB, breaking resolveClarification on the next turn.
+    // FIX 1: family recovery is extracted — see resolveClarificationPendingFamily.
     {
-      const _rawFamily = execPlan.intentFamily as string | null;
-      const familyForPending =
-        (_rawFamily && _rawFamily !== "clarification_required")
-          ? _rawFamily
-          : (() => {
-              const recovered = normalizeToIntentFamily(parsed.data.content, nonStreamFocusMode);
-              return recovered.family !== "clarification_required" ? recovered.family : "clarification_required";
-            })();
+      const familyForPending = resolveClarificationPendingFamily(
+        execPlan.intentFamily as string | null,
+        parsed.data.content,
+        nonStreamFocusMode,
+      );
 
       writePendingClarification({
         conversationId: params.data.id,
@@ -3964,17 +3959,13 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
     // Write pending clarification state so the next reply can resume the correct intent.
     // Always write here — we are inside case "ASK_CLARIFICATION" so the plan is always a question.
-    // FIX 1 (SSE): Same recovery as non-SSE path — if execPlan.intentFamily is
-    // "clarification_required" (fallback), re-classify to find the real family.
+    // FIX 1: family recovery is extracted — see resolveClarificationPendingFamily.
     {
-      const _rawFamilySSE = execPlan.intentFamily as string | null;
-      const familyForPending =
-        (_rawFamilySSE && _rawFamilySSE !== "clarification_required")
-          ? _rawFamilySSE
-          : (() => {
-              const recovered = normalizeToIntentFamily(parsed.data.content, streamFocusMode);
-              return recovered.family !== "clarification_required" ? recovered.family : "clarification_required";
-            })();
+      const familyForPending = resolveClarificationPendingFamily(
+        execPlan.intentFamily as string | null,
+        parsed.data.content,
+        streamFocusMode,
+      );
 
       writePendingClarification({
         conversationId: params.data.id, userId,

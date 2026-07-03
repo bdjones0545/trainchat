@@ -1,6 +1,18 @@
-import { describe, it, expect } from "vitest";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES } from "../conversation-routing";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily } from "../conversation-routing";
 import type { AgentSettingsContext } from "../agent-settings-resolver";
+
+// vi.hoisted ensures the mock fn exists before the vi.mock factory runs.
+const { mockNormalizeToIntentFamily } = vi.hoisted(() => ({
+  mockNormalizeToIntentFamily: vi.fn(),
+}));
+
+// Mock normalizeToIntentFamily so resolveClarificationPendingFamily tests are
+// isolated from the full intent-classification pipeline.
+vi.mock("../intent-family-engine", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../intent-family-engine")>();
+  return { ...original, normalizeToIntentFamily: mockNormalizeToIntentFamily };
+});
 
 // ─── resolveResponseMode ──────────────────────────────────────────────────────
 
@@ -229,5 +241,83 @@ describe("shouldBypassEditEngine", () => {
   it("DELOAD_INTENT_FAMILIES does not contain non-deload families", () => {
     expect(DELOAD_INTENT_FAMILIES.has("increase_volume")).toBe(false);
     expect(DELOAD_INTENT_FAMILIES.has("coaching_question")).toBe(false);
+  });
+});
+
+// ─── resolveClarificationPendingFamily ────────────────────────────────────────
+
+describe("resolveClarificationPendingFamily", () => {
+  // normalizeToIntentFamily is mocked at module level; reset before each test.
+  beforeEach(() => {
+    mockNormalizeToIntentFamily.mockReset();
+  });
+
+  // ── pass-through (valid non-fallback family) ────────────────────────────────
+
+  it("returns planIntentFamily unchanged when it is a valid non-fallback value", () => {
+    expect(resolveClarificationPendingFamily("exercise_swap", "swap my bench", "strength")).toBe("exercise_swap");
+    expect(mockNormalizeToIntentFamily).not.toHaveBeenCalled();
+  });
+
+  it("returns planIntentFamily when it is any non-empty, non-fallback string", () => {
+    expect(resolveClarificationPendingFamily("increase_volume", "add sets", null)).toBe("increase_volume");
+    expect(mockNormalizeToIntentFamily).not.toHaveBeenCalled();
+  });
+
+  it("does not call normalizeToIntentFamily when family is already resolved", () => {
+    resolveClarificationPendingFamily("fatigue_management", "give me a deload", "speed");
+    expect(mockNormalizeToIntentFamily).not.toHaveBeenCalled();
+  });
+
+  // ── recovery (fallback family) ──────────────────────────────────────────────
+
+  it("calls normalizeToIntentFamily when planIntentFamily is null", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "exercise_swap" });
+    const result = resolveClarificationPendingFamily(null, "swap my squat", "strength");
+    expect(mockNormalizeToIntentFamily).toHaveBeenCalledWith("swap my squat", "strength");
+    expect(result).toBe("exercise_swap");
+  });
+
+  it("calls normalizeToIntentFamily when planIntentFamily is undefined", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "increase_volume" });
+    const result = resolveClarificationPendingFamily(undefined, "add sets", null);
+    expect(mockNormalizeToIntentFamily).toHaveBeenCalledWith("add sets", undefined);
+    expect(result).toBe("increase_volume");
+  });
+
+  it("calls normalizeToIntentFamily when planIntentFamily is the sentinel 'clarification_required'", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "exercise_swap" });
+    const result = resolveClarificationPendingFamily("clarification_required", "change something", "strength");
+    expect(mockNormalizeToIntentFamily).toHaveBeenCalled();
+    expect(result).toBe("exercise_swap");
+  });
+
+  it("calls normalizeToIntentFamily when planIntentFamily is empty string (falsy)", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "coaching_question" });
+    const result = resolveClarificationPendingFamily("", "how many sets?", null);
+    expect(mockNormalizeToIntentFamily).toHaveBeenCalled();
+    expect(result).toBe("coaching_question");
+  });
+
+  // ── double-fallback guard ───────────────────────────────────────────────────
+
+  it("returns 'clarification_required' when normalizeToIntentFamily also returns the sentinel", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "clarification_required" });
+    const result = resolveClarificationPendingFamily(null, "...", null);
+    expect(result).toBe("clarification_required");
+  });
+
+  // ── focusMode threading ─────────────────────────────────────────────────────
+
+  it("passes focusMode through to normalizeToIntentFamily", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "speed_focus" });
+    resolveClarificationPendingFamily(null, "make it faster", "speed");
+    expect(mockNormalizeToIntentFamily).toHaveBeenCalledWith("make it faster", "speed");
+  });
+
+  it("passes undefined to normalizeToIntentFamily when focusMode is null", () => {
+    mockNormalizeToIntentFamily.mockReturnValue({ family: "coaching_question" });
+    resolveClarificationPendingFamily(null, "help me", null);
+    expect(mockNormalizeToIntentFamily).toHaveBeenCalledWith("help me", undefined);
   });
 });

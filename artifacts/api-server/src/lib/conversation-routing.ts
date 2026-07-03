@@ -1,7 +1,8 @@
 import type { ExecutionAction, ExecutionMutation } from "./execution-planner";
-import type { IntentFamily } from "./intent-family-engine";
+import { normalizeToIntentFamily, type IntentFamily } from "./intent-family-engine";
 import type { ResponseMode } from "./response-templates";
 import type { AgentSettingsContext } from "./agent-settings-resolver";
+import type { FocusMode } from "./focus-engines/engine-interface";
 
 // ─── Response mode ────────────────────────────────────────────────────────────
 
@@ -109,4 +110,34 @@ export function shouldBypassEditEngine(
   }
 
   return null;
+}
+
+// ─── Pending-clarification family resolution ──────────────────────────────────
+
+/**
+ * Resolves the intent family to store in a pending-clarification record.
+ *
+ * The execution planner occasionally emits `"clarification_required"` as a
+ * fallback `intentFamily` when it cannot classify the request. Persisting that
+ * sentinel in the DB breaks `resolveClarification` on the next turn (FIX 1).
+ * When the fallback is detected, this function re-runs `normalizeToIntentFamily`
+ * to recover the real family from the raw user message.
+ *
+ * Present in both the non-SSE and SSE ASK_CLARIFICATION branches with only the
+ * `focusMode` argument differing; extracted here so the fix lives in one place.
+ *
+ * @param planIntentFamily  `execPlan.intentFamily` cast to string (may be null/undefined)
+ * @param userMessage       Raw user message content
+ * @param focusMode         Active focus mode for the session (null → no mode override)
+ */
+export function resolveClarificationPendingFamily(
+  planIntentFamily: string | null | undefined,
+  userMessage: string,
+  focusMode: FocusMode | null | undefined,
+): string {
+  if (planIntentFamily && planIntentFamily !== "clarification_required") {
+    return planIntentFamily;
+  }
+  const recovered = normalizeToIntentFamily(userMessage, focusMode ?? undefined);
+  return recovered.family !== "clarification_required" ? recovered.family : "clarification_required";
 }
