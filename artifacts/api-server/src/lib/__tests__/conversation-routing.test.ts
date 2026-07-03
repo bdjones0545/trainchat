@@ -31,7 +31,7 @@ describe("resolveResponseMode", () => {
 
   it("GUIDANCE + unrecognized intentFamily → COACHING_RESPONSE", () => {
     expect(resolveResponseMode("GUIDANCE", "sport_context_update")).toBe("COACHING_RESPONSE");
-    expect(resolveResponseMode("GUIDANCE", "volume_adjustment")).toBe("COACHING_RESPONSE");
+    expect(resolveResponseMode("GUIDANCE", "increase_volume")).toBe("COACHING_RESPONSE");
   });
 
   it("GUIDANCE + null intentFamily → COACHING_RESPONSE", () => {
