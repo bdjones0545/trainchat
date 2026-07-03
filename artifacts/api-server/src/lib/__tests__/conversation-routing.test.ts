@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard } from "../conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal } from "../conversation-routing";
 import type { AgentSettingsContext } from "../agent-settings-resolver";
 
 // vi.hoisted ensures the mock fn exists before the vi.mock factory runs.
@@ -391,5 +391,55 @@ describe("formatChoiceCard", () => {
     const { content } = formatChoiceCard(card);
     expect(content).not.toContain("back_squat");
     expect(content).not.toContain("front_squat");
+  });
+});
+
+// ─── formatSafetyRefusal ──────────────────────────────────────────────────────
+
+describe("formatSafetyRefusal", () => {
+  // ── default message ────────────────────────────────────────────────────────
+
+  it("returns the default message when safetyRefusal is undefined", () => {
+    const { content } = formatSafetyRefusal(undefined);
+    expect(content).toMatch(/can't design sessions intended to cause pain/i);
+  });
+
+  it("returns the default message when safetyRefusal has no message property (undefined arg)", () => {
+    const { content } = formatSafetyRefusal(undefined);
+    expect(typeof content).toBe("string");
+    expect(content.length).toBeGreaterThan(0);
+  });
+
+  // ── custom message ─────────────────────────────────────────────────────────
+
+  it("returns the custom message when safetyRefusal.message is provided", () => {
+    const { content } = formatSafetyRefusal({ message: "This request is unsafe." });
+    expect(content).toBe("This request is unsafe.");
+  });
+
+  it("does not fall back to default when a non-empty custom message is given", () => {
+    const { content } = formatSafetyRefusal({ message: "Custom refusal." });
+    expect(content).not.toMatch(/can't design sessions/i);
+  });
+
+  // ── structuredData ─────────────────────────────────────────────────────────
+
+  it("structuredData is valid JSON", () => {
+    expect(() => JSON.parse(formatSafetyRefusal(undefined).structuredData)).not.toThrow();
+  });
+
+  it("structuredData _type is 'safety_refusal'", () => {
+    const { structuredData } = formatSafetyRefusal(undefined);
+    expect(JSON.parse(structuredData)._type).toBe("safety_refusal");
+  });
+
+  it("structuredData _type is 'safety_refusal' for custom message too", () => {
+    const { structuredData } = formatSafetyRefusal({ message: "Stop." });
+    expect(JSON.parse(structuredData)._type).toBe("safety_refusal");
+  });
+
+  it("structuredData contains no other fields beyond _type", () => {
+    const parsed = JSON.parse(formatSafetyRefusal(undefined).structuredData);
+    expect(Object.keys(parsed)).toEqual(["_type"]);
   });
 });

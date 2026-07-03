@@ -104,7 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard } from "../lib/conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -1524,13 +1524,12 @@ Keep it helpful and intelligent, never promotional.`;
     // ── SAFETY_REFUSAL ────────────────────────────────────────────────────────
     // Request would cause physical harm — return a safe redirect message.
     case "SAFETY_REFUSAL": {
-      const refusalMessage = execPlan.safetyRefusal?.message ??
-        "I can't design sessions intended to cause pain or injury. Let me know if you want to increase intensity safely.";
+      const { content: refusalContent, structuredData: refusalStructuredData } = formatSafetyRefusal(execPlan.safetyRefusal);
       const [assistantMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id,
         role: "assistant",
-        content: refusalMessage,
-        structuredData: JSON.stringify({ _type: "safety_refusal" }),
+        content: refusalContent,
+        structuredData: refusalStructuredData,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
@@ -4020,13 +4019,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     // ── SAFETY_REFUSAL (SSE path) ─────────────────────────────────────────────
     // Request would cause physical harm — return a safe redirect message.
     case "SAFETY_REFUSAL": {
-      const refusalMessage = execPlan.safetyRefusal?.message ??
-        "I can't design sessions intended to cause pain or injury. Let me know if you want to increase intensity safely.";
+      const { content: refusalContent, structuredData: refusalStructuredData } = formatSafetyRefusal(execPlan.safetyRefusal);
       const [assistantMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id,
         role: "assistant",
-        content: refusalMessage,
-        structuredData: JSON.stringify({ _type: "safety_refusal" }),
+        content: refusalContent,
+        structuredData: refusalStructuredData,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       if (planInfo?.plan === "free" || planInfo?.plan === "starter") {

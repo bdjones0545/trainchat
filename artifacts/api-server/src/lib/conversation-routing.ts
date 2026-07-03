@@ -130,6 +130,29 @@ export function shouldBypassEditEngine(
  * @param userMessage       Raw user message content
  * @param focusMode         Active focus mode for the session (null → no mode override)
  */
+// ─── Safety-refusal formatting ────────────────────────────────────────────────
+
+const SAFETY_REFUSAL_DEFAULT =
+  "I can't design sessions intended to cause pain or injury. Let me know if you want to increase intensity safely.";
+
+/**
+ * Formats the SAFETY_REFUSAL response strings written to the DB and returned
+ * in the response. Identical logic appears in both the non-SSE and SSE branches;
+ * extracted here so the default message and structuredData type live in one place.
+ *
+ * @param safetyRefusal  `execPlan.safetyRefusal` (may be undefined when absent)
+ * @returns `content`        — the assistant message text (custom or default)
+ * @returns `structuredData` — the JSON string for the structuredData column
+ */
+export function formatSafetyRefusal(
+  safetyRefusal: { message: string } | undefined,
+): { content: string; structuredData: string } {
+  return {
+    content: safetyRefusal?.message ?? SAFETY_REFUSAL_DEFAULT,
+    structuredData: JSON.stringify({ _type: "safety_refusal" }),
+  };
+}
+
 // ─── Action-choice-card formatting ───────────────────────────────────────────
 
 /**
