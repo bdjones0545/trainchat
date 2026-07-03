@@ -494,6 +494,13 @@ validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies
   unused `GET /billing/subscription` and `POST /billing/create-portal-session` removed.
 - 🟠 **`DR-0003` / `DR-0004` — type-mismatched soft references** (`user_id`/`conversation_id` text).
 - 🟠 **`DR-0032` — split adaptation apply model** (check-in confirmed vs session-log auto-apply).
+- ✅ **`DR-0042` (high) — external-program cross-tenant access (IDOR). RESOLVED 2026-07-03.**
+  `external_programs` reads/edits/explains were resolved by primary key alone, so any valid API key
+  could read or edit another tenant's program by iterating ids. All lookups now route through
+  `findOwnedProgram()` (`routes/external/programs.ts`), scoping to the caller's key or shared `orgId`
+  and returning `404 NOT_FOUND` on non-ownership (no existence leak). Regression:
+  `external-programs-ownership.test.ts`. (First-party surgical-edit parity for external programs
+  remains open — Phase 1B+.)
 
 The **recurring root pattern** behind most of Class B is **"dual coexisting systems + defined-but-
 unwired scaffolding"** — new capability added beside legacy/intended code without retiring or wiring

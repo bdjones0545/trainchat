@@ -115,6 +115,13 @@ running the structured `interpretEditRequest`/`applyEditPlan` pipeline used by f
 regeneration — consistent with `external_programs` being a blob store, but a different mutation model
 than the internal canonical hierarchy.
 
+**Ownership scoping (object-level auth).** Every read/edit/explain lookup of `external_programs`
+goes through `findOwnedProgram(programId, req.apiKey)`, which resolves the row **and** its owning
+key's `orgId` in one join. Access is granted only when the program's owning key is the caller's key,
+or when both share a non-null `orgId`. On non-ownership the helper returns `undefined`, and the route
+emits the standard `404 NOT_FOUND` — identical to a genuinely-missing program, so cross-tenant
+existence never leaks. (Was DR-0042; resolved 2026-07-03.)
+
 ## 7. Response envelope
 
 All external responses use a consistent **`{ success, data, meta, error }`** shape (helper in
@@ -132,8 +139,9 @@ Registered in `docs/documentation-governance.md §5`. Both are nuances on an oth
 |---|---|---|---|
 | DR-0038 | In-memory per-instance rate limiter (60/60s) → effective global limit × instance count under autoscale; windows not shared. | code-vs-architecture | medium |
 | DR-0039 | External API uses its own `{success,data,meta,error}` envelope + `/external/docs`; not part of the OpenAPI spec-first contract (no generated client/zod). | doc-vs-code | low |
+| DR-0042 | **RESOLVED 2026-07-03.** `external_programs` reads/edits/explains were scoped by primary key only (cross-tenant IDOR). Now scoped to caller key/org via `findOwnedProgram()`; unauthorized → `404 NOT_FOUND`. Tests: `external-programs-ownership.test.ts`. | code (security) | ~~high~~ resolved |
 
-No `high`-severity items.
+No open `high`-severity items.
 
 ## 9. Cross-references to prior implementation docs
 

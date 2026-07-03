@@ -19,7 +19,7 @@ import { Router } from "express";
 import { z } from "zod/v4";
 import { validateExternalApiKey } from "../../middlewares/external-api-auth";
 import { generateAIResponse, type ProgramStructure } from "../../lib/ai";
-import { db, externalProgramsTable } from "@workspace/db";
+import { db, externalProgramsTable, externalApiKeysTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { getSwapCandidates, findExerciseByName } from "../../lib/exercise-service";
 import { resolveSafeSwapBackstop } from "../../lib/swap-backstop-service";
@@ -157,6 +157,53 @@ function buildErrorResponse(code: string, message: string, status = 500) {
       error: { code, message },
     },
   };
+}
+
+/**
+ * Fetch an external program by id, scoped to the caller's ownership.
+ *
+ * P0 IDOR fix: external programs were previously looked up by primary key
+ * alone, so any valid API key could read or edit another tenant's program by
+ * iterating integer ids. Ownership is now enforced here.
+ *
+ * Ownership rule:
+ *   - the program's owning key is the caller's key           → allowed
+ *   - the caller has an orgId AND the program's owning key
+ *     shares that same orgId                                  → allowed
+ *   - otherwise                                               → undefined
+ *
+ * Returns `undefined` for both "does not exist" and "not owned" so callers
+ * emit an identical 404 NOT_FOUND and never leak cross-tenant existence.
+ */
+async function findOwnedProgram(
+  programId: number,
+  apiKey: Express.Request["apiKey"],
+): Promise<typeof externalProgramsTable.$inferSelect | undefined> {
+  const [row] = await db
+    .select({
+      program: externalProgramsTable,
+      ownerOrgId: externalApiKeysTable.orgId,
+    })
+    .from(externalProgramsTable)
+    .leftJoin(
+      externalApiKeysTable,
+      eq(externalProgramsTable.apiKeyId, externalApiKeysTable.id),
+    )
+    .where(eq(externalProgramsTable.id, programId))
+    .limit(1);
+
+  if (!row) return undefined;
+
+  const callerKeyId = apiKey?.id ?? null;
+  const callerOrgId = apiKey?.orgId ?? null;
+
+  const ownedByKey =
+    row.program.apiKeyId != null && row.program.apiKeyId === callerKeyId;
+  const ownedByOrg =
+    callerOrgId != null && row.ownerOrgId != null && row.ownerOrgId === callerOrgId;
+
+  if (ownedByKey || ownedByOrg) return row.program;
+  return undefined;
 }
 
 // ─── POST /api/external/program/generate ─────────────────────────────────────
@@ -376,12 +423,7 @@ router.post(
 
     let storedProgram: typeof externalProgramsTable.$inferSelect | undefined;
     try {
-      const [found] = await db
-        .select()
-        .from(externalProgramsTable)
-        .where(eq(externalProgramsTable.id, programId))
-        .limit(1);
-      storedProgram = found;
+      storedProgram = await findOwnedProgram(programId, req.apiKey);
     } catch (err) {
       logger.error({ err }, "external-programs: edit DB lookup failed");
     }
@@ -596,15 +638,12 @@ router.post(
         return;
       }
 
-      // 2. Fall back to AI swap backstop via resolveSafeSwapBackstop
+      // 2. Fall back to AI swap backstop via resolveSafeSwapBackstop.
+      //    Scoped to the caller: an unowned/unknown programId simply yields no
+      //    system context (same as omitting it) — never another tenant's data.
       let storedProgram: typeof externalProgramsTable.$inferSelect | undefined;
       if (programId) {
-        const [found] = await db
-          .select()
-          .from(externalProgramsTable)
-          .where(eq(externalProgramsTable.id, programId))
-          .limit(1);
-        storedProgram = found;
+        storedProgram = await findOwnedProgram(programId, req.apiKey);
       }
 
       // Resolve exercise ID if we only had a name
@@ -688,12 +727,7 @@ router.post(
 
     let storedProgram: typeof externalProgramsTable.$inferSelect | undefined;
     try {
-      const [found] = await db
-        .select()
-        .from(externalProgramsTable)
-        .where(eq(externalProgramsTable.id, programId))
-        .limit(1);
-      storedProgram = found;
+      storedProgram = await findOwnedProgram(programId, req.apiKey);
     } catch (err) {
       logger.error({ err }, "external-programs: explain DB lookup failed");
     }
@@ -760,11 +794,7 @@ router.get(
     }
 
     try {
-      const [program] = await db
-        .select()
-        .from(externalProgramsTable)
-        .where(eq(externalProgramsTable.id, programId))
-        .limit(1);
+      const program = await findOwnedProgram(programId, req.apiKey);
 
       if (!program) {
         res.status(404).json({
