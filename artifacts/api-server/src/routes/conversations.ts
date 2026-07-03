@@ -104,7 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram } from "../lib/conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram, formatSystemEditData, formatMutationFailureContent } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -1280,8 +1280,7 @@ Keep it helpful and intelligent, never promotional.`;
 
           const coachingContent = buildVibeEditCoachingResponse(clarificationEditResult);
           const _clarificationFocusMode = ((clarificationSystem?.metadata as any)?.focusMode ?? "strength") as FocusMode;
-          const systemEditData = {
-            _type: "system_edit" as const,
+          const systemEditData = formatSystemEditData({
             changeSummary: clarificationEditResult.changeSummary,
             changedIds: clarificationEditResult.changedIds,
             systemId: clarificationSystem.id,
@@ -1292,7 +1291,7 @@ Keep it helpful and intelligent, never promotional.`;
               actionType: "edit",
               intent: clarificationEditResult.changeSummary,
             }),
-          };
+          });
 
           const [assistantMessage] = await db.insert(messagesTable).values({
             conversationId: params.data.id,
@@ -2340,8 +2339,7 @@ Keep it helpful and intelligent, never promotional.`;
         ? `${coachingContentRaw} ${_mutationConfidenceLine}`
         : coachingContentRaw;
 
-      const systemEditData = {
-        _type: "system_edit" as const,
+      const systemEditData = formatSystemEditData({
         changeSummary: directEditResult.changeSummary,
         changedIds: directEditResult.changedIds,
         systemId: resolvedSystem.id,
@@ -2353,7 +2351,7 @@ Keep it helpful and intelligent, never promotional.`;
           intent: directEditPlan.intent,
           scope: directEditPlan.scope,
         }),
-      };
+      });
 
       const [assistantMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id,
@@ -2434,14 +2432,7 @@ Keep it helpful and intelligent, never promotional.`;
       }
 
       // True failure — DB write never happened.
-      const structuralOp = execPlan.mutation?.type === "add"
-        ? "add that exercise"
-        : execPlan.mutation?.type === "remove"
-          ? "remove that exercise"
-          : execPlan.mutation?.type === "swap"
-            ? "swap that exercise"
-            : "apply that change";
-      const errContent = `I wasn't able to ${structuralOp} — your program hasn't been modified. Try being specific: include the exercise name, which day it's in, and exactly what you'd like changed. If it keeps happening, try opening the session panel and making the change from there.`;
+      const errContent = formatMutationFailureContent(execPlan.mutation?.type);
       const receipt = buildMutationFailureReceipt(err?.message ?? "edit_pipeline_error");
       const [errMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
@@ -3840,16 +3831,18 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           } catch { /* non-fatal — use original coachingContent */ }
 
           const _sseClariFixFocusMode = ((clarificationSystem?.metadata as any)?.focusMode ?? "strength") as FocusMode;
-          const systemEditData = {
-            _type: "system_edit" as const, changeSummary: clarificationEditResult.changeSummary,
-            changedIds: clarificationEditResult.changedIds, systemId: clarificationSystem.id, changeLogId,
+          const systemEditData = formatSystemEditData({
+            changeSummary: clarificationEditResult.changeSummary,
+            changedIds: clarificationEditResult.changedIds,
+            systemId: clarificationSystem.id,
+            changeLogId,
             verificationStatus: verification.status,
             coachReasoning: generateCoachReasoning({
               focusMode: _sseClariFixFocusMode,
               actionType: "edit",
               intent: clarificationEditResult.changeSummary,
             }),
-          };
+          });
           const [assistantMessage] = await db.insert(messagesTable).values({
             conversationId: params.data.id, role: "assistant", content: coachingContent,
             structuredData: JSON.stringify(systemEditData),
@@ -4608,8 +4601,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         ? `${coachingContentRaw} ${_sseConfidenceLine}`
         : coachingContentRaw;
 
-      const systemEditData = {
-        _type: "system_edit" as const,
+      const systemEditData = formatSystemEditData({
         changeSummary: streamEditResult.changeSummary,
         changedIds: streamEditResult.changedIds,
         systemId: resolvedSystem.id,
@@ -4621,7 +4613,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           intent: streamEditPlan.intent,
           scope: streamEditPlan.scope,
         }),
-      };
+      });
 
       const [assistantMessage] = await db.insert(messagesTable).values({
         conversationId: params.data.id, role: "assistant",
@@ -4740,14 +4732,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }
 
       // True failure — DB write never happened.
-      const streamStructuralOp = execPlan.mutation?.type === "add"
-        ? "add that exercise"
-        : execPlan.mutation?.type === "remove"
-          ? "remove that exercise"
-          : execPlan.mutation?.type === "swap"
-            ? "swap that exercise"
-            : "apply that change";
-      const errContent = `I wasn't able to ${streamStructuralOp} — your program hasn't been modified. Try being specific: include the exercise name, which day it's in, and exactly what you'd like changed. If it keeps happening, try opening the session panel and making the change from there.`;
+      const errContent = formatMutationFailureContent(execPlan.mutation?.type);
       const streamReceipt = buildMutationFailureReceipt(err?.message ?? "edit_pipeline_error");
       const _catchFailOutcome = finalizeMutationOutcome({
         appliedCount: 0,

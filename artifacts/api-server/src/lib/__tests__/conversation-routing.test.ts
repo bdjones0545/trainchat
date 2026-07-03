@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram } from "../conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram, formatSystemEditData, formatMutationFailureContent } from "../conversation-routing";
 import type { AgentSettingsContext } from "../agent-settings-resolver";
 
 // vi.hoisted ensures the mock fn exists before the vi.mock factory runs.
@@ -515,5 +515,116 @@ describe("formatSaveProgram", () => {
     const failureWithProgram = formatSaveProgram(false, program).baseContent;
     const noProgram = formatSaveProgram(false, null).baseContent;
     expect(failureWithProgram).not.toBe(noProgram);
+  });
+});
+
+// ─── formatSystemEditData ─────────────────────────────────────────────────────
+
+describe("formatSystemEditData", () => {
+  const base = {
+    changeSummary: "Swapped bench press for dumbbell press",
+    changedIds: { exercises: [42], sessions: [], weeks: [], phases: [] },
+    systemId: 7,
+    changeLogId: 99,
+    verificationStatus: "verified",
+    coachReasoning: "Equipment constraint applied.",
+  };
+
+  it("_type is always 'system_edit'", () => {
+    expect(formatSystemEditData(base)._type).toBe("system_edit");
+  });
+
+  it("preserves changeSummary", () => {
+    expect(formatSystemEditData(base).changeSummary).toBe(base.changeSummary);
+  });
+
+  it("preserves changedIds (by reference)", () => {
+    expect(formatSystemEditData(base).changedIds).toBe(base.changedIds);
+  });
+
+  it("preserves systemId", () => {
+    expect(formatSystemEditData(base).systemId).toBe(7);
+  });
+
+  it("preserves changeLogId when set", () => {
+    expect(formatSystemEditData(base).changeLogId).toBe(99);
+  });
+
+  it("preserves changeLogId when null", () => {
+    const result = formatSystemEditData({ ...base, changeLogId: null });
+    expect(result.changeLogId).toBeNull();
+  });
+
+  it("preserves changeLogId when undefined", () => {
+    const result = formatSystemEditData({ ...base, changeLogId: undefined });
+    expect(result.changeLogId).toBeUndefined();
+  });
+
+  it("preserves verificationStatus", () => {
+    expect(formatSystemEditData(base).verificationStatus).toBe("verified");
+  });
+
+  it("preserves coachReasoning when set", () => {
+    expect(formatSystemEditData(base).coachReasoning).toBe("Equipment constraint applied.");
+  });
+
+  it("preserves coachReasoning when null", () => {
+    const result = formatSystemEditData({ ...base, coachReasoning: null });
+    expect(result.coachReasoning).toBeNull();
+  });
+
+  it("result serializes to valid JSON", () => {
+    expect(() => JSON.stringify(formatSystemEditData(base))).not.toThrow();
+  });
+
+  it("serialized JSON contains _type: 'system_edit'", () => {
+    const parsed = JSON.parse(JSON.stringify(formatSystemEditData(base)));
+    expect(parsed._type).toBe("system_edit");
+  });
+});
+
+// ─── formatMutationFailureContent ────────────────────────────────────────────
+
+describe("formatMutationFailureContent", () => {
+  // ── verb selection ─────────────────────────────────────────────────────────
+
+  it("'add' → 'add that exercise'", () => {
+    expect(formatMutationFailureContent("add")).toContain("add that exercise");
+  });
+
+  it("'remove' → 'remove that exercise'", () => {
+    expect(formatMutationFailureContent("remove")).toContain("remove that exercise");
+  });
+
+  it("'swap' → 'swap that exercise'", () => {
+    expect(formatMutationFailureContent("swap")).toContain("swap that exercise");
+  });
+
+  it("unknown type → 'apply that change'", () => {
+    expect(formatMutationFailureContent("progression")).toContain("apply that change");
+  });
+
+  it("null → 'apply that change'", () => {
+    expect(formatMutationFailureContent(null)).toContain("apply that change");
+  });
+
+  it("undefined → 'apply that change'", () => {
+    expect(formatMutationFailureContent(undefined)).toContain("apply that change");
+  });
+
+  // ── message invariants ─────────────────────────────────────────────────────
+
+  it("always starts with \"I wasn't able to\"", () => {
+    for (const t of ["add", "remove", "swap", null]) {
+      expect(formatMutationFailureContent(t)).toMatch(/^I wasn't able to/);
+    }
+  });
+
+  it("always mentions that program was not modified", () => {
+    expect(formatMutationFailureContent("add")).toMatch(/program hasn't been modified/i);
+  });
+
+  it("add and remove messages are different strings", () => {
+    expect(formatMutationFailureContent("add")).not.toBe(formatMutationFailureContent("remove"));
   });
 });

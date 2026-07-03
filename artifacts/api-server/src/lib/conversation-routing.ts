@@ -130,6 +130,65 @@ export function shouldBypassEditEngine(
  * @param userMessage       Raw user message content
  * @param focusMode         Active focus mode for the session (null → no mode override)
  */
+// ─── APPLY_MUTATION formatting helpers ───────────────────────────────────────
+
+/**
+ * Assembles the `system_edit` structuredData object written to the DB and
+ * returned to the client on a successful APPLY_MUTATION turn. Identical shape
+ * appears in four places (non-SSE and SSE × direct-edit and clarification-
+ * followup); extracted here so the object contract lives in one place.
+ *
+ * The caller is responsible for JSON.stringify()-ing the return value before
+ * the DB insert, and for computing `coachReasoning` via `generateCoachReasoning`
+ * (which needs handler-local focusMode and intent).
+ */
+export function formatSystemEditData(params: {
+  changeSummary: string;
+  changedIds: unknown;
+  systemId: number;
+  changeLogId: number | null | undefined;
+  verificationStatus: string;
+  coachReasoning: string | null;
+}): {
+  _type: "system_edit";
+  changeSummary: string;
+  changedIds: unknown;
+  systemId: number;
+  changeLogId: number | null | undefined;
+  verificationStatus: string;
+  coachReasoning: string | null;
+} {
+  return {
+    _type: "system_edit",
+    changeSummary: params.changeSummary,
+    changedIds: params.changedIds,
+    systemId: params.systemId,
+    changeLogId: params.changeLogId,
+    verificationStatus: params.verificationStatus,
+    coachReasoning: params.coachReasoning,
+  };
+}
+
+/**
+ * Returns the user-facing failure message for the APPLY_MUTATION catch block's
+ * true-failure path (DB write never happened). Selects a mutation-type-specific
+ * verb so the message is precise rather than generic.
+ *
+ * Identical ternary appears in both the non-SSE and SSE catch blocks; extracted
+ * here so the wording lives in one place. The full sentence is returned — callers
+ * use it directly as the assistant message content.
+ */
+export function formatMutationFailureContent(mutationType: string | null | undefined): string {
+  const op = mutationType === "add"
+    ? "add that exercise"
+    : mutationType === "remove"
+      ? "remove that exercise"
+      : mutationType === "swap"
+        ? "swap that exercise"
+        : "apply that change";
+  return `I wasn't able to ${op} — your program hasn't been modified. Try being specific: include the exercise name, which day it's in, and exactly what you'd like changed. If it keeps happening, try opening the session panel and making the change from there.`;
+}
+
 // ─── Save-program formatting ──────────────────────────────────────────────────
 
 /**
