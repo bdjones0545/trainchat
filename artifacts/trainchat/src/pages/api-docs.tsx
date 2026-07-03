@@ -129,6 +129,22 @@ const ENDPOINTS = [
   },
   {
     method: "GET",
+    path: "/api/external/program/:id/history",
+    permission: "retrieve_program",
+    description: "List the append-only version history for a program",
+    body: "",
+  },
+  {
+    method: "POST",
+    path: "/api/external/program/:id/revert",
+    permission: "edit_program",
+    description: "Roll a program back to a prior version snapshot",
+    body: `{
+  "versionId": 12
+}`,
+  },
+  {
+    method: "GET",
     path: "/api/external/exercises",
     permission: "list_exercises",
     description: "Browse the exercise library with search and filters",
@@ -158,6 +174,7 @@ const ERRORS = [
   { code: "VALIDATION_ERROR", status: 400, description: "Request body or query params failed schema validation" },
   { code: "NOT_FOUND", status: 404, description: "Requested resource does not exist" },
   { code: "GENERATION_FAILED", status: 422, description: "AI did not produce structured output — add more detail" },
+  { code: "EDIT_FAILED", status: 422, description: "Edit produced no updated program — the program was left unchanged; rephrase the instruction" },
   { code: "INTERNAL_ERROR", status: 500, description: "Unexpected server-side failure" },
 ];
 

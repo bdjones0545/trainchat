@@ -107,3 +107,64 @@ export const externalProgramsTable = pgTable("external_programs", {
 });
 
 export type ExternalProgram = typeof externalProgramsTable.$inferSelect;
+
+// ─── External Program Versions ───────────────────────────────────────────────
+//
+// Append-only version/audit history for external programs. One row is written
+// *before* each edit overwrite (Phase 1C) capturing the program state at that
+// point, and one row is written before a revert so a rollback is itself
+// reversible. This gives change-tracking + rollback parity for the external
+// API without yet routing edits through the internal surgical edit-engine
+// (Phase 2). Rows cascade-delete with their parent program.
+
+export const EXTERNAL_PROGRAM_VERSION_TYPES = [
+  "edit",              // snapshot of the pre-edit program, taken before an edit overwrite
+  "revert",            // snapshot of the pre-revert program, taken before a rollback
+  "generate_snapshot", // baseline "v0 = as generated" snapshot, written at program creation
+] as const;
+
+export type ExternalProgramVersionType =
+  (typeof EXTERNAL_PROGRAM_VERSION_TYPES)[number];
+
+export const externalProgramVersionsTable = pgTable("external_program_versions", {
+  id: serial("id").primaryKey(),
+
+  externalProgramId: integer("external_program_id")
+    .notNull()
+    .references(() => externalProgramsTable.id, { onDelete: "cascade" }),
+
+  // The key that produced this version. Kept for attribution; on key deletion
+  // the version row survives (set null) so history is not lost.
+  apiKeyId: integer("api_key_id").references(() => externalApiKeysTable.id, {
+    onDelete: "set null",
+  }),
+
+  // Full program snapshot captured BEFORE the mutation that this row records.
+  programSnapshot: jsonb("program_snapshot").notNull(),
+
+  // What kind of event produced this snapshot.
+  type: text("type", { enum: EXTERNAL_PROGRAM_VERSION_TYPES })
+    .notNull()
+    .default("edit"),
+
+  // The edit instruction / scope that triggered the mutation (nullable — a
+  // revert has no free-text instruction).
+  instruction: text("instruction"),
+
+  scope: text("scope"),
+
+  // Coach-provided summary of the change (array of strings or free text).
+  changeSummary: jsonb("change_summary"),
+
+  // For revert rows: the version id whose snapshot was restored.
+  revertedFromVersionId: integer("reverted_from_version_id"),
+
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export type ExternalProgramVersion =
+  typeof externalProgramVersionsTable.$inferSelect;
+export type InsertExternalProgramVersion =
+  typeof externalProgramVersionsTable.$inferInsert;

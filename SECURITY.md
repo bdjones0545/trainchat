@@ -375,6 +375,7 @@ The external API (`/api/external/*`) is a separate authentication surface for B2
 | Key storage | SHA-256 hash only (`keyHash`); raw key is never persisted |
 | Key comparison | Hash-based; timing-safe by construction |
 | Permission model | Per-key `permissions` array; per-route `validateExternalApiKey(requiredPermissions)` |
+| Program ownership (object-level auth) | Every `external_programs` lookup is scoped to the caller via `findOwnedProgram()` — allowed only if the program's owning key is the caller's key, or shares the caller's `orgId`. Otherwise a `404 NOT_FOUND` is returned (no existence leak). |
 | Active/expiry check | `isActive` and `expiresAt` validated on every request |
 | Rate limiting | 60 req/min per key (in-memory sliding window) |
 | Rate limit headers | `X-RateLimit-Limit`, `-Remaining`, `-Reset` returned on every response |
@@ -384,6 +385,22 @@ The external API (`/api/external/*`) is a separate authentication surface for B2
 
 **Key generation is the caller's responsibility.** TrainChat validates keys on ingress but
 does not prescribe how callers generate or store their keys.
+
+**Resolved — cross-tenant program access (IDOR), fixed 2026-07-03.** Previously
+`GET /program/:id`, `POST /program/edit`, and `POST /program/explain` (and the optional
+`programId` lookup in `exercise-swap`) resolved `external_programs` by primary key alone, so any
+valid key could read or edit another tenant's program by iterating integer ids. All lookups now go
+through `findOwnedProgram()` in `routes/external/programs.ts`, which enforces key/org ownership and
+returns `404 NOT_FOUND` (never `403`) on non-ownership so a denied response is byte-identical to a
+genuinely-missing one. Regression coverage: `src/__tests__/external-programs-ownership.test.ts`.
+
+**Resolved — external attribution data-isolation leak, fixed 2026-07-03.** `buildSystemUserId`
+previously returned `apiKey.createdBy ?? 1`, so when a key's creating user had been deleted the AI
+pipeline loaded **internal user #1's** profile into the external request. It now attributes to the
+key's `createdBy`, or a non-personal service sentinel (`EXTERNAL_API_SERVICE_USER_ID = -1`, logged)
+when absent. The pipeline only reads user context by this id (never writes), so the sentinel yields
+an empty profile — external generations are driven solely by the request payload. Regression
+coverage: `src/__tests__/external-programs-ownership.test.ts`.
 
 ---
 
