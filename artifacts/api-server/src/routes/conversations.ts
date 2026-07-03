@@ -104,6 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
+import { resolveResponseMode, classifyOrchMutationType } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -897,16 +898,9 @@ Keep it helpful and intelligent, never promotional.`;
   }
 
   // ── Agent Orchestrator — structured chain-of-command decision log ────────
-  // Phase 1: mutationType is derived from the execution plan's mutation type.
   // "structural" (add/swap/remove) → BUILD_WITH_ARCHITECT validation gate
   // "minor" (sets/reps/rest/tempo) → DIRECT_EDIT fast path
-  const execMutationType = execPlan.mutation?.type;
-  const orchMutationType: "structural" | "minor" | undefined =
-    execMutationType === "add" || execMutationType === "remove" || execMutationType === "swap"
-      ? "structural"
-      : execMutationType === "progression" || execMutationType === "regression"
-        ? "minor"
-        : undefined;
+  const orchMutationType = classifyOrchMutationType(execPlan.mutation?.type);
 
   const orchDecision = orchestrate({
     message: parsed.data.content,
@@ -980,17 +974,8 @@ Keep it helpful and intelligent, never promotional.`;
 
   // ── Response Mode Selection — derived from execution planner action ──────────
   // Decision tree (resolveAction) is no longer called here; the execution planner
-  // is the single routing authority. ResponseMode is derived directly from execPlan.
-  // For GUIDANCE actions, we further specialize the mode based on the intent family
-  // so program questions get the exact right response template.
-  const responseMode: ResponseMode =
-    execPlan.action === "ASK_CLARIFICATION" ? "CLARIFICATION_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_safety_question" ? "PROGRAM_SAFETY_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_explanation_question" ? "PROGRAM_EXPLANATION_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "coaching_question" ? "COACHING_GUIDANCE_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "greeting" ? "GREETING_RESPONSE" :
-    execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
-    "EXECUTION_RESPONSE";
+  // is the single routing authority. ResponseMode is derived from execPlan via resolveResponseMode.
+  const responseMode: ResponseMode = resolveResponseMode(execPlan.action, execPlan.intentFamily);
 
   const failSafeResolution = resolveFailSafeState({
     message: parsed.data.content,
@@ -3632,16 +3617,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   );
 
   // ── Response Mode Selection — derived from execution planner action ──────────
-  // For GUIDANCE actions, specialize based on intent family so program questions
-  // get the exact right response template (safety, explanation, or coaching).
-  const responseMode: ResponseMode =
-    execPlan.action === "ASK_CLARIFICATION" ? "CLARIFICATION_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_safety_question" ? "PROGRAM_SAFETY_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "program_explanation_question" ? "PROGRAM_EXPLANATION_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "coaching_question" ? "COACHING_GUIDANCE_RESPONSE" :
-    execPlan.action === "GUIDANCE" && execPlan.intentFamily === "greeting" ? "GREETING_RESPONSE" :
-    execPlan.action === "GUIDANCE" ? "COACHING_RESPONSE" :
-    "EXECUTION_RESPONSE";
+  const responseMode: ResponseMode = resolveResponseMode(execPlan.action, execPlan.intentFamily);
 
   const failSafeResolution = resolveFailSafeState({
     message: parsed.data.content,
