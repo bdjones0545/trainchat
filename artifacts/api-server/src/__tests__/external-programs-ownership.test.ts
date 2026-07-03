@@ -154,6 +154,9 @@ const OWNED_ROW = {
 // A version row inserted by snapshot-before-edit / revert (.returning() result).
 const INSERTED_VERSION = { id: 500, createdAt: new Date("2026-02-01T00:00:00Z") };
 
+// A stored external_programs row (.returning() result on generate).
+const STORED_PROGRAM = { id: 100, generatedAt: new Date("2026-01-01T00:00:00Z") };
+
 // The canonical not-found body every denied/missing lookup must return.
 const NOT_FOUND_BODY = {
   success: false,
@@ -607,5 +610,122 @@ describe("external programs — version history & revert (Phase 1C)", () => {
     // Fail-loud precedes any version write.
     expect(mockDb.insert).not.toHaveBeenCalled();
     expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Phase 1B/1E — creation-time ownership + attribution hardening.
+ *
+ *   GEN-01  generate stores apiKeyId and attributes AI context to createdBy
+ *   GEN-02  stream generate stores apiKeyId
+ *   GEN-03  createdBy=null → service user (-1), NOT a silent fallback to user 1
+ *   GEN-04  generate writes a "generate_snapshot" baseline version row
+ *   GEN-05  a failing baseline snapshot is non-fatal (generation still 201)
+ */
+describe("external programs — creation & attribution hardening (Phase 1B/1E)", () => {
+  const KEY_WITH_CREATOR = { id: 7, orgId: "org-A", createdBy: 42 };
+  const KEY_NO_CREATOR = { id: 8, orgId: "org-A", createdBy: null };
+  const EXTERNAL_API_SERVICE_USER_ID = -1;
+
+  function setupGenerate() {
+    const insertChain = mockDb._rows([STORED_PROGRAM]);
+    mockDb.insert.mockReturnValue(insertChain);
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: { ...PROGRAM_DATA },
+      changeSummary: [],
+      content: "generated",
+    });
+    return insertChain;
+  }
+
+  it("GEN-01: generate stores apiKeyId and attributes AI context to createdBy", async () => {
+    const insertChain = setupGenerate();
+    authState.apiKey = KEY_WITH_CREATOR;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/generate")
+      .set("Authorization", "Bearer tc_key")
+      .send({ goal: "build strength" });
+
+    expect(res.status).toBe(201);
+    // external_programs insert carries the caller's apiKeyId.
+    expect(insertChain.values.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ apiKeyId: 7 }),
+    );
+    // AI context is attributed to the key's creator (userId = 3rd arg).
+    expect(mockGenerateAIResponse.mock.calls[0][2]).toBe(42);
+  });
+
+  it("GEN-02: stream generate stores apiKeyId", async () => {
+    const insertChain = setupGenerate();
+    authState.apiKey = KEY_WITH_CREATOR;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/generate/stream")
+      .set("Authorization", "Bearer tc_key")
+      .send({ goal: "build strength" });
+
+    expect(res.status).toBe(200);
+    expect(insertChain.values.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ apiKeyId: 7 }),
+    );
+  });
+
+  it("GEN-03: createdBy=null attributes to the service user, never silently to user 1", async () => {
+    setupGenerate();
+    authState.apiKey = KEY_NO_CREATOR;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/generate")
+      .set("Authorization", "Bearer tc_key")
+      .send({ goal: "build strength" });
+
+    expect(res.status).toBe(201);
+    const userIdArg = mockGenerateAIResponse.mock.calls[0][2];
+    expect(userIdArg).not.toBe(1); // the old silent leak
+    expect(userIdArg).toBe(EXTERNAL_API_SERVICE_USER_ID);
+  });
+
+  it("GEN-04: generate writes a generate_snapshot baseline version row", async () => {
+    const insertChain = setupGenerate();
+    authState.apiKey = KEY_WITH_CREATOR;
+
+    await supertest(await makeApp())
+      .post("/api/external/program/generate")
+      .set("Authorization", "Bearer tc_key")
+      .send({ goal: "build strength" });
+
+    // Second insert is the baseline snapshot.
+    expect(insertChain.values.mock.calls[1][0]).toEqual(
+      expect.objectContaining({
+        externalProgramId: STORED_PROGRAM.id,
+        apiKeyId: 7,
+        type: "generate_snapshot",
+      }),
+    );
+  });
+
+  it("GEN-05: a failing baseline snapshot is non-fatal — generation still returns 201", async () => {
+    // First insert (external_programs) succeeds; second (snapshot) rejects.
+    const programChain = mockDb._rows([STORED_PROGRAM]);
+    const throwingChain: any = { values: vi.fn(() => Promise.reject(new Error("boom"))) };
+    mockDb.insert
+      .mockReturnValueOnce(programChain)
+      .mockReturnValueOnce(throwingChain);
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: { ...PROGRAM_DATA },
+      changeSummary: [],
+      content: "generated",
+    });
+    authState.apiKey = KEY_WITH_CREATOR;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/generate")
+      .set("Authorization", "Bearer tc_key")
+      .send({ goal: "build strength" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(throwingChain.values).toHaveBeenCalled();
   });
 });

@@ -508,6 +508,12 @@ validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies
   and `POST /program/:id/revert` (writes a reverse snapshot before restoring). Ownership-scoped;
   cross-tenant/cross-program → `404`. Edits are **still non-surgical** (LLM regeneration) until Phase 2
   materialization. Tests: `external-programs-ownership.test.ts`.
+- ✅ **`DR-0044` (medium) — external attribution leak (`?? 1`). RESOLVED 2026-07-03.** Phase 1B/1E:
+  `buildSystemUserId` no longer falls back to user #1 (which loaded that user's profile into external
+  requests). It attributes to the key's `createdBy`, else a non-personal service sentinel (`-1`,
+  logged). Creation always stores `apiKeyId`, and generate now writes a best-effort
+  `generate_snapshot` baseline version. This closes **Phase 1** of external API parity; Phase 2
+  (materialize external programs into `training_systems` for true surgical edits) remains open.
 
 The **recurring root pattern** behind most of Class B is **"dual coexisting systems + defined-but-
 unwired scaffolding"** — new capability added beside legacy/intended code without retiring or wiring

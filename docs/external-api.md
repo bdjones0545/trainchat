@@ -126,6 +126,10 @@ updated blob and returns `{ programId, updatedProgram, changes, coachSummary }`.
 External programs now carry an **append-only audit trail** in `external_program_versions`
 (`db-schema.md`), giving change-tracking + rollback without yet changing the edit mechanism.
 
+- **Baseline snapshot at creation.** `/program/generate` (and the streaming variant) write one
+  `type: "generate_snapshot"` row for the freshly-created program, so `/history` and `/revert` are
+  coherent from the start ("v0 = as generated"). This write is **best-effort** — a failure is logged
+  and never fails an otherwise-successful generation.
 - **Snapshot-before-edit.** `/program/edit` writes one version row capturing the program state
   **before** the overwrite (after fail-loud passes — a `422` edit writes no version), attributed to
   the caller's `apiKeyId`, with `type: "edit"`, the `instruction`/`scope`, and the `changeSummary`.
@@ -155,6 +159,15 @@ or when both share a non-null `orgId`. On non-ownership the helper returns `unde
 emits the standard `404 NOT_FOUND` — identical to a genuinely-missing program, so cross-tenant
 existence never leaks. (Was DR-0042; resolved 2026-07-03.)
 
+**Creation & attribution (Phase 1B/1E).** Every created program stores the caller's `apiKeyId`
+(guaranteed by the auth middleware, which sets `req.apiKeyId` before any handler runs). The `userId`
+passed into `generateAIResponse` is the key's `createdBy` when present; when the creator was deleted
+(`created_by` is `on delete set null`) it falls back to a **non-personal service user**
+(`EXTERNAL_API_SERVICE_USER_ID = -1`), logged, not the previous silent `?? 1`. Because the pipeline
+only *reads* user context by this id (never writes), the sentinel loads an empty profile — external
+generations are driven purely by the request payload and can never be contaminated by an internal
+user's stored data. (Was DR-0044; resolved 2026-07-03.)
+
 ## 7. Response envelope
 
 All external responses use a consistent **`{ success, data, meta, error }`** shape (helper in
@@ -174,6 +187,7 @@ Registered in `docs/documentation-governance.md §5`. Both are nuances on an oth
 | DR-0039 | External API uses its own `{success,data,meta,error}` envelope + `/external/docs`; not part of the OpenAPI spec-first contract (no generated client/zod). | doc-vs-code | low |
 | DR-0042 | **RESOLVED 2026-07-03.** `external_programs` reads/edits/explains were scoped by primary key only (cross-tenant IDOR). Now scoped to caller key/org via `findOwnedProgram()`; unauthorized → `404 NOT_FOUND`. Tests: `external-programs-ownership.test.ts`. | code (security) | ~~high~~ resolved |
 | DR-0043 | **RESOLVED 2026-07-03.** External programs had no change tracking or rollback (the internal `system_change_log`/restore parity gap). Phase 1C adds `external_program_versions` (append-only), snapshot-before-edit, `GET /program/:id/history`, and `POST /program/:id/revert`. Edits remain non-surgical until Phase 2. Tests: `external-programs-ownership.test.ts`. | code (parity) | ~~medium~~ resolved |
+| DR-0044 | **RESOLVED 2026-07-03.** `buildSystemUserId` fell back to `?? 1`, loading internal user #1's profile into external generations (mis-attribution + data-isolation leak). Now attributes to the key's `createdBy`, else a non-personal service sentinel (`-1`, logged). Phase 1B/1E. Tests: `external-programs-ownership.test.ts`. | code (isolation) | ~~medium~~ resolved |
 
 No open `high`-severity items.
 

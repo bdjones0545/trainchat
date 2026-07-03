@@ -97,8 +97,55 @@ const RevertProgramBodySchema = z.object({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Non-personal attribution used when an API key has no `createdBy` (e.g. the
+ * creating user was later deleted — `created_by` is `on delete set null`).
+ *
+ * It is intentionally NOT a real user id. `generateAIResponse` only *reads*
+ * user context (e.g. `user_profiles`) by this id and never writes by it, so a
+ * sentinel yields an empty profile — the external generation is driven purely
+ * by the request payload and can never be contaminated by an internal user's
+ * stored data. The previous `?? 1` fallback silently loaded user #1's profile
+ * into external requests, which was both wrong attribution and a data-isolation
+ * leak.
+ */
+export const EXTERNAL_API_SERVICE_USER_ID = -1;
+
 function buildSystemUserId(apiKey: Express.Request["apiKey"]): number {
-  return apiKey?.createdBy ?? 1;
+  const createdBy = apiKey?.createdBy;
+  if (createdBy !== null && createdBy !== undefined) return createdBy;
+
+  logger.warn(
+    { apiKeyId: apiKey?.id ?? null },
+    "external-programs: API key has no createdBy — attributing to service user (no personal context loaded)",
+  );
+  return EXTERNAL_API_SERVICE_USER_ID;
+}
+
+/**
+ * Best-effort baseline snapshot written at program creation so /history and
+ * /revert are coherent from the start (a freshly-generated, never-edited program
+ * still has a "v0 = as generated" anchor). Additive and non-fatal: a failure
+ * here never fails an otherwise-successful generation.
+ */
+async function writeGenerateSnapshot(
+  externalProgramId: number,
+  apiKeyId: number | null,
+  program: ProgramStructure,
+): Promise<void> {
+  try {
+    await db.insert(externalProgramVersionsTable).values({
+      externalProgramId,
+      apiKeyId,
+      programSnapshot: program as unknown as Record<string, unknown>,
+      type: "generate_snapshot",
+    });
+  } catch (err) {
+    logger.warn(
+      { err, externalProgramId },
+      "external-programs: generate_snapshot write failed (non-fatal)",
+    );
+  }
 }
 
 function buildGenerateMessage(data: z.infer<typeof GenerateProgramBodySchema>): string {
@@ -285,6 +332,9 @@ router.post(
         })
         .returning();
 
+      // Baseline "v0 = as generated" snapshot (additive, best-effort).
+      await writeGenerateSnapshot(stored.id, req.apiKeyId ?? null, safeProgram);
+
       res.status(201).json(
         buildStandardResponse({
           programId: stored.id,
@@ -384,6 +434,9 @@ router.post(
           summary: safeProgram.description ?? safeProgram.programName,
         })
         .returning();
+
+      // Baseline "v0 = as generated" snapshot (additive, best-effort).
+      await writeGenerateSnapshot(stored.id, req.apiKeyId ?? null, safeProgram);
 
       emit("complete", {
         success: true,

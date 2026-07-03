@@ -120,7 +120,7 @@ export type ExternalProgram = typeof externalProgramsTable.$inferSelect;
 export const EXTERNAL_PROGRAM_VERSION_TYPES = [
   "edit",              // snapshot of the pre-edit program, taken before an edit overwrite
   "revert",            // snapshot of the pre-revert program, taken before a rollback
-  "generate_snapshot", // reserved: initial snapshot at generate time
+  "generate_snapshot", // baseline "v0 = as generated" snapshot, written at program creation
 ] as const;
 
 export type ExternalProgramVersionType =

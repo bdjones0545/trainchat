@@ -394,6 +394,14 @@ through `findOwnedProgram()` in `routes/external/programs.ts`, which enforces ke
 returns `404 NOT_FOUND` (never `403`) on non-ownership so a denied response is byte-identical to a
 genuinely-missing one. Regression coverage: `src/__tests__/external-programs-ownership.test.ts`.
 
+**Resolved — external attribution data-isolation leak, fixed 2026-07-03.** `buildSystemUserId`
+previously returned `apiKey.createdBy ?? 1`, so when a key's creating user had been deleted the AI
+pipeline loaded **internal user #1's** profile into the external request. It now attributes to the
+key's `createdBy`, or a non-personal service sentinel (`EXTERNAL_API_SERVICE_USER_ID = -1`, logged)
+when absent. The pipeline only reads user context by this id (never writes), so the sentinel yields
+an empty profile — external generations are driven solely by the request payload. Regression
+coverage: `src/__tests__/external-programs-ownership.test.ts`.
+
 ---
 
 ## 15. Admin Endpoint Protection
