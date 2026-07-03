@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { resolveResponseMode, classifyOrchMutationType } from "../conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES } from "../conversation-routing";
+import type { AgentSettingsContext } from "../agent-settings-resolver";
 
 // ─── resolveResponseMode ──────────────────────────────────────────────────────
 
@@ -110,5 +111,123 @@ describe("classifyOrchMutationType", () => {
 
   it("undefined → undefined", () => {
     expect(classifyOrchMutationType(undefined)).toBeUndefined();
+  });
+});
+
+// ─── shouldBypassEditEngine ───────────────────────────────────────────────────
+
+// Minimal AgentSettingsContext stub — only the behavior fields the helper reads.
+function makeSettings(
+  overrides: Partial<AgentSettingsContext["behavior"]> = {},
+): AgentSettingsContext {
+  return {
+    behavior: {
+      memoryPersonalization: false,
+      proactiveInsights: false,
+      requireApprovalStructural: false,
+      requireApprovalDeload: false,
+      autoAdjustRecommendations: true,
+      executionPermission: "apply_mutation",
+      ...overrides,
+    },
+    training: {},
+  } as AgentSettingsContext;
+}
+
+describe("shouldBypassEditEngine", () => {
+  // ── null (proceed) ──────────────────────────────────────────────────────────
+
+  it("returns null when no gate applies (all defaults)", () => {
+    expect(shouldBypassEditEngine(makeSettings(), "volume_adjustment" as any, undefined)).toBeNull();
+  });
+
+  it("returns null for minor mutation with requireApprovalStructural=true", () => {
+    const settings = makeSettings({ requireApprovalStructural: true });
+    expect(shouldBypassEditEngine(settings, "increase_volume", "minor")).toBeNull();
+  });
+
+  it("returns null for structural mutation when requireApprovalStructural=false", () => {
+    expect(shouldBypassEditEngine(makeSettings(), "increase_volume", "structural")).toBeNull();
+  });
+
+  it("returns null for deload family when requireApprovalDeload=false", () => {
+    expect(shouldBypassEditEngine(makeSettings(), "fatigue_management", undefined)).toBeNull();
+  });
+
+  it("returns null for non-deload family when requireApprovalDeload=true", () => {
+    const settings = makeSettings({ requireApprovalDeload: true });
+    expect(shouldBypassEditEngine(settings, "increase_volume", undefined)).toBeNull();
+  });
+
+  it("returns null when intentFamily is null and requireApprovalDeload=true", () => {
+    const settings = makeSettings({ requireApprovalDeload: true });
+    expect(shouldBypassEditEngine(settings, null, undefined)).toBeNull();
+  });
+
+  // ── suggest_only ────────────────────────────────────────────────────────────
+
+  it("returns 'suggest_only' when executionPermission is suggest_only", () => {
+    const settings = makeSettings({ executionPermission: "suggest_only" });
+    expect(shouldBypassEditEngine(settings, "increase_volume", undefined)).toBe("suggest_only");
+  });
+
+  it("suggest_only takes priority over requireApprovalDeload", () => {
+    const settings = makeSettings({
+      executionPermission: "suggest_only",
+      requireApprovalDeload: true,
+    });
+    expect(shouldBypassEditEngine(settings, "fatigue_management", undefined)).toBe("suggest_only");
+  });
+
+  it("suggest_only takes priority over requireApprovalStructural", () => {
+    const settings = makeSettings({
+      executionPermission: "suggest_only",
+      requireApprovalStructural: true,
+    });
+    expect(shouldBypassEditEngine(settings, "increase_volume", "structural")).toBe("suggest_only");
+  });
+
+  // ── requireApprovalDeload ───────────────────────────────────────────────────
+
+  it("returns 'requireApprovalDeload' for fatigue_management when gate is on", () => {
+    const settings = makeSettings({ requireApprovalDeload: true });
+    expect(shouldBypassEditEngine(settings, "fatigue_management", undefined)).toBe("requireApprovalDeload");
+  });
+
+  it("returns 'requireApprovalDeload' for recovery_focus when gate is on", () => {
+    const settings = makeSettings({ requireApprovalDeload: true });
+    expect(shouldBypassEditEngine(settings, "recovery_focus", undefined)).toBe("requireApprovalDeload");
+  });
+
+  it("requireApprovalDeload takes priority over requireApprovalStructural", () => {
+    const settings = makeSettings({
+      requireApprovalDeload: true,
+      requireApprovalStructural: true,
+    });
+    expect(shouldBypassEditEngine(settings, "fatigue_management", "structural")).toBe("requireApprovalDeload");
+  });
+
+  // ── requireApprovalStructural ───────────────────────────────────────────────
+
+  it("returns 'requireApprovalStructural' for structural mutation when gate is on", () => {
+    const settings = makeSettings({ requireApprovalStructural: true });
+    expect(shouldBypassEditEngine(settings, "increase_volume", "structural")).toBe("requireApprovalStructural");
+  });
+
+  it("returns null for undefined orchMutationType with requireApprovalStructural=true", () => {
+    const settings = makeSettings({ requireApprovalStructural: true });
+    expect(shouldBypassEditEngine(settings, "increase_volume", undefined)).toBeNull();
+  });
+
+  // ── DELOAD_INTENT_FAMILIES constant ────────────────────────────────────────
+
+  it("DELOAD_INTENT_FAMILIES contains fatigue_management and recovery_focus", () => {
+    expect(DELOAD_INTENT_FAMILIES.has("fatigue_management")).toBe(true);
+    expect(DELOAD_INTENT_FAMILIES.has("recovery_focus")).toBe(true);
+  });
+
+  it("DELOAD_INTENT_FAMILIES does not contain non-deload families", () => {
+    expect(DELOAD_INTENT_FAMILIES.has("increase_volume")).toBe(false);
+    expect(DELOAD_INTENT_FAMILIES.has("coaching_question")).toBe(false);
   });
 });

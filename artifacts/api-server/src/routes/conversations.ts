@@ -104,7 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
-import { resolveResponseMode, classifyOrchMutationType } from "../lib/conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -1072,46 +1072,32 @@ Keep it helpful and intelligent, never promotional.`;
     // vibe edits (surgical edit on the active training system).
     case "APPLY_MUTATION": {
 
-  // ── SUGGEST-ONLY GATE — skip edit engine when autoAdjustRecommendations is off ─
-  // When executionPermission is "suggest_only", the edit engine is bypassed entirely.
-  // The request falls through to the AI path, where system prompt behavior instructions
-  // (injected via buildBehaviorInstructions) tell the AI to describe the change
-  // and ask "Want me to apply this?" instead of mutating.
-  if (agentSettings.behavior.executionPermission === "suggest_only") {
-    logger.info(
-      { userId, conversationId: params.data.id, executionPermission: "suggest_only" },
-      "[AgentSettings] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
-    );
-    break; // fall through to AI call below
-  }
-
-  // ── P1: DELOAD APPROVAL GATE (non-SSE) ──────────────────────────────────────
-  // When requireApprovalDeload=true, deload/recovery-focus intents must route
-  // to the AI describe+confirm path instead of being auto-applied.
-  if (
-    agentSettings.behavior.requireApprovalDeload &&
-    execPlan.intentFamily != null &&
-    (["fatigue_management", "recovery_focus"] as string[]).includes(execPlan.intentFamily as string)
-  ) {
-    logger.info(
-      { userId, intentFamily: execPlan.intentFamily },
-      "[AgentSettings] requireApprovalDeload — deload intent requires user confirmation, routing to AI confirm path"
-    );
-    break; // fall through to AI describe+confirm path
-  }
-
-  // ── P1: STRUCTURAL MUTATION APPROVAL GATE (non-SSE) ─────────────────────────
-  // When requireApprovalStructural=true, structural exercise mutations (add/remove/swap)
-  // must route to the AI describe+confirm path before the edit engine runs.
-  if (
-    agentSettings.behavior.requireApprovalStructural &&
-    orchMutationType === "structural"
-  ) {
-    logger.info(
-      { userId, orchMutationType, mutationType: execPlan.mutation?.type },
-      "[AgentSettings] requireApprovalStructural — structural mutation requires user confirmation, routing to AI confirm path"
-    );
-    break; // fall through to AI describe+confirm path
+  // ── Approval gates (non-SSE) ─────────────────────────────────────────────────
+  // suggest_only / requireApprovalDeload / requireApprovalStructural
+  // Pure decision is extracted; logging and break remain here.
+  {
+    const _bypassReason = shouldBypassEditEngine(agentSettings, execPlan.intentFamily, orchMutationType);
+    if (_bypassReason === "suggest_only") {
+      logger.info(
+        { userId, conversationId: params.data.id, executionPermission: "suggest_only" },
+        "[AgentSettings] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
+      );
+      break;
+    }
+    if (_bypassReason === "requireApprovalDeload") {
+      logger.info(
+        { userId, intentFamily: execPlan.intentFamily },
+        "[AgentSettings] requireApprovalDeload — deload intent requires user confirmation, routing to AI confirm path"
+      );
+      break;
+    }
+    if (_bypassReason === "requireApprovalStructural") {
+      logger.info(
+        { userId, orchMutationType, mutationType: execPlan.mutation?.type },
+        "[AgentSettings] requireApprovalStructural — structural mutation requires user confirmation, routing to AI confirm path"
+      );
+      break;
+    }
   }
 
   // ── CLARIFICATION_FOLLOWUP — resume a pending mutation with the user's answer ──
@@ -3733,43 +3719,32 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     // ── APPLY_MUTATION ────────────────────────────────────────────────────────
     case "APPLY_MUTATION": {
 
-  // ── SUGGEST-ONLY GATE — skip edit engine when autoAdjustRecommendations is off ─
-  if (agentSettings.behavior.executionPermission === "suggest_only") {
-    logger.info(
-      { userId, conversationId: params.data.id, executionPermission: "suggest_only" },
-      "[AgentSettings:stream] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
-    );
-    break; // fall through to AI call below
-  }
-
-  // ── P1: DELOAD APPROVAL GATE (SSE path) ─────────────────────────────────────
-  // When requireApprovalDeload=true, deload/recovery-focus intents must route
-  // to the AI describe+confirm path instead of being auto-applied.
-  if (
-    agentSettings.behavior.requireApprovalDeload &&
-    execPlan.intentFamily != null &&
-    (["fatigue_management", "recovery_focus"] as string[]).includes(execPlan.intentFamily as string)
-  ) {
-    logger.info(
-      { userId, intentFamily: execPlan.intentFamily },
-      "[AgentSettings:stream] requireApprovalDeload — deload intent requires user confirmation, routing to AI confirm path"
-    );
-    break; // fall through to AI describe+confirm path
-  }
-
-  // ── P1: STRUCTURAL MUTATION APPROVAL GATE (SSE path) ─────────────────────────
-  // When requireApprovalStructural=true, structural exercise mutations (add/remove/swap)
-  // must route to the AI describe+confirm path before the edit engine runs.
-  if (
-    agentSettings.behavior.requireApprovalStructural &&
-    execPlan.mutation?.type != null &&
-    (["add", "remove", "swap"] as string[]).includes(execPlan.mutation.type)
-  ) {
-    logger.info(
-      { userId, mutationType: execPlan.mutation?.type },
-      "[AgentSettings:stream] requireApprovalStructural — structural mutation requires user confirmation, routing to AI confirm path"
-    );
-    break; // fall through to AI describe+confirm path
+  // ── Approval gates (SSE path) ────────────────────────────────────────────────
+  // suggest_only / requireApprovalDeload / requireApprovalStructural
+  {
+    const _sseOrchMutationType = classifyOrchMutationType(execPlan.mutation?.type);
+    const _bypassReason = shouldBypassEditEngine(agentSettings, execPlan.intentFamily, _sseOrchMutationType);
+    if (_bypassReason === "suggest_only") {
+      logger.info(
+        { userId, conversationId: params.data.id, executionPermission: "suggest_only" },
+        "[AgentSettings:stream] suggest_only mode — bypassing edit engine, routing to AI describe+confirm path"
+      );
+      break;
+    }
+    if (_bypassReason === "requireApprovalDeload") {
+      logger.info(
+        { userId, intentFamily: execPlan.intentFamily },
+        "[AgentSettings:stream] requireApprovalDeload — deload intent requires user confirmation, routing to AI confirm path"
+      );
+      break;
+    }
+    if (_bypassReason === "requireApprovalStructural") {
+      logger.info(
+        { userId, mutationType: execPlan.mutation?.type },
+        "[AgentSettings:stream] requireApprovalStructural — structural mutation requires user confirmation, routing to AI confirm path"
+      );
+      break;
+    }
   }
 
   // ── Short-circuit: CLARIFICATION_FOLLOWUP ────────────────────────────────
