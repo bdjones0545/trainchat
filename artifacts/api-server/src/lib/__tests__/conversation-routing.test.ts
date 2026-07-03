@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily } from "../conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, DELOAD_INTENT_FAMILIES, resolveClarificationPendingFamily, formatChoiceCard } from "../conversation-routing";
 import type { AgentSettingsContext } from "../agent-settings-resolver";
 
 // vi.hoisted ensures the mock fn exists before the vi.mock factory runs.
@@ -319,5 +319,77 @@ describe("resolveClarificationPendingFamily", () => {
     mockNormalizeToIntentFamily.mockReturnValue({ family: "coaching_question" });
     resolveClarificationPendingFamily(null, "help me", null);
     expect(mockNormalizeToIntentFamily).toHaveBeenCalledWith("help me", undefined);
+  });
+});
+
+// ─── formatChoiceCard ─────────────────────────────────────────────────────────
+
+describe("formatChoiceCard", () => {
+  const card = {
+    prompt: "Which exercise do you mean?",
+    choices: [
+      { label: "Back squat", action: "back_squat" },
+      { label: "Front squat", action: "front_squat" },
+      { label: "Goblet squat", action: "goblet_squat" },
+    ],
+  };
+
+  // ── content ────────────────────────────────────────────────────────────────
+
+  it("prefixes each choice with its 1-based index", () => {
+    const { content } = formatChoiceCard(card);
+    expect(content).toContain("1. Back squat");
+    expect(content).toContain("2. Front squat");
+    expect(content).toContain("3. Goblet squat");
+  });
+
+  it("opens content with the card prompt", () => {
+    const { content } = formatChoiceCard(card);
+    expect(content.startsWith("Which exercise do you mean?")).toBe(true);
+  });
+
+  it("separates prompt from choices with a blank line", () => {
+    const { content } = formatChoiceCard(card);
+    expect(content).toContain("Which exercise do you mean?\n\n1.");
+  });
+
+  it("handles a single choice", () => {
+    const single = { prompt: "Confirm?", choices: [{ label: "Yes", action: "yes" }] };
+    const { content } = formatChoiceCard(single);
+    expect(content).toBe("Confirm?\n\n1. Yes");
+  });
+
+  // ── structuredData ─────────────────────────────────────────────────────────
+
+  it("structuredData is valid JSON", () => {
+    const { structuredData } = formatChoiceCard(card);
+    expect(() => JSON.parse(structuredData)).not.toThrow();
+  });
+
+  it("structuredData _type is 'action_choice_card'", () => {
+    const { structuredData } = formatChoiceCard(card);
+    expect(JSON.parse(structuredData)._type).toBe("action_choice_card");
+  });
+
+  it("structuredData contains the original prompt and choices", () => {
+    const { structuredData } = formatChoiceCard(card);
+    const parsed = JSON.parse(structuredData);
+    expect(parsed.prompt).toBe(card.prompt);
+    expect(parsed.choices).toEqual(card.choices);
+  });
+
+  it("structuredData spreads the card — no extra fields lost", () => {
+    const extended = { prompt: "Pick one", choices: [{ label: "A", action: "a" }] };
+    const { structuredData } = formatChoiceCard(extended);
+    const parsed = JSON.parse(structuredData);
+    expect(parsed).toMatchObject({ _type: "action_choice_card", prompt: "Pick one" });
+  });
+
+  // ── label-only rendering (action field not in content) ────────────────────
+
+  it("content uses the label, not the action string", () => {
+    const { content } = formatChoiceCard(card);
+    expect(content).not.toContain("back_squat");
+    expect(content).not.toContain("front_squat");
   });
 });

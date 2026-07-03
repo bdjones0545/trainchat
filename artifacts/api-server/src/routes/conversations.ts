@@ -104,7 +104,7 @@ import { interpretMutationRequest } from "../services/mutation-execution-service
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
-import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily } from "../lib/conversation-routing";
+import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
@@ -1484,13 +1484,12 @@ Keep it helpful and intelligent, never promotional.`;
     case "ACTION_CHOICE_CARD": {
       const choiceCard = execPlan.choiceCard;
       if (choiceCard) {
-        const choiceLines = choiceCard.choices.map((c, i) => `${i + 1}. ${c.label}`).join("\n");
-        const choiceContent = `${choiceCard.prompt}\n\n${choiceLines}`;
+        const { content: choiceContent, structuredData: choiceStructuredData } = formatChoiceCard(choiceCard);
         const [assistantMessage] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
           role: "assistant",
           content: choiceContent,
-          structuredData: JSON.stringify({ _type: "action_choice_card", ...choiceCard }),
+          structuredData: choiceStructuredData,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
         if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
@@ -4001,13 +4000,12 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     case "ACTION_CHOICE_CARD": {
       const choiceCard = execPlan.choiceCard;
       if (choiceCard) {
-        const choiceLines = choiceCard.choices.map((c, i) => `${i + 1}. ${c.label}`).join("\n");
-        const choiceContent = `${choiceCard.prompt}\n\n${choiceLines}`;
+        const { content: choiceContent, structuredData: choiceStructuredData } = formatChoiceCard(choiceCard);
         const [assistantMessage] = await db.insert(messagesTable).values({
           conversationId: params.data.id,
           role: "assistant",
           content: choiceContent,
-          structuredData: JSON.stringify({ _type: "action_choice_card", ...choiceCard }),
+          structuredData: choiceStructuredData,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
         if (planInfo?.plan === "free" || planInfo?.plan === "starter") {

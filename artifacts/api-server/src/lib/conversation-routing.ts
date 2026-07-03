@@ -130,6 +130,38 @@ export function shouldBypassEditEngine(
  * @param userMessage       Raw user message content
  * @param focusMode         Active focus mode for the session (null → no mode override)
  */
+// ─── Action-choice-card formatting ───────────────────────────────────────────
+
+/**
+ * The subset of the execution plan's choiceCard that both handlers need to
+ * format — typed narrowly so the helper stays pure and independently testable.
+ */
+export interface ChoiceCardInput {
+  prompt: string;
+  choices: Array<{ label: string; action: string }>;
+}
+
+/**
+ * Formats a choice card into the two strings written to the DB and returned in
+ * the response. Identical logic appears in both the non-SSE and SSE
+ * ACTION_CHOICE_CARD branches; extracted here so it lives in one place.
+ *
+ * @returns `content`       — the plaintext message stored as the assistant turn
+ * @returns `structuredData`— the JSON string stored in the structuredData column
+ */
+export function formatChoiceCard(choiceCard: ChoiceCardInput): {
+  content: string;
+  structuredData: string;
+} {
+  const choiceLines = choiceCard.choices.map((c, i) => `${i + 1}. ${c.label}`).join("\n");
+  return {
+    content: `${choiceCard.prompt}\n\n${choiceLines}`,
+    structuredData: JSON.stringify({ _type: "action_choice_card", ...choiceCard }),
+  };
+}
+
+// ─── Pending-clarification family resolution ──────────────────────────────────
+
 export function resolveClarificationPendingFamily(
   planIntentFamily: string | null | undefined,
   userMessage: string,
