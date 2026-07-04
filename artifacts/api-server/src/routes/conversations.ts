@@ -102,14 +102,24 @@ import { buildCompleteEvent } from "../services/streaming-response-service";
 import { saveOrUpdateProgram } from "../services/program-build-service";
 import { interpretMutationRequest } from "../services/mutation-execution-service";
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
+import { sharedRateLimit } from "../lib/shared-rate-limiter";
 import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { buildConversationContext } from "../lib/conversation-context-injection";
 import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram, formatSystemEditData, formatMutationFailureContent } from "../lib/conversation-routing";
 
 const router: IRouter = Router();
 
-// ─── In-Memory Rate Limiter (SSE message endpoint) ────────────────────────────
-// Moved to ../lib/sse — checkSseRateLimit imported above.
+// ─── Rate limiting ─────────────────────────────────────────────────────────────
+// The SSE stream endpoint checks checkSseRateLimit inline (it must answer over
+// the event stream); the non-SSE message endpoint uses this middleware. Both
+// count into the SAME shared "chat:user:<id>" bucket (30/60s per user, F10),
+// so a user has one chat budget regardless of transport.
+const chatRateLimiter = sharedRateLimit({
+  category: "chat",
+  max: 30,
+  windowMs: 60_000,
+  message: "You're sending messages too quickly. Please wait a moment before trying again.",
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -532,7 +542,7 @@ router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise
   })));
 });
 
-router.post("/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
+router.post("/conversations/:id/messages", requireAuth, chatRateLimiter, async (req, res): Promise<void> => {
   const params = SendMessageParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -3130,8 +3140,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 
   const userId = req.session.userId!;
 
-  // ── Rate limiting — 30 messages / 60 s per authenticated user ────────────
-  if (!checkSseRateLimit(userId)) {
+  // ── Rate limiting — 30 messages / 60 s per authenticated user (shared store) ──
+  if (!(await checkSseRateLimit(userId))) {
     done({
       type: "error",
       status: 429,

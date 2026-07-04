@@ -126,8 +126,8 @@ export function validateExternalApiKey(requiredPermissions: ExternalApiPermissio
       }
     }
 
-    // ── Rate limiting ─────────────────────────────────────────────────────────
-    const rateResult = checkRateLimit(String(apiKey.id));
+    // ── Rate limiting (shared store — enforced across instances, F10) ────────
+    const rateResult = await checkRateLimit(String(apiKey.id));
     res.setHeader("X-RateLimit-Limit", rateResult.limit);
     res.setHeader("X-RateLimit-Remaining", rateResult.remaining);
     res.setHeader("X-RateLimit-Reset", Math.ceil(rateResult.resetAt / 1000));

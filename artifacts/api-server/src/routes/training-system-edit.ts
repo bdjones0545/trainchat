@@ -16,6 +16,7 @@
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
+import { programEditRateLimiter } from "../middlewares/ai-rate-limiter";
 import { interpretEditRequest, handleStructuredIntent, mapNLPToIntent, type CommandIntentKey } from "../lib/edit-intent-service";
 import { applyEditPlan, type EditResult } from "../lib/edit-engine";
 import { createChangeLogEntry, classifyEdit, type SystemSnapshot } from "../lib/change-log-service";
@@ -267,7 +268,7 @@ function buildUIContextHint(uiContext: Record<string, any> | null | undefined): 
 }
 
 // ─── POST /training-system/edit ───────────────────────────────────────────────
-router.post("/training-system/edit", requireAuth, async (req, res): Promise<void> => {
+router.post("/training-system/edit", requireAuth, programEditRateLimiter, async (req, res): Promise<void> => {
   const parsed = EditRequestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body. 'request' field required." });

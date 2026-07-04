@@ -1,79 +1,26 @@
 /**
- * ExternalApiRateLimiter — In-memory sliding window rate limiter
+ * ExternalApiRateLimiter — shared-store (Postgres) rate limiter.
  *
- * Tracks requests per API key over a rolling window.
- * Default: 60 requests / 60 seconds per key.
+ * Tracks requests per API key: 60 requests / 60 seconds per key (unchanged
+ * from the in-memory implementation this replaces — audit F10). Counting now
+ * happens in the shared `rate_limit_counters` table, so the limit holds
+ * across app instances under autoscale instead of multiplying per instance.
  *
- * Designed to be lightweight and self-cleaning — expired windows are
- * pruned on each check so memory does not grow unboundedly.
+ * Fail-open: if the store is unreachable the request is allowed (see
+ * shared-rate-limiter.ts for the policy rationale).
  */
 
-interface WindowEntry {
-  timestamps: number[];
-}
-
-const store = new Map<string, WindowEntry>();
+import { sharedRateLimiter, type SharedRateLimitResult } from "./shared-rate-limiter";
 
 const DEFAULT_WINDOW_MS = 60_000;
 const DEFAULT_MAX_REQUESTS = 60;
 
-function pruneOldEntries(): void {
-  const now = Date.now();
-  for (const [key, entry] of store.entries()) {
-    entry.timestamps = entry.timestamps.filter(t => now - t < DEFAULT_WINDOW_MS);
-    if (entry.timestamps.length === 0) {
-      store.delete(key);
-    }
-  }
-}
+export type RateLimitResult = SharedRateLimitResult;
 
-let pruneTimer: ReturnType<typeof setInterval> | null = null;
-
-function startPruneTimer(): void {
-  if (pruneTimer) return;
-  pruneTimer = setInterval(pruneOldEntries, 30_000);
-  if (pruneTimer.unref) pruneTimer.unref();
-}
-
-startPruneTimer();
-
-export interface RateLimitResult {
-  allowed: boolean;
-  remaining: number;
-  resetAt: number;
-  limit: number;
-}
-
-export function checkRateLimit(
+export async function checkRateLimit(
   keyId: string,
   maxRequests = DEFAULT_MAX_REQUESTS,
   windowMs = DEFAULT_WINDOW_MS,
-): RateLimitResult {
-  const now = Date.now();
-  const windowStart = now - windowMs;
-
-  let entry = store.get(keyId);
-  if (!entry) {
-    entry = { timestamps: [] };
-    store.set(keyId, entry);
-  }
-
-  entry.timestamps = entry.timestamps.filter(t => t > windowStart);
-
-  const count = entry.timestamps.length;
-  const allowed = count < maxRequests;
-
-  if (allowed) {
-    entry.timestamps.push(now);
-  }
-
-  const oldest = entry.timestamps[0] ?? now;
-  const resetAt = oldest + windowMs;
-
-  return {
-    allowed,
-    remaining: Math.max(0, maxRequests - count - (allowed ? 1 : 0)),
-    resetAt,
-    limit: maxRequests,
-  };
+): Promise<RateLimitResult> {
+  return sharedRateLimiter.hit(`external:key:${keyId}`, maxRequests, windowMs);
 }

@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db, shareMomentAuditTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
+import { shareMomentsRateLimiter } from "../middlewares/ai-rate-limiter";
 import { z } from "zod";
 import { logger } from "../lib/logger";
 import { OPENAI_MODELS } from "../lib/openai-models";
@@ -16,7 +17,7 @@ const AuditBody = z.object({
   captionGenerated: z.boolean().default(false),
 });
 
-router.post("/share-moments/audit", requireAuth, async (req: any, res): Promise<void> => {
+router.post("/share-moments/audit", requireAuth, shareMomentsRateLimiter, async (req: any, res): Promise<void> => {
   try {
     const userId = req.session.userId as number;
     const body = AuditBody.safeParse(req.body);
@@ -156,7 +157,7 @@ If selectedWeekNumber is provided, every field must reference THAT specific week
 This must feel like something a serious athlete would share.
 If it feels generic, rewrite it.`;
 
-router.post("/share-moments/program-card", requireAuth, async (req: any, res): Promise<void> => {
+router.post("/share-moments/program-card", requireAuth, shareMomentsRateLimiter, async (req: any, res): Promise<void> => {
   try {
     const body = ProgramCardBody.safeParse(req.body);
     if (!body.success) {

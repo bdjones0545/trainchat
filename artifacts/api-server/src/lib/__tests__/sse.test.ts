@@ -4,11 +4,22 @@
  * Tests the three categories of helpers extracted from the SSE route handler:
  *   1. setupSseHeaders  — sets the four required response headers
  *   2. sseEmit / sseDone — write events to the client; survive disconnects
- *   3. checkSseRateLimit — sliding-window counter; blocks after 30 req/60 s
+ *   3. checkSseRateLimit — shared-store counter (F10); blocks after 30 req/60 s.
+ *      The store itself is covered in shared-rate-limiter.test.ts; here we
+ *      verify the chat wrapper forwards the right key/limit/window and maps
+ *      the result to a boolean.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit, _sseRateMap } from "../sse";
+
+vi.mock("../shared-rate-limiter", () => ({
+  sharedRateLimiter: { hit: vi.fn() },
+}));
+
+import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../sse";
+import { sharedRateLimiter } from "../shared-rate-limiter";
+
+const mockHit = sharedRateLimiter.hit as ReturnType<typeof vi.fn>;
 
 // ─── Minimal res mock ────────────────────────────────────────────────────────
 
@@ -105,48 +116,31 @@ describe("sseDone", () => {
 // ─── checkSseRateLimit ───────────────────────────────────────────────────────
 
 describe("checkSseRateLimit", () => {
-  // Each test group uses a unique userId prefix to avoid cross-test contamination
-  // from the module-level _sseRateMap.
-
-  it("allows the first request", () => {
-    expect(checkSseRateLimit("rl-test-1")).toBe(true);
+  beforeEach(() => {
+    mockHit.mockReset();
   });
 
-  it("allows up to 30 requests within the window", () => {
-    const uid = "rl-test-2";
-    for (let i = 0; i < 29; i++) checkSseRateLimit(uid);
-    expect(checkSseRateLimit(uid)).toBe(true); // 30th — still allowed
+  it("counts against the shared chat bucket with 30 req / 60 s", async () => {
+    mockHit.mockResolvedValue({ allowed: true, remaining: 29, resetAt: 0, limit: 30 });
+    await checkSseRateLimit(45);
+    expect(mockHit).toHaveBeenCalledWith("chat:user:45", 30, 60_000);
   });
 
-  it("blocks the 31st request within the window", () => {
-    const uid = "rl-test-3";
-    for (let i = 0; i < 30; i++) checkSseRateLimit(uid);
-    expect(checkSseRateLimit(uid)).toBe(false);
+  it("returns true when the store allows the request", async () => {
+    mockHit.mockResolvedValue({ allowed: true, remaining: 1, resetAt: 0, limit: 30 });
+    await expect(checkSseRateLimit("u1")).resolves.toBe(true);
   });
 
-  it("accepts both number and string userId", () => {
-    expect(checkSseRateLimit(88888)).toBe(true);
-    expect(checkSseRateLimit("88888")).toBe(true); // same bucket — 2 requests
+  it("returns false when the store reports the limit exceeded", async () => {
+    mockHit.mockResolvedValue({ allowed: false, remaining: 0, resetAt: 0, limit: 30 });
+    await expect(checkSseRateLimit("u1")).resolves.toBe(false);
   });
 
-  it("allows a new request after the window expires", () => {
-    const uid = "rl-test-4";
-    // Fill the bucket
-    for (let i = 0; i < 30; i++) checkSseRateLimit(uid);
-    expect(checkSseRateLimit(uid)).toBe(false);
-
-    // Backdate all timestamps so they fall outside the 60-second window
-    const stale = Date.now() - 61_000;
-    _sseRateMap.set(uid, Array(30).fill(stale));
-
-    expect(checkSseRateLimit(uid)).toBe(true);
-  });
-
-  it("isolates rate limits per userId", () => {
-    const uid1 = "rl-test-5a";
-    const uid2 = "rl-test-5b";
-    for (let i = 0; i < 30; i++) checkSseRateLimit(uid1);
-    // uid2 has never been called — should still be allowed
-    expect(checkSseRateLimit(uid2)).toBe(true);
+  it("uses the same bucket for number and string userId", async () => {
+    mockHit.mockResolvedValue({ allowed: true, remaining: 1, resetAt: 0, limit: 30 });
+    await checkSseRateLimit(88888);
+    await checkSseRateLimit("88888");
+    expect(mockHit).toHaveBeenNthCalledWith(1, "chat:user:88888", 30, 60_000);
+    expect(mockHit).toHaveBeenNthCalledWith(2, "chat:user:88888", 30, 60_000);
   });
 });
