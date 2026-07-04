@@ -42,3 +42,21 @@ export {
   type FullTrainingSystem,
   type SerializedProgram,
 } from "./adapter";
+
+export {
+  isExternalMaterializationEnabled,
+  EXTERNAL_MATERIALIZATION_FLAG,
+} from "./feature-flag";
+
+export {
+  resolveExternalServiceUserId,
+  externalServiceDeviceId,
+} from "./service-user";
+
+export {
+  maybeMaterializeOnEdit,
+  type LazyMaterializeProgram,
+  type LazyMaterializeDeps,
+  type LazyMaterializeResult,
+  type LazyMaterializeReason,
+} from "./lazy";

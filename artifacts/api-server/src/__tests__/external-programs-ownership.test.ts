@@ -34,7 +34,7 @@ import supertest from "supertest";
 
 // ── Hoisted state & mocks ──────────────────────────────────────────────────────
 
-const { authState, mockDb, mockGenerateAIResponse } = vi.hoisted(() => {
+const { authState, mockDb, mockGenerateAIResponse, mockMaybeMaterialize } = vi.hoisted(() => {
   // A fluent Drizzle chain that is itself a Promise resolving to `rows`. Every
   // builder method (.from/.leftJoin/.where/.orderBy/.limit/.values/.returning)
   // returns the same chain, so any query shape used by the route resolves to
@@ -69,6 +69,23 @@ const { authState, mockDb, mockGenerateAIResponse } = vi.hoisted(() => {
       _rows: chainResult,
     },
     mockGenerateAIResponse: vi.fn(),
+    mockMaybeMaterialize: vi.fn(
+      async (
+        _program?: unknown,
+        _owner?: unknown,
+        _deps?: unknown,
+      ): Promise<{
+        attempted: boolean;
+        materialized: boolean;
+        trainingSystemId: number | null;
+        reason: string;
+      }> => ({
+        attempted: false,
+        materialized: false,
+        trainingSystemId: null,
+        reason: "flag_off",
+      }),
+    ),
   };
 });
 
@@ -109,6 +126,15 @@ vi.mock("../lib/ai", () => ({
   generateAIResponse: mockGenerateAIResponse,
 }));
 
+// Phase 2.3: stub the materialization module so the edit route's flagged
+// side-effect call is observable without pulling the real engine/DB.
+vi.mock("../lib/external-materialization", () => ({
+  isExternalMaterializationEnabled: vi.fn(() => false),
+  createDefaultRoundTripDeps: vi.fn(() => ({})),
+  resolveExternalServiceUserId: vi.fn(async () => 1),
+  maybeMaterializeOnEdit: mockMaybeMaterialize,
+}));
+
 vi.mock("../lib/exercise-service", () => ({
   getSwapCandidates: vi.fn().mockResolvedValue([]),
   findExerciseByName: vi.fn().mockResolvedValue(undefined),
@@ -143,6 +169,7 @@ const OWNED_ROW = {
     id: 100,
     apiKeyId: KEY_A.id,
     programData: PROGRAM_DATA,
+    trainingSystemId: null,
     requestContext: { goal: "x" },
     summary: "A program",
     generatedAt: new Date("2026-01-01T00:00:00Z"),
@@ -204,6 +231,12 @@ beforeEach(() => {
     structuredData: { ...PROGRAM_DATA },
     changeSummary: ["Adjusted volume"],
     content: "Done.",
+  });
+  mockMaybeMaterialize.mockResolvedValue({
+    attempted: false,
+    materialized: false,
+    trainingSystemId: null,
+    reason: "flag_off",
   });
 });
 
@@ -727,5 +760,78 @@ describe("external programs — creation & attribution hardening (Phase 1B/1E)",
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(throwingChain.values).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Phase 2.3 — lazy materialization on edit (flag-gated, best-effort side effect).
+ *
+ * The materialization module is mocked; these assert the ROUTE wiring: it is
+ * invoked only after ownership passes, and it never changes the edit response.
+ *
+ *   MAT-01  edit runs materialization after ownership; response stays compatible
+ *   MAT-02  cross-tenant edit → 404 and materialization is NEVER attempted
+ *   MAT-03  materialization result does not alter the version snapshot / overwrite
+ */
+describe("external programs — lazy materialization wiring (Phase 2.3)", () => {
+  it("MAT-01: owner edit invokes materialization, response stays backwards-compatible", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    // Materialization was invoked once, with the stored program + owner context.
+    expect(mockMaybeMaterialize).toHaveBeenCalledTimes(1);
+    const [programArg, ownerArg] = mockMaybeMaterialize.mock.calls[0];
+    expect(programArg).toMatchObject({ id: 100, trainingSystemId: null });
+    expect(ownerArg).toEqual({ apiKeyId: 1, orgId: "org-A" });
+    // Existing edit contract is unchanged.
+    expect(res.body.data).toHaveProperty("updatedProgram");
+    expect(res.body.data).toHaveProperty("changes");
+    expect(res.body.data).toHaveProperty("coachSummary");
+    expect(res.body.data).toHaveProperty("version");
+    expect(res.body.data).toHaveProperty("changeReceipt");
+  });
+
+  it("MAT-02: cross-tenant edit → 404 and materialization is never attempted", async () => {
+    programExists();
+    authState.apiKey = KEY_B_OTHER_ORG;
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_intruder")
+      .send({ programId: 100, instruction: "sabotage" });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(NOT_FOUND_BODY);
+    // Ownership gate precedes materialization.
+    expect(mockMaybeMaterialize).not.toHaveBeenCalled();
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+  });
+
+  it("MAT-03: a materialized result still writes the version snapshot and overwrite", async () => {
+    programExists();
+    // Simulate the flag on + a successful materialization.
+    mockMaybeMaterialize.mockResolvedValue({
+      attempted: true,
+      materialized: true,
+      trainingSystemId: 909,
+      reason: "materialized",
+    });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    // The existing regeneration edit path still runs: LLM called, version row
+    // inserted, program overwritten.
+    expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1);
+    expect(mockDb.insert).toHaveBeenCalledTimes(1); // snapshot-before-edit
+    expect(mockDb.update).toHaveBeenCalledTimes(1); // programData overwrite
   });
 });
