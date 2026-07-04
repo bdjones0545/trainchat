@@ -31,6 +31,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import express from "express";
 import supertest from "supertest";
+import {
+  TRAINING_SYSTEM_LOCK_CLASS,
+  EXTERNAL_PROGRAM_LOCK_CLASS,
+} from "../lib/advisory-lock";
 
 // ── Hoisted state & mocks ──────────────────────────────────────────────────────
 
@@ -72,6 +76,9 @@ const {
     select: vi.fn(),
     insert: vi.fn(),
     update: vi.fn(),
+    // Advisory-lock acquisition (F9) issues tx.execute(sql`SELECT pg_advisory_xact_lock(...)`)
+    // inside the blob transaction — a no-op here.
+    execute: vi.fn(async () => ({ rows: [] })),
     // Test helper: build a chain resolving to `rows`.
     _rows: chainResult,
   };
@@ -149,6 +156,11 @@ vi.mock("drizzle-orm", () => ({
   eq: vi.fn((_col: unknown, val: unknown) => ({ __eq: val })),
   and: vi.fn((...args: unknown[]) => ({ __and: args })),
   desc: vi.fn((col: unknown) => ({ __desc: col })),
+  // Advisory-lock helper (F9) builds its statement with the sql template tag.
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({
+    __sql: strings.join("$"),
+    values,
+  })),
 }));
 
 // Mock the auth middleware so each test controls the caller identity.
@@ -1231,5 +1243,64 @@ describe("external programs — rollout observability & kill switch (Phase 2.7)"
     expect(res.status).toBe(200);
     expect(mockSystemDeps.restoreFromChange).toHaveBeenCalledWith(99, 11, 909);
     expect(mockEmit.mock.calls.map((c) => c[0])).toContain("revert_succeeded");
+  });
+});
+
+// ── Advisory locks on the edit blob transactions (audit F9) ───────────────────
+//
+// The route's two blob transactions must issue pg_advisory_xact_lock as their
+// first statements: the surgical path locks (system, program), the fallback
+// regeneration path locks (program). Cross-instance serialization semantics
+// are proven in advisory-lock-serialization.test.ts; here we prove the route
+// actually issues the lock SQL inside its transactions.
+describe("external programs — edit blob-transaction advisory locks (F9)", () => {
+  const lockCalls = () =>
+    (mockDb.execute.mock.calls as Array<[{ __sql?: string; values?: unknown[] }]>)
+      .filter(([q]) => q?.__sql?.includes("pg_advisory_xact_lock"))
+      .map(([q]) => q.values);
+
+  it("LOCK-R01: fallback regeneration edit locks the external program inside the tx", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(lockCalls()).toEqual([[EXTERNAL_PROGRAM_LOCK_CLASS, 100]]);
+  });
+
+  it("LOCK-R02: surgical edit locks the training system AND the program inside the blob tx", async () => {
+    programExists();
+    mockSurgicalEnabled.mockReturnValue(true);
+    mockMaybeMaterialize.mockResolvedValue({
+      attempted: true,
+      materialized: true,
+      trainingSystemId: 909,
+      reason: "materialized",
+    });
+    mockSurgical.mockResolvedValue({
+      ok: true,
+      result: {
+        updatedProgram: { programName: "Surgically Edited", days: [] },
+        changes: ["set Squat 3→2"],
+        coachSummary: "Reduced Friday volume.",
+      },
+    });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    // Lock order is fixed (system → program) — the only multi-lock site.
+    expect(lockCalls()).toEqual([
+      [TRAINING_SYSTEM_LOCK_CLASS, 909],
+      [EXTERNAL_PROGRAM_LOCK_CLASS, 100],
+    ]);
   });
 });
