@@ -212,6 +212,40 @@ engine + blob is deferred and would require the engine to accept a `tx` handle.
 and fallback counts, then default on; consider a DB advisory lock for cross-instance serialization
 under autoscale. **Both flags remain OFF by default** until then.
 
+**Rollout controls (Phase 2.7).** The materialized/surgical path ships **off by default** with
+per-pilot gating, observability, a migration diagnostic, and a documented kill switch.
+
+- **Prerequisite — migration 0002.** Before enabling anything, apply the nullable
+  `external_programs.training_system_id` column:
+  `psql "$DATABASE_URL" -f lib/db/manual-migrations/0002_external_programs_training_system_id.sql`.
+  At startup the server runs a **best-effort diagnostic** (`runExternalMaterializationReadinessCheck`):
+  if a flag could be active but the column is missing, it logs a loud, actionable warning (it never
+  throws — materialized edits already fail-soft to regeneration).
+- **Flags (default OFF).** `EXTERNAL_MATERIALIZATION_ENABLED`, `EXTERNAL_SURGICAL_EDIT_ENABLED`.
+- **Pilot gating (no schema change).** A flag is on for a caller when the global env flag is `"true"`
+  **or** the caller's key/org is in a comma-separated allowlist:
+  `EXTERNAL_MATERIALIZATION_PILOT_KEYS` / `_PILOT_ORGS`,
+  `EXTERNAL_SURGICAL_EDIT_PILOT_KEYS` / `_PILOT_ORGS` (apiKeyId / orgId values). All empty by default.
+- **Recommended rollout:** apply 0002 → set `EXTERNAL_MATERIALIZATION_PILOT_KEYS=<pilot key>` →
+  observe → add `EXTERNAL_SURGICAL_EDIT_PILOT_KEYS=<pilot key>` → observe → widen to more keys/orgs →
+  only then consider the global env flags.
+- **Monitoring checklist** (structured log events / counters, `emitExternalEvent`):
+  `materialize_attempted|succeeded|failed|skipped`, `surgical_attempted|succeeded|fallback|edit_partial`
+  (with `latencyMs`), `history_blob|history_system`, `revert_succeeded|revert_failed`. Watch for a
+  rising `surgical_fallback`/`surgical_edit_partial` or `materialize_failed` rate.
+- **Kill switch (exact procedure):**
+  1. Remove the caller from `EXTERNAL_SURGICAL_EDIT_PILOT_KEYS/_ORGS` (or set
+     `EXTERNAL_SURGICAL_EDIT_ENABLED` unset/`false`) **first** — new edits immediately fall back to LLM
+     regeneration.
+  2. If needed, disable `EXTERNAL_MATERIALIZATION_ENABLED`/pilot next — no new programs materialize.
+  3. **History/revert stays safe for already-materialized programs regardless of the surgical flag** —
+     the dispatcher routes on `trainingSystemId`, not on the flags, so existing materialized programs
+     keep correct history/revert. No data migration is needed to roll back.
+- **Cross-instance locking limitation.** The Phase 2.6 serialization lock is **in-process only**. Under
+  Replit autoscale (multiple instances) it does not serialize across instances. For broad, multi-key
+  rollout under autoscale, add a **Postgres advisory lock** (or a shared store) for materialized
+  edit/revert first; pilot rollout on a single instance (or a low-concurrency key) is safe today.
+
 **History & revert unification (Phase 2.5).** `/program/:id/history` and `/program/:id/revert` now
 **dispatch on `trainingSystemId`** (after the ownership check, which is unchanged):
 

@@ -48,7 +48,24 @@ export {
   EXTERNAL_MATERIALIZATION_FLAG,
   isExternalSurgicalEditEnabled,
   EXTERNAL_SURGICAL_EDIT_FLAG,
+  isAnyExternalFlagPotentiallyEnabled,
+  type FlagContext,
 } from "./feature-flag";
+
+export {
+  emitExternalEvent,
+  getExternalEventCounts,
+  resetExternalEventCounts,
+  type ExternalEvent,
+} from "./metrics";
+
+export {
+  checkExternalMaterializationReadiness,
+  type ReadinessStatus,
+  type ReadinessDeps,
+} from "./readiness";
+
+export { runExternalMaterializationReadinessCheck } from "./readiness-deps";
 
 export {
   maybeApplySurgicalExternalEdit,
