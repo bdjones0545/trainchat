@@ -181,6 +181,37 @@ rollback/history unification (`system_change_log`) and transaction/concurrency h
 to later PRs (design doc §10, PR 2.5/2.6). Surgical edits still record blob snapshots in
 `external_program_versions`, same as regeneration.
 
+**Transaction & concurrency hardening (Phase 2.6).** The materialized paths are made
+concurrency-safe and fail-loud before rollout:
+
+- **Per-program serialization.** A narrow **in-process lock** keyed by program id
+  (`withExternalProgramLock`) wraps the materialized edit and revert operations, so
+  materialization, surgical edits, and reverts on the **same** program never interleave. *Limitation:*
+  the lock is **per instance** — under Replit autoscale it does not serialize across instances (same
+  class as DR-0020/DR-0038); a cross-instance guarantee (DB advisory lock / shared store) is a 2.7
+  rollout consideration.
+- **Once-only materialization.** Under the lock the link is **re-read** before materializing, so
+  concurrent edits link exactly one `trainingSystemId` and reuse it (no duplicate systems, no orphan
+  from a lost link race).
+- **Fail-loud after commit.** The surgical helper distinguishes failures **before** any relational
+  mutation (safe → fall back to regeneration) from failures **after** `applyEditPlan` has mutated the
+  system (reload/reserialize/persist). In the latter case the route returns **`500 EDIT_PARTIAL`** and
+  does **not** regenerate — regenerating would leave the blob and the training system divergent.
+- **Grouped blob writes.** The surgical version-snapshot insert + `programData` overwrite run in a
+  single `db.transaction` so they commit together. Materialized revert leaves the blob **untouched** on
+  any relational failure.
+
+**Transaction boundary (known limitation).** The relational engine calls (`applyEditPlan`,
+`restoreFromChange`, `createTrainingSystemFromProgram`) use the module-level `db`, not an injected
+transaction handle (DR-0006), so the relational mutation **cannot** share one DB transaction with the
+external blob writes without changing the first-party edit engine (out of scope). The serialization
+lock + fail-loud-after-commit provide the practical safety; a single end-to-end transaction spanning
+engine + blob is deferred and would require the engine to accept a `tx` handle.
+
+**Remaining for rollout (Phase 2.7).** Enable the flags for a pilot key, monitor drift/latency/error
+and fallback counts, then default on; consider a DB advisory lock for cross-instance serialization
+under autoscale. **Both flags remain OFF by default** until then.
+
 **History & revert unification (Phase 2.5).** `/program/:id/history` and `/program/:id/revert` now
 **dispatch on `trainingSystemId`** (after the ownership check, which is unchanged):
 

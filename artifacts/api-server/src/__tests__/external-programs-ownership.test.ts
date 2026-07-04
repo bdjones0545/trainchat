@@ -42,6 +42,7 @@ const {
   mockSurgical,
   mockSurgicalEnabled,
   mockSystemDeps,
+  mockReloadTsid,
 } = vi.hoisted(() => {
   // A fluent Drizzle chain that is itself a Promise resolving to `rows`. Every
   // builder method (.from/.leftJoin/.where/.orderBy/.limit/.values/.returning)
@@ -66,16 +67,21 @@ const {
     return chain;
   }
 
+  const mockDb: any = {
+    select: vi.fn(),
+    insert: vi.fn(),
+    update: vi.fn(),
+    // Test helper: build a chain resolving to `rows`.
+    _rows: chainResult,
+  };
+  // db.transaction(fn) runs fn with the same mock (tx === db) so grouped writes
+  // use the same insert/update spies.
+  mockDb.transaction = vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb));
+
   return {
     // Mutable caller identity injected by the mocked auth middleware.
     authState: { apiKey: null as null | { id: number; orgId: string | null } },
-    mockDb: {
-      select: vi.fn(),
-      insert: vi.fn(),
-      update: vi.fn(),
-      // Test helper: build a chain resolving to `rows`.
-      _rows: chainResult,
-    },
+    mockDb,
     mockGenerateAIResponse: vi.fn(),
     mockMaybeMaterialize: vi.fn(
       async (
@@ -98,8 +104,10 @@ const {
       async (
         _params?: unknown,
         _deps?: unknown,
-      ): Promise<{ updatedProgram: unknown; changes: string[]; coachSummary: string } | null> =>
-        null,
+      ): Promise<
+        | { ok: true; result: { updatedProgram: unknown; changes: string[]; coachSummary: string } }
+        | { ok: false; committed: boolean; stage: string }
+      > => ({ ok: false, committed: false, stage: "interpret" }),
     ),
     mockSurgicalEnabled: vi.fn((): boolean => false),
     // Phase 2.5 relational history/revert collaborators (injected via the
@@ -111,6 +119,8 @@ const {
       loadFullSystem: vi.fn(async () => ({ id: 909 }) as any),
       serializeToProgram: vi.fn(() => ({ programName: "Restored", days: [] }) as any),
     },
+    // Phase 2.6 fresh-read of the trainingSystemId under the lock.
+    mockReloadTsid: vi.fn(async (): Promise<number | null> => null),
   };
 });
 
@@ -168,6 +178,13 @@ vi.mock("../lib/external-materialization", () => ({
 // the mocked db and the relational path uses controllable fakes.
 vi.mock("../lib/external-materialization/history-revert-deps", () => ({
   createHistoryRevertSystemDeps: () => mockSystemDeps,
+}));
+
+// Phase 2.6: mock the fresh-read helper (which imports @workspace/db) so the
+// lock's re-read is controllable without perturbing the select sequence. The
+// serialization lock itself is imported real (transparent — just serializes).
+vi.mock("../lib/external-materialization/program-store", () => ({
+  reloadExternalTrainingSystemId: mockReloadTsid,
 }));
 
 vi.mock("../lib/exercise-service", () => ({
@@ -274,13 +291,15 @@ beforeEach(() => {
     reason: "flag_off",
   });
   mockSurgicalEnabled.mockReturnValue(false);
-  mockSurgical.mockResolvedValue(null);
+  mockSurgical.mockResolvedValue({ ok: false, committed: false, stage: "interpret" });
   // resetAllMocks clears the vi.fn impls on mockSystemDeps — re-seed defaults.
   mockSystemDeps.resolveServiceUserId.mockResolvedValue(99);
   mockSystemDeps.readChangeHistory.mockResolvedValue([]);
   mockSystemDeps.restoreFromChange.mockResolvedValue({ changeLogId: 4242 });
   mockSystemDeps.loadFullSystem.mockResolvedValue({ id: 909 });
   mockSystemDeps.serializeToProgram.mockReturnValue({ programName: "Restored", days: [] });
+  mockReloadTsid.mockResolvedValue(null);
+  mockDb.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb));
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -940,9 +959,12 @@ describe("external programs — surgical edit wiring (Phase 2.4)", () => {
     programExists();
     enableSurgicalWithSystem();
     mockSurgical.mockResolvedValue({
-      updatedProgram: SURGICAL_PROGRAM,
-      changes: ["set Squat 3→2"],
-      coachSummary: "Reduced Friday volume.",
+      ok: true,
+      result: {
+        updatedProgram: SURGICAL_PROGRAM,
+        changes: ["set Squat 3→2"],
+        coachSummary: "Reduced Friday volume.",
+      },
     });
     authState.apiKey = KEY_A;
 
@@ -968,10 +990,10 @@ describe("external programs — surgical edit wiring (Phase 2.4)", () => {
     expect(mockDb.update).toHaveBeenCalledTimes(1);
   });
 
-  it("SURG-R04: surgical failure → falls back to regeneration", async () => {
+  it("SURG-R04: surgical failure BEFORE relational commit → falls back to regeneration", async () => {
     programExists();
     enableSurgicalWithSystem();
-    mockSurgical.mockResolvedValue(null); // surgical failed
+    mockSurgical.mockResolvedValue({ ok: false, committed: false, stage: "interpret" });
     authState.apiKey = KEY_A;
 
     const res = await supertest(await makeApp())
@@ -982,6 +1004,24 @@ describe("external programs — surgical edit wiring (Phase 2.4)", () => {
     expect(res.status).toBe(200);
     expect(mockSurgical).toHaveBeenCalledTimes(1);
     expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1); // regeneration fallback
+  });
+
+  it("SURG-R06: surgical failure AFTER relational commit → 500 EDIT_PARTIAL, NO regeneration", async () => {
+    programExists();
+    enableSurgicalWithSystem();
+    mockSurgical.mockResolvedValue({ ok: false, committed: true, stage: "serialize" });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe("EDIT_PARTIAL");
+    // Must NOT fall back to regeneration (would diverge blob vs system).
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
   it("SURG-R05: cross-tenant edit → 404; neither bridge nor surgical attempted", async () => {

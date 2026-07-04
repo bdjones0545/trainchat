@@ -13,6 +13,7 @@ import {
   buildSurgicalEditMessage,
   type SurgicalEditDeps,
 } from "../external-materialization/surgical";
+import { materializeOnce } from "../external-materialization/serialization";
 
 const PARAMS = { trainingSystemId: 909, instruction: "reduce Friday volume", scope: "week" };
 
@@ -47,12 +48,15 @@ describe("buildSurgicalEditMessage", () => {
 describe("maybeApplySurgicalExternalEdit", () => {
   it("SURG-01: success runs interpret + apply and returns the reserialized program", async () => {
     const t = makeDeps();
-    const result = await maybeApplySurgicalExternalEdit(PARAMS, t.deps);
+    const outcome = await maybeApplySurgicalExternalEdit(PARAMS, t.deps);
 
-    expect(result).toEqual({
-      updatedProgram: UPDATED_PROGRAM,
-      changes: ["set Squat 3→2"],
-      coachSummary: "Reduced Friday volume",
+    expect(outcome).toEqual({
+      ok: true,
+      result: {
+        updatedProgram: UPDATED_PROGRAM,
+        changes: ["set Squat 3→2"],
+        coachSummary: "Reduced Friday volume",
+      },
     });
     expect(t.interpretEditRequest).toHaveBeenCalledWith("reduce Friday volume (scope: week)", "SYSTEM CONTEXT");
     expect(t.applyEditPlan).toHaveBeenCalledWith(expect.anything(), undefined, 909);
@@ -60,14 +64,13 @@ describe("maybeApplySurgicalExternalEdit", () => {
     expect(t.onError).not.toHaveBeenCalled();
   });
 
-  it("SURG-02: no edit plan → null, apply not called", async () => {
+  it("SURG-02: no edit plan → not ok, NOT committed (safe fallback), apply not called", async () => {
     const t = makeDeps({ interpretEditRequest: vi.fn(async () => null) });
-    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toBeNull();
+    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toEqual({ ok: false, committed: false, stage: "interpret" });
     expect(t.applyEditPlan).not.toHaveBeenCalled();
-    expect(t.onError).toHaveBeenCalled();
   });
 
-  it("SURG-03: applyEditPlan throws → null (no throw), serialize not called", async () => {
+  it("SURG-03: applyEditPlan throws → committed (fail loud), serialize not called", async () => {
     const serializeToProgram = vi.fn(() => UPDATED_PROGRAM as any);
     const t = makeDeps({
       applyEditPlan: vi.fn(async () => {
@@ -75,29 +78,65 @@ describe("maybeApplySurgicalExternalEdit", () => {
       }),
       serializeToProgram,
     });
-    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toBeNull();
+    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toEqual({ ok: false, committed: true, stage: "apply" });
     expect(serializeToProgram).not.toHaveBeenCalled();
-    expect(t.onError).toHaveBeenCalled();
   });
 
-  it("SURG-04: zero changes applied → null (fall back)", async () => {
+  it("SURG-04: zero changes applied → not committed (safe fallback)", async () => {
     const t = makeDeps({
       applyEditPlan: vi.fn(async () => ({ appliedCount: 0, changeSummary: "", details: [] }) as any),
     });
-    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toBeNull();
-    expect(t.onError).toHaveBeenCalled();
+    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toEqual({ ok: false, committed: false, stage: "apply_noop" });
   });
 
-  it("SURG-05: reserialization returns null → null", async () => {
+  it("SURG-05: reserialize null AFTER apply → committed (fail loud, no divergent fallback)", async () => {
     const t = makeDeps({ serializeToProgram: vi.fn(() => null) });
-    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toBeNull();
-    expect(t.onError).toHaveBeenCalled();
+    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toEqual({ ok: false, committed: true, stage: "serialize" });
   });
 
-  it("SURG-06: missing system on load → null, interpret not called", async () => {
+  it("SURG-06: missing system on load → not committed, interpret not called", async () => {
     const interpretEditRequest = vi.fn(async () => ({ changes: [{}] }) as any);
     const t = makeDeps({ loadFullSystem: vi.fn(async () => null as any), interpretEditRequest });
-    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toBeNull();
+    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toEqual({ ok: false, committed: false, stage: "load" });
     expect(interpretEditRequest).not.toHaveBeenCalled();
+  });
+
+  it("SURG-07: reload fails AFTER apply → committed (fail loud)", async () => {
+    let call = 0;
+    const t = makeDeps({
+      loadFullSystem: vi.fn(async () => {
+        // first (pre) load ok; second (post) load returns null
+        return ++call === 1 ? ({ id: 909 } as any) : (null as any);
+      }),
+    });
+    expect(await maybeApplySurgicalExternalEdit(PARAMS, t.deps)).toEqual({ ok: false, committed: true, stage: "reload" });
+  });
+});
+
+describe("materializeOnce", () => {
+  it("MO-01: concurrent calls materialize once and both get the same id", async () => {
+    let linked: number | null = null;
+    const materialize = vi.fn(async () => {
+      await new Promise((r) => setTimeout(r, 5));
+      linked = 909;
+      return linked;
+    });
+    const reload = vi.fn(async () => linked);
+
+    const [a, b] = await Promise.all([
+      materializeOnce(100, { reload, materialize }),
+      materializeOnce(100, { reload, materialize }),
+    ]);
+
+    expect(a).toBe(909);
+    expect(b).toBe(909);
+    expect(materialize).toHaveBeenCalledTimes(1); // only one link
+  });
+
+  it("MO-02: already-linked program reuses the id without materializing", async () => {
+    const materialize = vi.fn(async () => 111);
+    const reload = vi.fn(async () => 42);
+    expect(await materializeOnce(100, { reload, materialize })).toBe(42);
+    expect(materialize).not.toHaveBeenCalled();
   });
 });

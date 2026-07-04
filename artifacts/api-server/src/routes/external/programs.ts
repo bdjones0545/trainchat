@@ -43,6 +43,8 @@ import {
   type HistoryRevertDeps,
 } from "../../lib/external-materialization/history-revert";
 import { createHistoryRevertSystemDeps } from "../../lib/external-materialization/history-revert-deps";
+import { withExternalProgramLock } from "../../lib/external-materialization/serialization";
+import { reloadExternalTrainingSystemId } from "../../lib/external-materialization/program-store";
 import { logger } from "../../lib/logger";
 
 const router = Router();
@@ -515,103 +517,145 @@ router.post(
       return;
     }
 
-    // ── Phase 2.3 bridge: lazy materialization (runs when EITHER flag is on) ──
-    // Best-effort side effect after ownership. The surgical path (2.4) forces
-    // materialization so it has a training system to operate on. Never changes
-    // the edit by itself; failures are logged, not surfaced.
-    const surgicalEnabled = isExternalSurgicalEditEnabled();
-    const bridgeResult = await maybeMaterializeOnEdit(
-      {
-        id: storedProgram.id,
-        programData: storedProgram.programData,
-        trainingSystemId: storedProgram.trainingSystemId,
-      },
-      { apiKeyId: req.apiKeyId ?? null, orgId: req.apiKey?.orgId ?? null },
-      {
-        enabled: isExternalMaterializationEnabled() || surgicalEnabled,
-        adapterDeps: createDefaultRoundTripDeps(() =>
-          resolveExternalServiceUserId(storedProgram!.id),
-        ),
-        link: async (pid, systemId) => {
-          await db
-            .update(externalProgramsTable)
-            .set({ trainingSystemId: systemId })
-            .where(eq(externalProgramsTable.id, pid));
-        },
-        focusMode:
-          (storedProgram.requestContext as { focusMode?: string } | null)?.focusMode ??
-          null,
-        onError: (err) =>
-          logger.warn(
-            { err, programId: storedProgram!.id },
-            "external-programs: lazy materialization failed — continuing with blob edit path",
-          ),
-      },
-    );
-    const trainingSystemId =
-      bridgeResult.trainingSystemId ?? storedProgram.trainingSystemId ?? null;
-
     const currentProgram = storedProgram.programData as unknown as ProgramStructure;
+    const surgicalEnabled = isExternalSurgicalEditEnabled();
 
-    // ── Phase 2.4: surgical edit path (flag-gated; falls back to regeneration) ──
-    // When the flag is on AND a training system exists, run the internal
-    // surgical pipeline (interpretEditRequest → applyEditPlan → reserialize).
-    // On ANY failure the helper returns null and we fall through to the LLM
-    // regeneration path below. Persistence mirrors the existing 1C audit
-    // pattern (version snapshot → programData overwrite → same response shape).
-    if (surgicalEnabled && trainingSystemId != null) {
-      const surgical = await maybeApplySurgicalExternalEdit(
+    // ── Phase 2.6: serialize all materialized work for THIS program (per
+    //    instance) so concurrent materialization / surgical edits never
+    //    interleave. Materialization is idempotent (re-read the link under the
+    //    lock). The surgical relational mutation and the blob writes cannot share
+    //    one DB transaction because the engine uses the module db (DR-0006), so
+    //    on a failure AFTER the relational mutation commits we FAIL LOUD rather
+    //    than fall back to regeneration (which would diverge blob vs system).
+    const editOutcome = await withExternalProgramLock(programId, async (): Promise<
+      | { kind: "surgical_ok"; updatedProgram: unknown; changes: string[]; coachSummary: string; versionId: number | null; versionCreatedAt: Date | null }
+      | { kind: "surgical_partial" }
+      | { kind: "fallback" }
+    > => {
+      // Phase 2.3 bridge — best-effort, runs when EITHER flag is on. Re-read the
+      // link under the lock first for concurrency-safe, once-only materialization.
+      const freshTsid = await reloadExternalTrainingSystemId(programId);
+      const bridge = await maybeMaterializeOnEdit(
+        {
+          id: storedProgram!.id,
+          programData: storedProgram!.programData,
+          trainingSystemId: freshTsid ?? storedProgram!.trainingSystemId,
+        },
+        { apiKeyId: req.apiKeyId ?? null, orgId: req.apiKey?.orgId ?? null },
+        {
+          enabled: isExternalMaterializationEnabled() || surgicalEnabled,
+          adapterDeps: createDefaultRoundTripDeps(() =>
+            resolveExternalServiceUserId(storedProgram!.id),
+          ),
+          link: async (pid, systemId) => {
+            await db
+              .update(externalProgramsTable)
+              .set({ trainingSystemId: systemId })
+              .where(eq(externalProgramsTable.id, pid));
+          },
+          focusMode:
+            (storedProgram!.requestContext as { focusMode?: string } | null)?.focusMode ?? null,
+          onError: (err) =>
+            logger.warn(
+              { err, programId: storedProgram!.id },
+              "external-programs: lazy materialization failed — continuing with blob edit path",
+            ),
+        },
+      );
+      const trainingSystemId =
+        bridge.trainingSystemId ?? freshTsid ?? storedProgram!.trainingSystemId ?? null;
+
+      if (!surgicalEnabled || trainingSystemId == null) {
+        return { kind: "fallback" };
+      }
+
+      const outcome = await maybeApplySurgicalExternalEdit(
         { trainingSystemId, instruction, scope: scope ?? null },
         createDefaultSurgicalDeps((err, stage) =>
           logger.warn(
             { err, stage, programId, trainingSystemId },
-            "external-programs: surgical edit failed — falling back to regeneration",
+            "external-programs: surgical edit step failed",
           ),
         ),
       );
-      if (surgical) {
-        const changes = surgical.changes;
-        const [version] = await db
-          .insert(externalProgramVersionsTable)
-          .values({
-            externalProgramId: programId,
-            apiKeyId: req.apiKeyId ?? null,
-            programSnapshot: currentProgram as unknown as Record<string, unknown>,
-            type: "edit",
-            instruction,
-            scope: scope ?? null,
-            changeSummary: changes as unknown as Record<string, unknown>,
-          })
-          .returning();
 
-        await db
-          .update(externalProgramsTable)
-          .set({
-            programData: surgical.updatedProgram as unknown as Record<string, unknown>,
-          })
-          .where(eq(externalProgramsTable.id, programId));
-
-        res.json(
-          buildStandardResponse({
-            programId,
-            updatedProgram: surgical.updatedProgram,
-            changes,
-            coachSummary: surgical.coachSummary,
-            version: version?.id ?? null,
-            changeReceipt: {
-              versionId: version?.id ?? null,
-              type: "edit" as const,
+      if (outcome.ok) {
+        const changes = outcome.result.changes;
+        // Group the two blob writes (version snapshot + programData overwrite)
+        // in one transaction so they commit together.
+        let version: { id: number; createdAt: Date } | undefined;
+        await db.transaction(async (tx) => {
+          const [v] = await tx
+            .insert(externalProgramVersionsTable)
+            .values({
+              externalProgramId: programId,
+              apiKeyId: req.apiKeyId ?? null,
+              programSnapshot: currentProgram as unknown as Record<string, unknown>,
+              type: "edit",
               instruction,
               scope: scope ?? null,
-              changes,
-              snapshotAt: version?.createdAt ?? null,
-            },
-          }),
-        );
-        return;
+              changeSummary: changes as unknown as Record<string, unknown>,
+            })
+            .returning();
+          version = v;
+          await tx
+            .update(externalProgramsTable)
+            .set({ programData: outcome.result.updatedProgram as unknown as Record<string, unknown> })
+            .where(eq(externalProgramsTable.id, programId));
+        });
+        return {
+          kind: "surgical_ok",
+          updatedProgram: outcome.result.updatedProgram,
+          changes,
+          coachSummary: outcome.result.coachSummary,
+          versionId: version?.id ?? null,
+          versionCreatedAt: version?.createdAt ?? null,
+        };
       }
-      // surgical returned null → fall through to the regeneration path below.
+
+      // committed === true → relational mutation committed but couldn't finalize
+      // the blob → fail loud (do NOT regenerate; that would diverge).
+      if (outcome.committed) return { kind: "surgical_partial" };
+
+      // committed === false → nothing changed relationally → safe fallback.
+      return { kind: "fallback" };
+    });
+
+    if (editOutcome.kind === "surgical_ok") {
+      res.json(
+        buildStandardResponse({
+          programId,
+          updatedProgram: editOutcome.updatedProgram,
+          changes: editOutcome.changes,
+          coachSummary: editOutcome.coachSummary,
+          version: editOutcome.versionId,
+          changeReceipt: {
+            versionId: editOutcome.versionId,
+            type: "edit" as const,
+            instruction,
+            scope: scope ?? null,
+            changes: editOutcome.changes,
+            snapshotAt: editOutcome.versionCreatedAt,
+          },
+        }),
+      );
+      return;
     }
+
+    if (editOutcome.kind === "surgical_partial") {
+      res.status(500).json({
+        success: false,
+        data: null,
+        meta: null,
+        error: {
+          code: "EDIT_PARTIAL",
+          message:
+            "The edit was applied to the program but could not be finalized. Please retry.",
+        },
+      });
+      return;
+    }
+    // editOutcome.kind === "fallback" → continue to the regeneration path below.
 
     const userId = buildSystemUserId(req.apiKey);
     const editMessage = buildEditMessage({ programId, instruction, scope }, currentProgram);
@@ -1215,10 +1259,14 @@ router.post(
       // snapshot (unchanged); materialized programs restore through the
       // relational path and reserialize the blob. On any relational failure the
       // blob is left unchanged (no corruption).
-      const outcome = await revertExternalProgramVersion(
-        { id: owned.id, programData: owned.programData, trainingSystemId: owned.trainingSystemId },
-        { versionId, apiKeyId: req.apiKeyId ?? null },
-        buildHistoryRevertDeps(),
+      // Phase 2.6: serialize per program so revert never interleaves with a
+      // concurrent edit/materialization on the same program (per instance).
+      const outcome = await withExternalProgramLock(programId, () =>
+        revertExternalProgramVersion(
+          { id: owned!.id, programData: owned!.programData, trainingSystemId: owned!.trainingSystemId },
+          { versionId, apiKeyId: req.apiKeyId ?? null },
+          buildHistoryRevertDeps(),
+        ),
       );
 
       if (!outcome.ok) {
