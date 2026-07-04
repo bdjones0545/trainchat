@@ -25,6 +25,12 @@ import {
   auditExerciseVariantSelection,
 } from "./strength-week-expression";
 
+// Transaction handle for generation persistence (same pattern as
+// anonymousMerge.ts). All reads, LLM output handling, and exercise selection
+// happen BEFORE the transaction opens; only hierarchy writes run inside it,
+// so a mid-write failure rolls back the whole generated program (DR-0006).
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type ExerciseCategory =
@@ -950,66 +956,26 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
   const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
   const systemName = getSystemName(goal, trainingStyle, equipment);
 
-  const [system] = await db.insert(trainingSystems).values({
-    userId,
-    name: systemName,
-    overarchingGoal: profile?.trainingGoal ?? "Build fitness and improve health",
-    trainingStyle: profile?.trainingStyle ?? "Balanced strength and conditioning",
-    weeklyFrequency: daysPerWeek,
-    equipmentAccess: profile?.equipmentAccess ?? "Full gym",
-    constraints: profile?.injuries ?? null,
-    status: "active",
-  }).returning();
-
-  const [phase] = await db.insert(trainingPhases).values({
-    trainingSystemId: system.id,
-    name: phaseConfig.phaseName,
-    goal: phaseConfig.phaseGoal,
-    emphasis: phaseConfig.emphasis,
-    weekCount: 4,
-    orderIndex: 0,
-    status: "current",
-    notes: null,
-  }).returning();
-
-  await db.update(trainingSystems).set({ currentPhaseId: phase.id }).where(eq(trainingSystems.id, system.id));
-
   const splitDays = splitMaps[Math.min(daysPerWeek, 6)] ?? splitMaps[3];
 
+  // ── Pre-select all exercises BEFORE opening the transaction ──
+  // selectSessionExercises reads the exercise library; the write transaction
+  // must not be held open across those reads.
+  //
+  // Intelligent coach selection from the 620-exercise DB: each week gets the
+  // correct week-number scaling (volume, intensity, deload). The coach engine
+  // applies NSCA hierarchy, goal-matched prescriptions, equipment filtering,
+  // and injury-aware selection automatically.
+  const plannedExercises: ReturnType<typeof sortExercisesByCategory>[][] = []; // [weekIdx][sessionIdx]
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
     const weekConfig = phaseConfig.weekConfigs[weekIdx];
     const weekNumber = weekIdx + 1;
     const isDeload = weekConfig.volumeLevel === "deload";
-
-    const [week] = await db.insert(trainingWeeks).values({
-      trainingPhaseId: phase.id,
-      weekNumber,
-      label: weekConfig.label,
-      focus: weekConfig.focus,
-      volumeLevel: weekConfig.volumeLevel,
-      status: weekIdx === 0 ? "current" : "upcoming",
-      orderIndex: weekIdx,
-    }).returning();
+    const weekPlans: ReturnType<typeof sortExercisesByCategory>[] = [];
 
     for (let sessionIdx = 0; sessionIdx < splitDays.length; sessionIdx++) {
       const splitDay = splitDays[sessionIdx];
 
-      const [session] = await db.insert(trainingSessions).values({
-        trainingWeekId: week.id,
-        label: splitDay.label,
-        sessionType: splitDay.sessionType,
-        dayOfWeek: splitDay.dayOfWeek,
-        emphasis: splitDay.emphasis,
-        warmupNotes: getWarmupNotes(splitDay.sessionType, splitDay.emphasis),
-        coachingNotes: getCoachingNotes(goal, weekIdx, splitDay.label),
-        isRestDay: false,
-        orderIndex: sessionIdx,
-      }).returning();
-
-      // ── Intelligent coach selection from the 620-exercise DB ──
-      // Each week gets the correct week-number scaling (volume, intensity, deload).
-      // The coach engine applies NSCA hierarchy, goal-matched prescriptions,
-      // equipment filtering, and injury-aware selection automatically.
       const coachExercises = await selectSessionExercises({
         sessionType: splitDay.coachSessionType,
         goal: coachGoal,
@@ -1034,27 +1000,90 @@ export async function initializeTrainingSystem(userId: number): Promise<typeof t
           "accessory";
         return { ...ex, category };
       });
-      const orderedExercises = sortExercisesByCategory(mappedExercises);
-
-      for (let exIdx = 0; exIdx < orderedExercises.length; exIdx++) {
-        const ex = orderedExercises[exIdx];
-
-        await db.insert(sessionExercises).values({
-          trainingSessionId: session.id,
-          name: ex.name,
-          category: ex.category,
-          sets: ex.sets,
-          reps: ex.reps,
-          rest: ex.rest,
-          tempo: null,
-          notes: ex.notes,
-          orderIndex: exIdx,
-        });
-      }
+      weekPlans.push(sortExercisesByCategory(mappedExercises));
     }
+    plannedExercises.push(weekPlans);
   }
 
-  return system;
+  // ── Persist the full hierarchy atomically ──
+  // If any insert fails, the whole generated system rolls back — never a
+  // partial system/phase/week/session/exercise tree.
+  return db.transaction(async (tx: Tx) => {
+    const [system] = await tx.insert(trainingSystems).values({
+      userId,
+      name: systemName,
+      overarchingGoal: profile?.trainingGoal ?? "Build fitness and improve health",
+      trainingStyle: profile?.trainingStyle ?? "Balanced strength and conditioning",
+      weeklyFrequency: daysPerWeek,
+      equipmentAccess: profile?.equipmentAccess ?? "Full gym",
+      constraints: profile?.injuries ?? null,
+      status: "active",
+    }).returning();
+
+    const [phase] = await tx.insert(trainingPhases).values({
+      trainingSystemId: system.id,
+      name: phaseConfig.phaseName,
+      goal: phaseConfig.phaseGoal,
+      emphasis: phaseConfig.emphasis,
+      weekCount: 4,
+      orderIndex: 0,
+      status: "current",
+      notes: null,
+    }).returning();
+
+    await tx.update(trainingSystems).set({ currentPhaseId: phase.id }).where(eq(trainingSystems.id, system.id));
+
+    for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
+      const weekConfig = phaseConfig.weekConfigs[weekIdx];
+      const weekNumber = weekIdx + 1;
+
+      const [week] = await tx.insert(trainingWeeks).values({
+        trainingPhaseId: phase.id,
+        weekNumber,
+        label: weekConfig.label,
+        focus: weekConfig.focus,
+        volumeLevel: weekConfig.volumeLevel,
+        status: weekIdx === 0 ? "current" : "upcoming",
+        orderIndex: weekIdx,
+      }).returning();
+
+      for (let sessionIdx = 0; sessionIdx < splitDays.length; sessionIdx++) {
+        const splitDay = splitDays[sessionIdx];
+
+        const [session] = await tx.insert(trainingSessions).values({
+          trainingWeekId: week.id,
+          label: splitDay.label,
+          sessionType: splitDay.sessionType,
+          dayOfWeek: splitDay.dayOfWeek,
+          emphasis: splitDay.emphasis,
+          warmupNotes: getWarmupNotes(splitDay.sessionType, splitDay.emphasis),
+          coachingNotes: getCoachingNotes(goal, weekIdx, splitDay.label),
+          isRestDay: false,
+          orderIndex: sessionIdx,
+        }).returning();
+
+        const orderedExercises = plannedExercises[weekIdx][sessionIdx];
+
+        for (let exIdx = 0; exIdx < orderedExercises.length; exIdx++) {
+          const ex = orderedExercises[exIdx];
+
+          await tx.insert(sessionExercises).values({
+            trainingSessionId: session.id,
+            name: ex.name,
+            category: ex.category,
+            sets: ex.sets,
+            reps: ex.reps,
+            rest: ex.rest,
+            tempo: null,
+            notes: ex.notes,
+            orderIndex: exIdx,
+          });
+        }
+      }
+    }
+
+    return system;
+  });
 }
 
 // ─── Strength Exercise Variant Map — LAST-RESORT FALLBACK ONLY ───────────────
@@ -1746,8 +1775,29 @@ export async function createTrainingSystemFromProgram(
     (s) => ((s.metadata as any)?.focusMode ?? "strength") === resolvedFocusMode
   );
 
+  const inferredGoal = inferGoalFromProgram(program);
+  // Speed and mobility programs must use their own phase configs — never default to the strength fallback.
+  const goal = resolvedFocusMode === "speed" ? "speed"
+             : resolvedFocusMode === "mobility" ? "mobility"
+             : inferredGoal;
+  const daysPerWeek = program.days.length;
+  const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
+
+  const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
+  const isStrength = resolvedFocusMode === "strength" || goal === "strength";
+
+  // Track per-week exercise lists for variation validation (strength builds only)
+  const weekExerciseListsByDay: ChatProgramExercise[][][] = []; // [weekIdx][dayIdx] = exercises
+
+  // ── Persist atomically: archive-old + full hierarchy in one transaction ──
+  // Archiving the previous same-focus system is included so a failed build
+  // never leaves the user with their old program archived and no new one.
+  // All compute inside the loop (week expression, classification, sorting) is
+  // pure and synchronous — no LLM call or external I/O runs inside the tx.
+  const system = await db.transaction(async (tx: Tx) => {
+
   for (const s of sameFocusSystems) {
-    await db
+    await tx
       .update(trainingSystems)
       .set({ status: "archived" })
       .where(eq(trainingSystems.id, s.id));
@@ -1758,16 +1808,8 @@ export async function createTrainingSystemFromProgram(
     "[TrainingSystem] createTrainingSystemFromProgram — archived same-focus systems"
   );
 
-  const inferredGoal = inferGoalFromProgram(program);
-  // Speed and mobility programs must use their own phase configs — never default to the strength fallback.
-  const goal = resolvedFocusMode === "speed" ? "speed"
-             : resolvedFocusMode === "mobility" ? "mobility"
-             : inferredGoal;
-  const daysPerWeek = program.days.length;
-  const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
-
   // Create the training system
-  const [system] = await db.insert(trainingSystems).values({
+  const [system] = await tx.insert(trainingSystems).values({
     userId,
     conversationId: conversationId ?? null,
     name: program.programName,
@@ -1796,7 +1838,7 @@ export async function createTrainingSystemFromProgram(
   logger.info({ systemId: system.id }, "[TrainingSystem] system created");
 
   // Create Phase 1
-  const [phase] = await db.insert(trainingPhases).values({
+  const [phase] = await tx.insert(trainingPhases).values({
     trainingSystemId: system.id,
     name: phaseConfig.phaseName,
     goal: phaseConfig.phaseGoal,
@@ -1808,17 +1850,11 @@ export async function createTrainingSystemFromProgram(
   }).returning();
 
   // Link system → phase
-  await db.update(trainingSystems)
+  await tx.update(trainingSystems)
     .set({ currentPhaseId: phase.id })
     .where(eq(trainingSystems.id, system.id));
 
   logger.info({ phaseId: phase.id }, "[TrainingSystem] phase created");
-
-  const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
-  const isStrength = resolvedFocusMode === "strength" || goal === "strength";
-
-  // Track per-week exercise lists for variation validation (strength builds only)
-  const weekExerciseListsByDay: ChatProgramExercise[][][] = []; // [weekIdx][dayIdx] = exercises
 
   // Create 4 weeks
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
@@ -1826,7 +1862,7 @@ export async function createTrainingSystemFromProgram(
     const weekNumber = weekIdx + 1;
     const isDeload = weekConfig.volumeLevel === "deload";
 
-    const [week] = await db.insert(trainingWeeks).values({
+    const [week] = await tx.insert(trainingWeeks).values({
       trainingPhaseId: phase.id,
       weekNumber,
       label: weekConfig.label,
@@ -1853,7 +1889,7 @@ export async function createTrainingSystemFromProgram(
         ? getCoachingNotes(goal, weekIdx, day.name)
         : (day.notes ? day.notes : getCoachingNotes(goal, weekIdx, day.name));
 
-      const [session] = await db.insert(trainingSessions).values({
+      const [session] = await tx.insert(trainingSessions).values({
         trainingWeekId: week.id,
         label: day.name,
         sessionType,
@@ -1884,7 +1920,7 @@ export async function createTrainingSystemFromProgram(
       for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
         const ex = exercises[exIdx];
 
-        await db.insert(sessionExercises).values({
+        await tx.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
           category: ex.category,
@@ -1900,6 +1936,9 @@ export async function createTrainingSystemFromProgram(
 
     weekExerciseListsByDay.push(weekDayExercises);
   }
+
+  return system;
+  });
 
   logger.info({ systemId: system.id, userId }, "[TrainingSystem] createTrainingSystemFromProgram — complete");
 
@@ -1999,8 +2038,22 @@ export async function upsertTrainingSystemFromProgram(
   const daysPerWeek = program.days.length;
   const phaseConfig = buildPhaseConfig(goal, daysPerWeek);
 
+  const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
+  const isStrengthUpsert = resolvedFocusMode === "strength" || goal === "strength";
+
+  // Track per-week exercise lists for variation validation (strength builds only)
+  const weekExerciseListsByDayUpsert: ChatProgramExercise[][][] = []; // [weekIdx][dayIdx] = exercises
+
+  // ── Update in place atomically ──
+  // The delete-existing-phases + recreate sequence is the most dangerous write
+  // path in generation: a failure after the delete used to destroy the user's
+  // program. Inside one transaction, any failure rolls back to the pre-edit
+  // state. All compute in the loop is pure/synchronous — no LLM call or
+  // external I/O runs inside the tx.
+  await db.transaction(async (tx: Tx) => {
+
   // Update system-level metadata (goal/style may have changed)
-  await db
+  await tx
     .update(trainingSystems)
     .set({
       name: program.programName,
@@ -2026,17 +2079,17 @@ export async function upsertTrainingSystemFromProgram(
     .where(eq(trainingSystems.id, existingSystem.id));
 
   // Delete all existing phases — cascade removes weeks → sessions → exercises
-  const existingPhases = await db
+  const existingPhases = await tx
     .select({ id: trainingPhases.id })
     .from(trainingPhases)
     .where(eq(trainingPhases.trainingSystemId, existingSystem.id));
 
   for (const phase of existingPhases) {
-    await db.delete(trainingPhases).where(eq(trainingPhases.id, phase.id));
+    await tx.delete(trainingPhases).where(eq(trainingPhases.id, phase.id));
   }
 
   // Recreate Phase 1 with the new program
-  const [phase] = await db.insert(trainingPhases).values({
+  const [phase] = await tx.insert(trainingPhases).values({
     trainingSystemId: existingSystem.id,
     name: phaseConfig.phaseName,
     goal: phaseConfig.phaseGoal,
@@ -2048,16 +2101,10 @@ export async function upsertTrainingSystemFromProgram(
   }).returning();
 
   // Link system → phase
-  await db
+  await tx
     .update(trainingSystems)
     .set({ currentPhaseId: phase.id })
     .where(eq(trainingSystems.id, existingSystem.id));
-
-  const dayOfWeekMap = assignDaysOfWeek(daysPerWeek);
-  const isStrengthUpsert = resolvedFocusMode === "strength" || goal === "strength";
-
-  // Track per-week exercise lists for variation validation (strength builds only)
-  const weekExerciseListsByDayUpsert: ChatProgramExercise[][][] = []; // [weekIdx][dayIdx] = exercises
 
   // Recreate 4 weeks of sessions and exercises
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
@@ -2065,7 +2112,7 @@ export async function upsertTrainingSystemFromProgram(
     const weekNumber = weekIdx + 1;
     const isDeload = weekConfig.volumeLevel === "deload";
 
-    const [week] = await db.insert(trainingWeeks).values({
+    const [week] = await tx.insert(trainingWeeks).values({
       trainingPhaseId: phase.id,
       weekNumber,
       label: weekConfig.label,
@@ -2088,7 +2135,7 @@ export async function upsertTrainingSystemFromProgram(
         ? getCoachingNotes(goal, weekIdx, day.name)
         : (day.notes ? day.notes : getCoachingNotes(goal, weekIdx, day.name));
 
-      const [session] = await db.insert(trainingSessions).values({
+      const [session] = await tx.insert(trainingSessions).values({
         trainingWeekId: week.id,
         label: day.name,
         sessionType,
@@ -2119,7 +2166,7 @@ export async function upsertTrainingSystemFromProgram(
       for (let exIdx = 0; exIdx < exercises.length; exIdx++) {
         const ex = exercises[exIdx];
 
-        await db.insert(sessionExercises).values({
+        await tx.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
           category: ex.category,
@@ -2135,6 +2182,8 @@ export async function upsertTrainingSystemFromProgram(
 
     weekExerciseListsByDayUpsert.push(weekDayExercisesUpsert);
   }
+
+  });
 
   // ── Variation audit for strength builds ──────────────────────────────────
   if (isStrengthUpsert && weekExerciseListsByDayUpsert.length === 4) {
@@ -2550,11 +2599,9 @@ export async function generateContinuationPhase(
   const previousPhase = currentPhase ?? lastCompletedPhase;
   if (!previousPhase) throw new Error("No existing phase to continue from");
 
-  // Mark current phase and all its weeks as completed
-  if (currentPhase && currentPhase.status === "current") {
-    await db.update(trainingWeeks).set({ status: "completed" }).where(eq(trainingWeeks.trainingPhaseId, currentPhase.id));
-    await db.update(trainingPhases).set({ status: "completed" }).where(eq(trainingPhases.id, currentPhase.id));
-  }
+  // NOTE: marking the current phase/weeks completed now happens inside the
+  // persistence transaction below — a failed continuation build must not
+  // leave the user with their old phase closed out and no new phase.
 
   // Detect focus mode from system metadata to use the correct block chain
   const systemFocusMode = (system.metadata as any)?.focusMode ?? "strength";
@@ -2683,7 +2730,60 @@ export async function generateContinuationPhase(
     : (CONTINUATION_BLOCK_CONFIGS[nextBlockType] ?? CONTINUATION_BLOCK_CONFIGS["FOUNDATION_ACCUMULATION"]);
   const blockChainIndex = allPhases.length;
 
-  const [newPhase] = await db.insert(trainingPhases).values({
+  const splitDays = splitMaps[Math.min(daysPerWeek, 6)] ?? splitMaps[3];
+
+  // ── Pre-select all exercises BEFORE opening the transaction ──
+  // selectSessionExercises reads the exercise library; the write transaction
+  // must not be held open across those reads.
+  const plannedExercises: ReturnType<typeof sortExercisesByCategory>[][] = []; // [weekIdx][sessionIdx]
+  for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
+    const weekConfig = nextBlockConfig.weekConfigs[weekIdx];
+    const weekNumber = weekIdx + 1;
+    const isDeload = weekConfig.volumeLevel === "deload" || weekConfig.volumeLevel === "low";
+    const weekPlans: ReturnType<typeof sortExercisesByCategory>[] = [];
+
+    for (let sessionIdx = 0; sessionIdx < splitDays.length; sessionIdx++) {
+      const splitDay = splitDays[sessionIdx];
+
+      const coachExercises = await selectSessionExercises({
+        sessionType: splitDay.coachSessionType,
+        goal: coachGoal,
+        experience: experience as CoachExperienceTier,
+        equipment: coachEquipment,
+        injuryFlags: injuryFlags.map(String),
+        weekNumber: isDeload ? 4 : weekNumber,
+      });
+
+      const rawCoachExercises = isDeload
+        ? coachExercises.slice(0, Math.max(Math.ceil(coachExercises.length * 0.6), 2))
+        : coachExercises;
+
+      const mappedExercises = rawCoachExercises.map((ex) => {
+        const category: ExerciseCategory =
+          ex.role === "explosive"    ? "power" :
+          ex.role === "primary"      ? "primary" :
+          ex.role === "secondary"    ? "secondary" :
+          ex.role === "conditioning" ? "conditioning" :
+          "accessory";
+        return { ...ex, category };
+      });
+      weekPlans.push(sortExercisesByCategory(mappedExercises));
+    }
+    plannedExercises.push(weekPlans);
+  }
+
+  // ── Persist the continuation block atomically ──
+  // Closing out the previous phase and creating the new one commit together:
+  // a failure anywhere rolls back to the pre-continuation state.
+  const newPhase = await db.transaction(async (tx: Tx) => {
+
+  // Mark current phase and all its weeks as completed
+  if (currentPhase && currentPhase.status === "current") {
+    await tx.update(trainingWeeks).set({ status: "completed" }).where(eq(trainingWeeks.trainingPhaseId, currentPhase.id));
+    await tx.update(trainingPhases).set({ status: "completed" }).where(eq(trainingPhases.id, currentPhase.id));
+  }
+
+  const [newPhase] = await tx.insert(trainingPhases).values({
     trainingSystemId: system.id,
     name: nextBlockConfig.phaseName,
     goal: nextBlockConfig.phaseGoal,
@@ -2713,16 +2813,13 @@ export async function generateContinuationPhase(
     },
   }).returning();
 
-  await db.update(trainingSystems).set({ currentPhaseId: newPhase.id }).where(eq(trainingSystems.id, system.id));
-
-  const splitDays = splitMaps[Math.min(daysPerWeek, 6)] ?? splitMaps[3];
+  await tx.update(trainingSystems).set({ currentPhaseId: newPhase.id }).where(eq(trainingSystems.id, system.id));
 
   for (let weekIdx = 0; weekIdx < 4; weekIdx++) {
     const weekConfig = nextBlockConfig.weekConfigs[weekIdx];
     const weekNumber = weekIdx + 1;
-    const isDeload = weekConfig.volumeLevel === "deload" || weekConfig.volumeLevel === "low";
 
-    const [week] = await db.insert(trainingWeeks).values({
+    const [week] = await tx.insert(trainingWeeks).values({
       trainingPhaseId: newPhase.id,
       weekNumber,
       label: weekConfig.label,
@@ -2735,7 +2832,7 @@ export async function generateContinuationPhase(
     for (let sessionIdx = 0; sessionIdx < splitDays.length; sessionIdx++) {
       const splitDay = splitDays[sessionIdx];
 
-      const [session] = await db.insert(trainingSessions).values({
+      const [session] = await tx.insert(trainingSessions).values({
         trainingWeekId: week.id,
         label: splitDay.label,
         sessionType: splitDay.sessionType,
@@ -2747,33 +2844,11 @@ export async function generateContinuationPhase(
         orderIndex: sessionIdx,
       }).returning();
 
-      const coachExercises = await selectSessionExercises({
-        sessionType: splitDay.coachSessionType,
-        goal: coachGoal,
-        experience: experience as CoachExperienceTier,
-        equipment: coachEquipment,
-        injuryFlags: injuryFlags.map(String),
-        weekNumber: isDeload ? 4 : weekNumber,
-      });
-
-      const rawCoachExercises = isDeload
-        ? coachExercises.slice(0, Math.max(Math.ceil(coachExercises.length * 0.6), 2))
-        : coachExercises;
-
-      const mappedExercises = rawCoachExercises.map((ex) => {
-        const category: ExerciseCategory =
-          ex.role === "explosive"    ? "power" :
-          ex.role === "primary"      ? "primary" :
-          ex.role === "secondary"    ? "secondary" :
-          ex.role === "conditioning" ? "conditioning" :
-          "accessory";
-        return { ...ex, category };
-      });
-      const orderedExercises = sortExercisesByCategory(mappedExercises);
+      const orderedExercises = plannedExercises[weekIdx][sessionIdx];
 
       for (let exIdx = 0; exIdx < orderedExercises.length; exIdx++) {
         const ex = orderedExercises[exIdx];
-        await db.insert(sessionExercises).values({
+        await tx.insert(sessionExercises).values({
           trainingSessionId: session.id,
           name: ex.name,
           category: ex.category,
@@ -2787,6 +2862,9 @@ export async function generateContinuationPhase(
       }
     }
   }
+
+  return newPhase;
+  });
 
   logger.info(
     { userId, systemId: system.id, newPhaseId: newPhase.id, nextBlockType, mode: options.mode },
