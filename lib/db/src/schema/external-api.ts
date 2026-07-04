@@ -8,6 +8,7 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
+import { trainingSystems } from "./training-system";
 
 // ─── External API Keys ───────────────────────────────────────────────────────
 //
@@ -96,6 +97,16 @@ export const externalProgramsTable = pgTable("external_programs", {
   apiKeyId: integer("api_key_id").references(() => externalApiKeysTable.id, { onDelete: "set null" }),
 
   programData: jsonb("program_data").notNull(),
+
+  // Phase 2 (materialization foundation): once an external program is
+  // materialized into the relational training_systems hierarchy for surgical
+  // editing, this links the blob to that system. NULL for every program today —
+  // no code writes it yet; materialization ships in a later Phase 2 PR.
+  // On system delete → set null (the blob survives as a standalone document).
+  trainingSystemId: integer("training_system_id").references(
+    () => trainingSystems.id,
+    { onDelete: "set null" },
+  ),
 
   requestContext: jsonb("request_context"),
 
