@@ -19,6 +19,7 @@
  */
 
 import { db, propagationEvents, sessionExercises, trainingSessions, trainingWeeks, trainingPhases } from "@workspace/db";
+import type { Dbx } from "./db-executor";
 import { eq, and, inArray, ne, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { logger } from "./logger";
@@ -130,10 +131,10 @@ export async function findEligibleFutureMatches(input: {
   sourceSessionLabel: string;
   exerciseName: string;
   trainingSystemId: number;
-}): Promise<FutureMatch[]> {
+}, dbx: Dbx = db): Promise<FutureMatch[]> {
   const { sourceExerciseId, sourceWeekNumber, sourceSessionLabel, exerciseName, trainingSystemId } = input;
 
-  const phases = await db
+  const phases = await dbx
     .select({ id: trainingPhases.id })
     .from(trainingPhases)
     .where(eq(trainingPhases.trainingSystemId, trainingSystemId));
@@ -141,7 +142,7 @@ export async function findEligibleFutureMatches(input: {
   if (phases.length === 0) return [];
   const phaseIds = phases.map((p) => p.id);
 
-  const futureWeeks = await db
+  const futureWeeks = await dbx
     .select({
       id: trainingWeeks.id,
       weekNumber: trainingWeeks.weekNumber,
@@ -166,7 +167,7 @@ export async function findEligibleFutureMatches(input: {
   const eligibleWeekIds = eligibleWeeks.map((w) => w.id);
   const weekMap = new Map(eligibleWeeks.map((w) => [w.id, w]));
 
-  const sessions = await db
+  const sessions = await dbx
     .select({ id: trainingSessions.id, label: trainingSessions.label, weekId: trainingSessions.trainingWeekId })
     .from(trainingSessions)
     .where(
@@ -181,7 +182,7 @@ export async function findEligibleFutureMatches(input: {
   const sessionIds = sessions.map((s) => s.id);
   const sessionMap = new Map(sessions.map((s) => [s.id, s]));
 
-  const candidates = await db
+  const candidates = await dbx
     .select({
       id: sessionExercises.id,
       name: sessionExercises.name,
@@ -470,7 +471,7 @@ export async function buildPropagationPlan(input: {
   exerciseAfter: Record<string, any>;
   planIntent: string;
   fieldsChanged: string[];
-}): Promise<PropagationPlan> {
+}, dbx: Dbx = db): Promise<PropagationPlan> {
   const {
     sourceExerciseId, sourceWeekNumber, sourceSessionLabel, exerciseName,
     trainingSystemId, exerciseBefore, exerciseAfter, planIntent, fieldsChanged,
@@ -497,7 +498,7 @@ export async function buildPropagationPlan(input: {
 
   const candidates = await findEligibleFutureMatches({
     sourceExerciseId, sourceWeekNumber, sourceSessionLabel, exerciseName, trainingSystemId,
-  });
+  }, dbx);
 
   const entries: PropagationPlanEntry[] = [];
   let protectedCount = 0;
@@ -601,7 +602,8 @@ export async function commitPropagationPlan(
   plan: PropagationPlan,
   trainingSystemId: number,
   changeLogId: number | undefined,
-  initiatedBy: "user" | "agent" = "user"
+  initiatedBy: "user" | "agent" = "user",
+  dbx: Dbx = db
 ): Promise<CommitResult> {
   const appliedIds: number[] = [];
   const auditRows: {
@@ -620,83 +622,69 @@ export async function commitPropagationPlan(
     initiatedBy: string;
   }[] = [];
 
+  // NOTE (transactional edits): a failed write here THROWS instead of being
+  // swallowed. This runs inside the edit-engine transaction — swallowing a
+  // failed statement would leave the transaction aborted and turn the final
+  // COMMIT into a silent rollback while still reporting success. The sole
+  // caller (applyEditPlan) converts the throw into a rolled-back edit.
   for (const entry of plan.targets) {
-    try {
-      if (entry.action === "apply") {
-        const updates: Record<string, any> = {};
-        const before = entry.beforeSnapshot;
-        const after = entry.afterSnapshot;
+    if (entry.action === "apply") {
+      const updates: Record<string, any> = {};
+      const before = entry.beforeSnapshot;
+      const after = entry.afterSnapshot;
 
-        for (const key of ["name", "sets", "reps", "rest", "tempo", "notes", "category"] as const) {
-          if (after[key] !== undefined && after[key] !== before[key]) {
-            updates[key] = after[key];
-          }
+      for (const key of ["name", "sets", "reps", "rest", "tempo", "notes", "category"] as const) {
+        if (after[key] !== undefined && after[key] !== before[key]) {
+          updates[key] = after[key];
         }
-
-        if (Object.keys(updates).length > 0) {
-          // Stamp propagation provenance into metadata
-          const existingMeta = await db
-            .select({ metadata: sessionExercises.metadata })
-            .from(sessionExercises)
-            .where(eq(sessionExercises.id, entry.exerciseId))
-            .limit(1);
-
-          const currentMeta = (existingMeta[0]?.metadata as Record<string, any>) ?? {};
-          const propagationMeta = {
-            ...(currentMeta.propagation ?? {}),
-            modifiedBy: "agent",
-            lastModifiedAt: new Date().toISOString(),
-            propagationSource: {
-              planId: plan.planId,
-              sourceWeekNumber: plan.source.weekNumber,
-              sourceExerciseId: plan.source.exerciseId,
-            },
-          };
-
-          await db
-            .update(sessionExercises)
-            .set({
-              ...updates,
-              metadata: { ...currentMeta, propagation: propagationMeta },
-            })
-            .where(eq(sessionExercises.id, entry.exerciseId));
-
-          appliedIds.push(entry.exerciseId);
-        }
-
-        auditRows.push({
-          planId: plan.planId,
-          trainingSystemId,
-          changeLogId,
-          sourceWeekNumber: plan.source.weekNumber,
-          sourceExerciseId: plan.source.exerciseId,
-          targetWeekNumber: entry.weekNumber,
-          targetExerciseId: entry.exerciseId,
-          propagationMode: plan.mode,
-          action: "apply",
-          safetyScore: entry.safetyScore,
-          changedFields: Object.keys(updates),
-          initiatedBy,
-        });
-      } else {
-        auditRows.push({
-          planId: plan.planId,
-          trainingSystemId,
-          changeLogId,
-          sourceWeekNumber: plan.source.weekNumber,
-          sourceExerciseId: plan.source.exerciseId,
-          targetWeekNumber: entry.weekNumber,
-          targetExerciseId: entry.exerciseId,
-          propagationMode: plan.mode,
-          action: "skip",
-          safetyScore: entry.safetyScore,
-          changedFields: null,
-          skippedReason: entry.reason,
-          initiatedBy,
-        });
       }
-    } catch (err) {
-      logger.error({ err, exerciseId: entry.exerciseId, planId: plan.planId }, "[PropagationEngine] Failed to apply target — skipping");
+
+      if (Object.keys(updates).length > 0) {
+        // Stamp propagation provenance into metadata
+        const existingMeta = await dbx
+          .select({ metadata: sessionExercises.metadata })
+          .from(sessionExercises)
+          .where(eq(sessionExercises.id, entry.exerciseId))
+          .limit(1);
+
+        const currentMeta = (existingMeta[0]?.metadata as Record<string, any>) ?? {};
+        const propagationMeta = {
+          ...(currentMeta.propagation ?? {}),
+          modifiedBy: "agent",
+          lastModifiedAt: new Date().toISOString(),
+          propagationSource: {
+            planId: plan.planId,
+            sourceWeekNumber: plan.source.weekNumber,
+            sourceExerciseId: plan.source.exerciseId,
+          },
+        };
+
+        await dbx
+          .update(sessionExercises)
+          .set({
+            ...updates,
+            metadata: { ...currentMeta, propagation: propagationMeta },
+          })
+          .where(eq(sessionExercises.id, entry.exerciseId));
+
+        appliedIds.push(entry.exerciseId);
+      }
+
+      auditRows.push({
+        planId: plan.planId,
+        trainingSystemId,
+        changeLogId,
+        sourceWeekNumber: plan.source.weekNumber,
+        sourceExerciseId: plan.source.exerciseId,
+        targetWeekNumber: entry.weekNumber,
+        targetExerciseId: entry.exerciseId,
+        propagationMode: plan.mode,
+        action: "apply",
+        safetyScore: entry.safetyScore,
+        changedFields: Object.keys(updates),
+        initiatedBy,
+      });
+    } else {
       auditRows.push({
         planId: plan.planId,
         trainingSystemId,
@@ -709,37 +697,35 @@ export async function commitPropagationPlan(
         action: "skip",
         safetyScore: entry.safetyScore,
         changedFields: null,
-        skippedReason: `Apply threw: ${err instanceof Error ? err.message : String(err)}`,
+        skippedReason: entry.reason,
         initiatedBy,
       });
     }
   }
 
-  // Write all audit entries in one batch
+  // Write all audit entries in one batch. Atomic with the propagated writes:
+  // if the audit insert fails, the whole edit transaction rolls back rather
+  // than committing mutations with a missing audit trail.
   let auditEntryCount = 0;
   if (auditRows.length > 0) {
-    try {
-      await db.insert(propagationEvents).values(
-        auditRows.map((r) => ({
-          planId: r.planId,
-          trainingSystemId: r.trainingSystemId,
-          changeLogId: r.changeLogId ?? null,
-          sourceWeekNumber: r.sourceWeekNumber,
-          sourceExerciseId: r.sourceExerciseId,
-          targetWeekNumber: r.targetWeekNumber,
-          targetExerciseId: r.targetExerciseId,
-          propagationMode: r.propagationMode,
-          action: r.action,
-          safetyScore: r.safetyScore,
-          changedFields: r.changedFields,
-          skippedReason: r.skippedReason ?? null,
-          initiatedBy: r.initiatedBy,
-        }))
-      );
-      auditEntryCount = auditRows.length;
-    } catch (auditErr) {
-      logger.warn({ auditErr }, "[PropagationEngine] Failed to write audit entries (non-fatal)");
-    }
+    await dbx.insert(propagationEvents).values(
+      auditRows.map((r) => ({
+        planId: r.planId,
+        trainingSystemId: r.trainingSystemId,
+        changeLogId: r.changeLogId ?? null,
+        sourceWeekNumber: r.sourceWeekNumber,
+        sourceExerciseId: r.sourceExerciseId,
+        targetWeekNumber: r.targetWeekNumber,
+        targetExerciseId: r.targetExerciseId,
+        propagationMode: r.propagationMode,
+        action: r.action,
+        safetyScore: r.safetyScore,
+        changedFields: r.changedFields,
+        skippedReason: r.skippedReason ?? null,
+        initiatedBy: r.initiatedBy,
+      }))
+    );
+    auditEntryCount = auditRows.length;
   }
 
   return {
@@ -894,26 +880,24 @@ export function isProtectedWeek(week: { volumeLevel?: string; weekLabel?: string
  * that was directly edited by the user. This prevents future auto-propagation
  * from overwriting the user's explicit customization.
  */
-export async function stampUserModification(exerciseId: number): Promise<void> {
-  try {
-    const [current] = await db
-      .select({ metadata: sessionExercises.metadata })
-      .from(sessionExercises)
-      .where(eq(sessionExercises.id, exerciseId))
-      .limit(1);
+export async function stampUserModification(exerciseId: number, dbx: Dbx = db): Promise<void> {
+  // Runs inside the edit-engine transaction: a failed stamp throws and rolls
+  // the edit back (swallowing it would poison the open transaction).
+  const [current] = await dbx
+    .select({ metadata: sessionExercises.metadata })
+    .from(sessionExercises)
+    .where(eq(sessionExercises.id, exerciseId))
+    .limit(1);
 
-    const currentMeta = (current?.metadata as Record<string, any>) ?? {};
-    const propagationMeta = {
-      ...(currentMeta.propagation ?? {}),
-      modifiedBy: "user",
-      lastModifiedAt: new Date().toISOString(),
-    };
+  const currentMeta = (current?.metadata as Record<string, any>) ?? {};
+  const propagationMeta = {
+    ...(currentMeta.propagation ?? {}),
+    modifiedBy: "user",
+    lastModifiedAt: new Date().toISOString(),
+  };
 
-    await db
-      .update(sessionExercises)
-      .set({ metadata: { ...currentMeta, propagation: propagationMeta } })
-      .where(eq(sessionExercises.id, exerciseId));
-  } catch (err) {
-    logger.warn({ err, exerciseId }, "[PropagationEngine] Failed to stamp user modification (non-fatal)");
-  }
+  await dbx
+    .update(sessionExercises)
+    .set({ metadata: { ...currentMeta, propagation: propagationMeta } })
+    .where(eq(sessionExercises.id, exerciseId));
 }

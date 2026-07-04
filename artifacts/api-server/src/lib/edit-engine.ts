@@ -28,6 +28,7 @@ import {
   learningCandidatesTable,
 } from "@workspace/db";
 import { eq, and, inArray, ne, sql } from "drizzle-orm";
+import type { Dbx } from "./db-executor";
 import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
@@ -655,7 +656,11 @@ async function snapshotPhase(id: number): Promise<Record<string, unknown> | null
 
 // ─── Apply a single change ────────────────────────────────────────────────────
 
-async function applyChange(change: EditChange): Promise<{ applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }> {
+// NOTE (transactional edits): applyChange runs INSIDE the applyEditPlan
+// transaction. add_exercise changes must already be duplicate-safe-resolved
+// (the resolver can call the LLM backstop, which must never run inside the
+// transaction) — see preResolveAddExercises in applyEditPlan.
+async function applyChange(change: EditChange, dbx: Dbx): Promise<{ applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }> {
   try {
     switch (change.type) {
       case "add_exercise": {
@@ -663,32 +668,25 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
           return { applied: false, detail: `add_exercise missing sessionId or exercise.name` };
         }
 
-        const resolved = await resolveDuplicateSafeAddExercise(change);
-        const effectiveChange = resolved.change;
-        if (!effectiveChange.sessionId || !effectiveChange.exercise?.name) {
-          const requested = change.exercise?.name ?? "unknown";
-          return { applied: false, detail: `Blocked duplicate add_exercise "${requested}" in session ${change.sessionId}; no valid non-duplicate candidate found` };
-        }
-
         // Determine the next orderIndex for this session
-        const existing = await db
+        const existing = await dbx
           .select({ orderIndex: sessionExercises.orderIndex })
           .from(sessionExercises)
-          .where(eq(sessionExercises.trainingSessionId, effectiveChange.sessionId));
+          .where(eq(sessionExercises.trainingSessionId, change.sessionId));
         const maxOrder = existing.reduce((max, r) => Math.max(max, r.orderIndex ?? 0), 0);
 
-        const [inserted] = await db
+        const [inserted] = await dbx
           .insert(sessionExercises)
           .values({
-            trainingSessionId: effectiveChange.sessionId,
-            name: effectiveChange.exercise.name,
-            category: (effectiveChange.exercise.category as any) ?? "accessory",
-            sets: effectiveChange.exercise.sets ?? 3,
-            reps: effectiveChange.exercise.reps ?? "8-10",
-            rest: effectiveChange.exercise.rest ?? "90s",
-            tempo: effectiveChange.exercise.tempo ?? null,
-            notes: effectiveChange.exercise.notes ?? null,
-            metadata: effectiveChange.exercise.metadata ?? null,
+            trainingSessionId: change.sessionId,
+            name: change.exercise.name,
+            category: (change.exercise.category as any) ?? "accessory",
+            sets: change.exercise.sets ?? 3,
+            reps: change.exercise.reps ?? "8-10",
+            rest: change.exercise.rest ?? "90s",
+            tempo: change.exercise.tempo ?? null,
+            notes: change.exercise.notes ?? null,
+            metadata: change.exercise.metadata ?? null,
             orderIndex: maxOrder + 1,
             createdAt: new Date(),
             updatedAt: new Date(),
@@ -697,38 +695,39 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
 
         if (!inserted) {
           logger.warn(
-            { sessionId: effectiveChange.sessionId, exerciseName: effectiveChange.exercise.name },
+            { sessionId: change.sessionId, exerciseName: change.exercise.name },
             "[Program Mutation DB Write Success] insert returned no ID — marking as failed",
           );
-          return { applied: false, detail: `Failed to insert exercise into session ${effectiveChange.sessionId}` };
+          return { applied: false, detail: `Failed to insert exercise into session ${change.sessionId}` };
         }
 
         logger.info(
-          { operation: "add_exercise", sessionId: effectiveChange.sessionId, exerciseName: effectiveChange.exercise.name, newId: inserted.id },
+          { operation: "add_exercise", sessionId: change.sessionId, exerciseName: change.exercise.name, newId: inserted.id },
           "[Program Mutation DB Write Success]",
         );
 
         // ── Post-write verification: re-read to confirm exercise exists in DB ──
         // This makes appliedCount accurate based on actual DB state, not just the
         // insert return value. Prevents false-negatives when the insert completes
-        // but the response chain doesn't see it.
-        const [postWrite] = await db
+        // but the response chain doesn't see it. (Reads via dbx so it sees the
+        // uncommitted insert inside the transaction.)
+        const [postWrite] = await dbx
           .select({ id: sessionExercises.id, name: sessionExercises.name, trainingSessionId: sessionExercises.trainingSessionId })
           .from(sessionExercises)
           .where(eq(sessionExercises.id, inserted.id))
           .limit(1);
 
         const verified = !!(postWrite && postWrite.id === inserted.id);
-        const insertedName = postWrite?.name ?? effectiveChange.exercise.name;
+        const insertedName = postWrite?.name ?? change.exercise.name;
 
         logger.info(
           {
             operation:    "add_exercise",
-            sessionId:    effectiveChange.sessionId,
+            sessionId:    change.sessionId,
             exerciseName: insertedName,
             newId:        inserted.id,
             verified,
-            sessionMatch: postWrite?.trainingSessionId === effectiveChange.sessionId,
+            sessionMatch: postWrite?.trainingSessionId === change.sessionId,
           },
           "[Program Mutation Post-Write Verification]",
         );
@@ -737,7 +736,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
           applied:      true,
           verified,
           insertedName,
-          detail:       `Added "${insertedName}" to session ${effectiveChange.sessionId} (new id:${inserted.id})`,
+          detail:       `Added "${insertedName}" to session ${change.sessionId} (new id:${inserted.id})`,
           newId:        inserted.id,
         };
       }
@@ -750,7 +749,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         // Handle INCREMENT/DECREMENT sentinels for sets
         const updatesWithSentinel = { ...change.updates };
         if (updatesWithSentinel.sets === "INCREMENT" || updatesWithSentinel.sets === "DECREMENT") {
-          const [existing] = await db.select().from(sessionExercises).where(eq(sessionExercises.id, change.id));
+          const [existing] = await dbx.select().from(sessionExercises).where(eq(sessionExercises.id, change.id));
           if (existing) {
             const currentSets = existing.sets ?? 3;
             updatesWithSentinel.sets = updatesWithSentinel.sets === "INCREMENT"
@@ -766,7 +765,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
 
         // If there are prescription metadata updates, merge them into metadata.prescription
         if (prescriptionPatch) {
-          const [existing] = await db.select().from(sessionExercises).where(eq(sessionExercises.id, change.id));
+          const [existing] = await dbx.select().from(sessionExercises).where(eq(sessionExercises.id, change.id));
           if (existing) {
             const currentMeta = (existing.metadata as Record<string, unknown> | null) ?? {};
             const currentPrescription = (currentMeta.prescription as Record<string, unknown> | null) ?? {};
@@ -781,7 +780,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         if (Object.keys(safeUpdates).length === 0) {
           return { applied: false, detail: `No allowed fields in exercise update for ${change.id}` };
         }
-        await db
+        await dbx
           .update(sessionExercises)
           .set({ ...safeUpdates, updatedAt: new Date() } as any)
           .where(eq(sessionExercises.id, change.id));
@@ -797,7 +796,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
           return { applied: false, detail: `No replacement data for exercise ${change.id}` };
         }
 
-        const [existing] = await db
+        const [existing] = await dbx
           .select()
           .from(sessionExercises)
           .where(eq(sessionExercises.id, change.id));
@@ -859,7 +858,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
           ? { ...((existing.metadata as Record<string, unknown> | null) ?? {}), ...replacement.metadata }
           : existing.metadata;
 
-        await db
+        await dbx
           .update(sessionExercises)
           .set({
             name: replacement.name,
@@ -880,21 +879,26 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         // exercises when the swap caused a meaningful stimulus loss.
         let redistributionSummary: string | null = null;
         let redistributionResult: StimulusRedistributionResult | null = null;
-        try {
-          const allSessionExercises = await db
-            .select({
-              id: sessionExercises.id,
-              name: sessionExercises.name,
-              sets: sessionExercises.sets,
-              reps: sessionExercises.reps,
-              rest: sessionExercises.rest,
-              notes: sessionExercises.notes,
-              category: sessionExercises.category,
-              orderIndex: sessionExercises.orderIndex,
-            })
-            .from(sessionExercises)
-            .where(eq(sessionExercises.trainingSessionId, existing.trainingSessionId));
 
+        // Session read + sibling writes are NOT wrapped in the try/catch: a
+        // failed statement inside the edit transaction must propagate and roll
+        // the edit back (swallowing it would leave the transaction aborted).
+        // Only the pure evaluation compute keeps its non-fatal guard.
+        const allSessionExercises = await dbx
+          .select({
+            id: sessionExercises.id,
+            name: sessionExercises.name,
+            sets: sessionExercises.sets,
+            reps: sessionExercises.reps,
+            rest: sessionExercises.rest,
+            notes: sessionExercises.notes,
+            category: sessionExercises.category,
+            orderIndex: sessionExercises.orderIndex,
+          })
+          .from(sessionExercises)
+          .where(eq(sessionExercises.trainingSessionId, existing.trainingSessionId));
+
+        try {
           const ctx = change.prescriptionContext;
           redistributionResult = evaluateSessionStimulusAfterMutation({
             originalExercise: {
@@ -920,21 +924,23 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
             painSafetyFlag: ctx?.hasPainFlag,
             mutationType:   "swap",
           });
+        } catch (err) {
+          logger.error(
+            { err, exerciseId: change.id },
+            "[Layer3:StimulusRedistribution] evaluation threw — skipping redistribution",
+          );
+        }
 
+        if (redistributionResult) {
           // Apply compensatory set upgrades to sibling exercises
           for (const upd of redistributionResult.updatedSessionExercises) {
-            await db
+            await dbx
               .update(sessionExercises)
               .set({ sets: upd.newSets, updatedAt: new Date() })
               .where(eq(sessionExercises.id, upd.id));
           }
 
           redistributionSummary = redistributionResult.userFacingSummary;
-        } catch (err) {
-          logger.error(
-            { err, exerciseId: change.id },
-            "[Layer3:StimulusRedistribution] threw — skipping redistribution",
-          );
         }
 
         const baseDetail = `Replaced exercise ${change.id} with "${replacement.name}"`;
@@ -946,7 +952,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
       }
 
       case "delete_exercise": {
-        await db.delete(sessionExercises).where(eq(sessionExercises.id, change.id));
+        await dbx.delete(sessionExercises).where(eq(sessionExercises.id, change.id));
         return { applied: true, detail: `Deleted exercise ${change.id}` };
       }
 
@@ -958,7 +964,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         if (Object.keys(safeUpdates).length === 0) {
           return { applied: false, detail: `No allowed fields in session update for ${change.id}` };
         }
-        await db
+        await dbx
           .update(trainingSessions)
           .set({ ...safeUpdates, updatedAt: new Date() } as any)
           .where(eq(trainingSessions.id, change.id));
@@ -973,7 +979,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         if (Object.keys(safeUpdates).length === 0) {
           return { applied: false, detail: `No allowed fields in week update for ${change.id}` };
         }
-        await db
+        await dbx
           .update(trainingWeeks)
           .set({ ...safeUpdates, updatedAt: new Date() } as any)
           .where(eq(trainingWeeks.id, change.id));
@@ -988,7 +994,7 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         if (Object.keys(safeUpdates).length === 0) {
           return { applied: false, detail: `No allowed fields in phase update for ${change.id}` };
         }
-        await db
+        await dbx
           .update(trainingPhases)
           .set({ ...safeUpdates, updatedAt: new Date() } as any)
           .where(eq(trainingPhases.id, change.id));
@@ -999,8 +1005,11 @@ async function applyChange(change: EditChange): Promise<{ applied: boolean; veri
         return { applied: false, detail: `Unknown change type: ${(change as any).type}` };
     }
   } catch (err) {
-    logger.error({ err, change }, "Failed to apply change");
-    return { applied: false, detail: `Error applying change: ${String(err)}` };
+    // Inside the edit transaction a failed statement leaves the transaction
+    // aborted — swallowing it here would let the edit "commit" as a silent
+    // rollback. Rethrow so applyEditPlan rolls back and reports the failure.
+    logger.error({ err, change }, "Failed to apply change — aborting edit transaction");
+    throw err;
   }
 }
 
@@ -1389,9 +1398,55 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
     "[Program Mutation Attempt]",
   );
 
-  const results: { applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }[] = [];
+  // ── Pre-resolve add_exercise changes BEFORE the transaction ───────────────
+  // The duplicate-safe resolver reads the exercise library and can fall back
+  // to an LLM call (requestAiAddCandidate). Neither may run inside the write
+  // transaction, so resolution happens here and applyChange receives changes
+  // that are already final. Order is preserved 1:1 with plan.changes so the
+  // propagation loop's results[i] ↔ plan.changes[i] pairing still holds.
+  const preparedChanges: { change: EditChange; blockedDetail?: string }[] = [];
   for (const change of plan.changes) {
-    const result = await applyChange(change);
+    if (change.type === "add_exercise" && change.sessionId && change.exercise?.name) {
+      const resolved = await resolveDuplicateSafeAddExercise(change);
+      if (!resolved.change.sessionId || !resolved.change.exercise?.name) {
+        preparedChanges.push({
+          change: resolved.change,
+          blockedDetail: `Blocked duplicate add_exercise "${change.exercise.name}" in session ${change.sessionId}; no valid non-duplicate candidate found`,
+        });
+      } else {
+        preparedChanges.push({ change: resolved.change });
+      }
+    } else {
+      preparedChanges.push({ change });
+    }
+  }
+
+  // ── Transactional persistence ──────────────────────────────────────────────
+  // Every DB write of the edit — exercise/session/week/phase mutations,
+  // stimulus redistribution, provenance stamps, cross-week propagation and its
+  // audit rows, and session-identity patches — runs inside ONE transaction.
+  // If any write fails, the whole edit rolls back and a zero-applied result is
+  // returned; the program is never left partially edited (DR-0006 / audit F8).
+  // No LLM call or external I/O runs inside this transaction.
+  let txOutcome: {
+    results: { applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }[];
+    appliedCount: number;
+    skippedCount: number;
+    changedIds: ChangedIds;
+    totalPropagated: number;
+    aggregatePropagationSummary: PropagationSummary | undefined;
+    identityPatches: Awaited<ReturnType<typeof ensureSessionIdentityUpdated>>;
+  };
+
+  try {
+    txOutcome = await db.transaction(async (tx) => {
+
+  const results: { applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }[] = [];
+  for (const prepared of preparedChanges) {
+    const change = prepared.change;
+    const result = prepared.blockedDetail
+      ? { applied: false, detail: prepared.blockedDetail }
+      : await applyChange(change, tx);
     results.push(result);
     logger.info(
       { applied: result.applied, verified: result.verified ?? null, detail: result.detail, changeType: change.type, id: change.id },
@@ -1499,7 +1554,9 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
 
       // Stamp user modification provenance on the directly edited exercise.
       // This prevents future propagation from treating this as an unmodified sibling.
-      stampUserModification(change.id).catch(() => {});
+      // Awaited on the transaction handle: a fire-and-forget write on the
+      // module-level db would race (and possibly deadlock) with this open tx.
+      await stampUserModification(change.id, tx);
 
       // Derive before/after state for this exercise
       const exerciseBefore = (beforeSnapshot.exercises[String(change.id)] ?? {}) as Record<string, any>;
@@ -1522,7 +1579,7 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
       if (!exerciseName) continue;
 
       // Get source session label + week number via a single join query
-      const [sourceCtx] = await db
+      const [sourceCtx] = await tx
         .select({
           sessionLabel: trainingSessions.label,
           weekNumber: trainingWeeks.weekNumber,
@@ -1546,7 +1603,7 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
         exerciseAfter,
         planIntent: plan.intent,
         fieldsChanged,
-      });
+      }, tx);
 
       if (propPlan.mode === "none") {
         logger.info({ intent: plan.intent, exerciseName }, "[EditEngine] Propagation mode=none — local only");
@@ -1571,7 +1628,7 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
       }
 
       // Commit the plan — applies changes, stamps metadata, writes audit log
-      const commit = await commitPropagationPlan(propPlan, trainingSystemId, undefined, "user");
+      const commit = await commitPropagationPlan(propPlan, trainingSystemId, undefined, "user", tx);
 
       changedIds.exercises.push(...commit.appliedIds);
       totalPropagated += commit.appliedCount;
@@ -1592,7 +1649,7 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
   // If the AI's EditPlan made structural changes for an identity-changing
   // transformation but did NOT include an update_session with new label/emphasis,
   // deterministically patch the session identity now using the template matrix.
-  const identityPatches = await ensureSessionIdentityUpdated(plan, intentFamily);
+  const identityPatches = await ensureSessionIdentityUpdated(plan, intentFamily, tx);
   if (identityPatches.length > 0) {
     // Add auto-patched sessions to changedIds so they appear in the after snapshot
     for (const patch of identityPatches) {
@@ -1614,7 +1671,40 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
     );
   }
 
-  // Phase 4: Capture state AFTER applying changes
+  return { results, appliedCount, skippedCount, changedIds, totalPropagated, aggregatePropagationSummary, identityPatches };
+    });
+  } catch (txErr) {
+    // The transaction rolled back — the program is exactly as it was before
+    // the edit. Return a zero-applied result (the same contract callers
+    // already handle for "nothing matched" edits) instead of throwing, so
+    // user-facing behavior and response shapes are preserved.
+    logger.error(
+      { err: txErr, intent: plan.intent, scope: plan.scope, changeCount: plan.changes.length },
+      "[EditEngine] Edit transaction failed — all changes rolled back",
+    );
+    const rolledBackResults = plan.changes.map((c) => ({
+      applied: false,
+      detail: `Rolled back: edit transaction failed (${txErr instanceof Error ? txErr.message : String(txErr)})`,
+    }));
+    return {
+      appliedCount: 0,
+      skippedCount: plan.changes.length,
+      changeSummary: "The edit could not be applied — no changes were made to your program.",
+      details: rolledBackResults.map((r) => r.detail),
+      changedIds: { exercises: [], sessions: [], weeks: [], phases: [] },
+      beforeSnapshot,
+      afterSnapshot: beforeSnapshot,
+      changeTargets: [],
+      verification: verifyMutation(plan, beforeSnapshot, beforeSnapshot, rolledBackResults),
+      identityPatches: [],
+      propagationSummary: undefined,
+    };
+  }
+
+  const { results, appliedCount, skippedCount, changedIds, totalPropagated, aggregatePropagationSummary, identityPatches } = txOutcome;
+
+  // Phase 4: Capture state AFTER applying changes (post-commit — reads the
+  // committed rows via the module-level db)
   const afterSnapshot = await captureAfterSnapshot(changedIds);
 
   // Phase 2: Verify that the intended changes are actually present in the post-mutation state

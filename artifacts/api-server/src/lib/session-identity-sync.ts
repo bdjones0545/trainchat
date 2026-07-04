@@ -22,6 +22,7 @@
 
 import { db } from "@workspace/db";
 import { trainingSessions, sessionExercises } from "@workspace/db";
+import type { Dbx } from "./db-executor";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import type { EditPlan } from "./edit-intent-service";
@@ -512,7 +513,7 @@ export function resolveIntentFamilyFromString(planIntent: string): string | null
  * For update_exercise changes: only counted if reps, sets, tempo, or rest
  * were modified — purely note-based updates are excluded.
  */
-async function collectStructurallyChangedSessionIds(plan: EditPlan): Promise<Set<number>> {
+async function collectStructurallyChangedSessionIds(plan: EditPlan, dbx: Dbx = db): Promise<Set<number>> {
   const sessions = new Set<number>();
 
   for (const change of plan.changes) {
@@ -526,16 +527,14 @@ async function collectStructurallyChangedSessionIds(plan: EditPlan): Promise<Set
       const u = change.updates ?? {};
       const isStructural = !!(u.reps || u.sets || u.tempo || u.rest);
       if (isStructural) {
-        try {
-          const rows = await db
-            .select({ sessionId: sessionExercises.trainingSessionId })
-            .from(sessionExercises)
-            .where(eq(sessionExercises.id, change.id))
-            .limit(1);
-          if (rows[0]?.sessionId) sessions.add(rows[0].sessionId);
-        } catch {
-          // Best-effort
-        }
+        // No swallow: inside the edit transaction, a failed read means the
+        // transaction is unusable — let it propagate and roll the edit back.
+        const rows = await dbx
+          .select({ sessionId: sessionExercises.trainingSessionId })
+          .from(sessionExercises)
+          .where(eq(sessionExercises.id, change.id))
+          .limit(1);
+        if (rows[0]?.sessionId) sessions.add(rows[0].sessionId);
       }
     }
   }
@@ -570,6 +569,7 @@ function getSessionsWithIdentityUpdate(plan: EditPlan): Set<number> {
 export async function ensureSessionIdentityUpdated(
   plan: EditPlan,
   intentFamily?: string,
+  dbx: Dbx = db,
 ): Promise<PatchedIdentityResult[]> {
   const family = intentFamily ?? resolveIntentFamilyFromString(plan.intent);
 
@@ -577,7 +577,7 @@ export async function ensureSessionIdentityUpdated(
     return [];
   }
 
-  const structurallyChangedSessions = await collectStructurallyChangedSessionIds(plan);
+  const structurallyChangedSessions = await collectStructurallyChangedSessionIds(plan, dbx);
   if (structurallyChangedSessions.size === 0) return [];
 
   const alreadyUpdatedSessions = getSessionsWithIdentityUpdate(plan);
@@ -589,10 +589,13 @@ export async function ensureSessionIdentityUpdated(
 
   const patched: PatchedIdentityResult[] = [];
 
+  // NOTE (transactional edits): no per-session swallow. This runs inside the
+  // edit-engine transaction; a failed statement leaves the transaction aborted,
+  // so continuing (or returning "success") would be a lie. Errors propagate to
+  // applyEditPlan, which rolls the whole edit back.
   for (const sessionId of sessionsNeedingUpdate) {
-    try {
       // Fetch session
-      const sessionRows = await db
+      const sessionRows = await dbx
         .select({
           id: trainingSessions.id,
           label: trainingSessions.label,
@@ -606,7 +609,7 @@ export async function ensureSessionIdentityUpdated(
       if (!sessionRow) continue;
 
       // Fetch current exercises (post-mutation state)
-      const exerciseRows = await db
+      const exerciseRows = await dbx
         .select({
           id: sessionExercises.id,
           name: sessionExercises.name,
@@ -645,7 +648,7 @@ export async function ensureSessionIdentityUpdated(
       }, "[SessionIdentitySync] Recomputing session identity");
 
       // Persist
-      await db
+      await dbx
         .update(trainingSessions)
         .set({
           label: identity.label,
@@ -669,12 +672,6 @@ export async function ensureSessionIdentityUpdated(
         intentFamily: family,
         inferredRegion,
       });
-    } catch (err) {
-      logger.warn(
-        { err, sessionId, family },
-        "[SessionIdentitySync] Failed to patch session identity",
-      );
-    }
   }
 
   return patched;
