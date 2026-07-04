@@ -141,6 +141,44 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn((...args: unknown[]) => ({ __and: args })),
 }));
 
+// F10: the chat limiter (lib/sse + the non-SSE chat middleware) now counts in
+// the shared Postgres store. Mock it with in-memory counting that is INERT by
+// default (always allowed) so the suite's many same-user requests don't trip
+// the 30/min budget across unrelated tests; TC-C35 flips `counting` on to
+// exercise the limit for real.
+const rateLimitTestState = vi.hoisted(() => ({
+  counting: false,
+  counts: new Map<string, number>(),
+}));
+
+vi.mock("../lib/shared-rate-limiter", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/shared-rate-limiter")>();
+  const limiter = {
+    hit: vi.fn(async (key: string, max: number) => {
+      if (!rateLimitTestState.counting) {
+        return { allowed: true, remaining: max, resetAt: Date.now() + 60_000, limit: max };
+      }
+      const count = (rateLimitTestState.counts.get(key) ?? 0) + 1;
+      rateLimitTestState.counts.set(key, count);
+      return {
+        allowed: count <= max,
+        remaining: Math.max(0, max - count),
+        resetAt: Date.now() + 60_000,
+        limit: max,
+      };
+    }),
+  };
+  return {
+    ...actual,
+    sharedRateLimiter: limiter,
+    // Route middleware built in this suite must use the same inert-by-default
+    // mock limiter (the real one would touch the mocked db and consume
+    // sequenced insert mocks).
+    sharedRateLimit: (opts: Parameters<typeof actual.sharedRateLimit>[0]) =>
+      actual.sharedRateLimit({ ...opts, limiter: limiter as never }),
+  };
+});
+
 vi.mock("@workspace/api-zod", () => ({
   CreateConversationBody: { safeParse: vi.fn((b: any) => ({ success: true, data: b })) },
   GetConversationParams: { safeParse: vi.fn((p: any) => ({ success: true, data: p })) },
@@ -1012,6 +1050,10 @@ describe("POST /conversations/:id/messages/stream — SSE rate limiter", () => {
     const rateLimitedUserId = 9999;
     mockGetUserPlanInfo.mockResolvedValue(PRO_PLAN);
 
+    // Enable real counting in the shared-limiter mock for this test only.
+    rateLimitTestState.counting = true;
+    rateLimitTestState.counts.clear();
+
     // Send 30 messages (each needs a minimal DB state).
     // The SSE rate map is module-level state — we exhaust the window by sending
     // enough requests that the 31st is blocked.
@@ -1043,6 +1085,9 @@ describe("POST /conversations/:id/messages/stream — SSE rate limiter", () => {
     expect(errEvent).toBeDefined();
     expect(errEvent?.code).toBe("RATE_LIMITED");
     expect(errEvent?.status).toBe(429);
+
+    rateLimitTestState.counting = false;
+    rateLimitTestState.counts.clear();
   });
 });
 

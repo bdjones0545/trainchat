@@ -7,6 +7,7 @@
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
+import { programEditRateLimiter } from "../middlewares/ai-rate-limiter";
 import { generateInsights, type InsightType } from "../lib/insights";
 import { listMemories } from "../lib/memory";
 import { interpretEditRequest } from "../lib/edit-intent-service";
@@ -64,7 +65,7 @@ const INSIGHT_EDIT_REQUESTS: Record<InsightType, string> = {
 
 // ─── POST /insights/apply ────────────────────────────────────────────────────
 
-router.post("/insights/apply", requireAuth, async (req, res): Promise<void> => {
+router.post("/insights/apply", requireAuth, programEditRateLimiter, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
   const { insightType, insightTitle } = req.body as { insightType: InsightType; insightTitle?: string };
 

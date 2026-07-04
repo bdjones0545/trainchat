@@ -19,6 +19,7 @@
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
+import { programEditRateLimiter } from "../middlewares/ai-rate-limiter";
 import { db } from "@workspace/db";
 import {
   sessionExercises,
@@ -179,7 +180,7 @@ async function hasDuplicateChangeLog(
 
 // ─── POST /api/training-system/mutate ────────────────────────────────────────
 
-router.post("/training-system/mutate", requireAuth, async (req, res): Promise<void> => {
+router.post("/training-system/mutate", requireAuth, programEditRateLimiter, async (req, res): Promise<void> => {
   const parsed = MutateRequestBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid request body.", issues: parsed.error.issues });

@@ -25,22 +25,22 @@ export function sseDone(res: Response, event: Record<string, unknown>): void {
   res.end();
 }
 
-// ─── In-memory SSE rate limiter ────────────────────────────────────────────────
-// 30 requests per authenticated user per 60-second sliding window.
-// Module-level map; no external dependency required.
+// ─── Chat rate limiter (shared store — audit F10) ─────────────────────────────
+// 30 requests per authenticated user per 60-second window. Previously an
+// in-memory sliding window (per process — the effective limit multiplied
+// under autoscale); now counted in the shared rate_limit_counters table so it
+// holds across instances. Fail-open on store errors (see shared-rate-limiter.ts).
 
-export const _sseRateMap = new Map<string, number[]>();
+import { sharedRateLimiter } from "./shared-rate-limiter";
 
 const SSE_RATE_LIMIT = 30;
 const SSE_RATE_WINDOW_MS = 60_000;
 
-export function checkSseRateLimit(userId: number | string): boolean {
-  const key = String(userId);
-  const now = Date.now();
-  const cutoff = now - SSE_RATE_WINDOW_MS;
-  const timestamps = (_sseRateMap.get(key) ?? []).filter((t) => t > cutoff);
-  if (timestamps.length >= SSE_RATE_LIMIT) return false;
-  timestamps.push(now);
-  _sseRateMap.set(key, timestamps);
-  return true;
+export async function checkSseRateLimit(userId: number | string): Promise<boolean> {
+  const result = await sharedRateLimiter.hit(
+    `chat:user:${String(userId)}`,
+    SSE_RATE_LIMIT,
+    SSE_RATE_WINDOW_MS,
+  );
+  return result.allowed;
 }
