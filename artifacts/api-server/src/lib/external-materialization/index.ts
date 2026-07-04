@@ -31,3 +31,14 @@ export {
   type ResolveServiceUserFn,
   type CreateSystemFn,
 } from "./service";
+
+export {
+  createDefaultRoundTripDeps,
+  materializeExternalProgram,
+  reserializeTrainingSystem,
+  roundTripExternalProgram,
+  type RoundTripAdapterDeps,
+  type RoundTripResult,
+  type FullTrainingSystem,
+  type SerializedProgram,
+} from "./adapter";
