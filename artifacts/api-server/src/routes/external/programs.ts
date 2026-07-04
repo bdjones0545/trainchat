@@ -30,9 +30,12 @@ import { getSwapCandidates, findExerciseByName } from "../../lib/exercise-servic
 import { resolveSafeSwapBackstop } from "../../lib/swap-backstop-service";
 import {
   isExternalMaterializationEnabled,
+  isExternalSurgicalEditEnabled,
   createDefaultRoundTripDeps,
   resolveExternalServiceUserId,
   maybeMaterializeOnEdit,
+  maybeApplySurgicalExternalEdit,
+  createDefaultSurgicalDeps,
 } from "../../lib/external-materialization";
 import { logger } from "../../lib/logger";
 
@@ -506,12 +509,12 @@ router.post(
       return;
     }
 
-    // ── Phase 2.3: lazy materialization (flag-gated, best-effort side effect) ──
-    // Runs AFTER ownership. When the flag is on and the program is not yet
-    // materialized, materialize it into a training_system and link
-    // trainingSystemId. This does NOT change the edit — the LLM regeneration
-    // path below is used regardless, and any failure is logged, not surfaced.
-    await maybeMaterializeOnEdit(
+    // ── Phase 2.3 bridge: lazy materialization (runs when EITHER flag is on) ──
+    // Best-effort side effect after ownership. The surgical path (2.4) forces
+    // materialization so it has a training system to operate on. Never changes
+    // the edit by itself; failures are logged, not surfaced.
+    const surgicalEnabled = isExternalSurgicalEditEnabled();
+    const bridgeResult = await maybeMaterializeOnEdit(
       {
         id: storedProgram.id,
         programData: storedProgram.programData,
@@ -519,7 +522,7 @@ router.post(
       },
       { apiKeyId: req.apiKeyId ?? null, orgId: req.apiKey?.orgId ?? null },
       {
-        enabled: isExternalMaterializationEnabled(),
+        enabled: isExternalMaterializationEnabled() || surgicalEnabled,
         adapterDeps: createDefaultRoundTripDeps(() =>
           resolveExternalServiceUserId(storedProgram!.id),
         ),
@@ -539,8 +542,71 @@ router.post(
           ),
       },
     );
+    const trainingSystemId =
+      bridgeResult.trainingSystemId ?? storedProgram.trainingSystemId ?? null;
 
     const currentProgram = storedProgram.programData as unknown as ProgramStructure;
+
+    // ── Phase 2.4: surgical edit path (flag-gated; falls back to regeneration) ──
+    // When the flag is on AND a training system exists, run the internal
+    // surgical pipeline (interpretEditRequest → applyEditPlan → reserialize).
+    // On ANY failure the helper returns null and we fall through to the LLM
+    // regeneration path below. Persistence mirrors the existing 1C audit
+    // pattern (version snapshot → programData overwrite → same response shape).
+    if (surgicalEnabled && trainingSystemId != null) {
+      const surgical = await maybeApplySurgicalExternalEdit(
+        { trainingSystemId, instruction, scope: scope ?? null },
+        createDefaultSurgicalDeps((err, stage) =>
+          logger.warn(
+            { err, stage, programId, trainingSystemId },
+            "external-programs: surgical edit failed — falling back to regeneration",
+          ),
+        ),
+      );
+      if (surgical) {
+        const changes = surgical.changes;
+        const [version] = await db
+          .insert(externalProgramVersionsTable)
+          .values({
+            externalProgramId: programId,
+            apiKeyId: req.apiKeyId ?? null,
+            programSnapshot: currentProgram as unknown as Record<string, unknown>,
+            type: "edit",
+            instruction,
+            scope: scope ?? null,
+            changeSummary: changes as unknown as Record<string, unknown>,
+          })
+          .returning();
+
+        await db
+          .update(externalProgramsTable)
+          .set({
+            programData: surgical.updatedProgram as unknown as Record<string, unknown>,
+          })
+          .where(eq(externalProgramsTable.id, programId));
+
+        res.json(
+          buildStandardResponse({
+            programId,
+            updatedProgram: surgical.updatedProgram,
+            changes,
+            coachSummary: surgical.coachSummary,
+            version: version?.id ?? null,
+            changeReceipt: {
+              versionId: version?.id ?? null,
+              type: "edit" as const,
+              instruction,
+              scope: scope ?? null,
+              changes,
+              snapshotAt: version?.createdAt ?? null,
+            },
+          }),
+        );
+        return;
+      }
+      // surgical returned null → fall through to the regeneration path below.
+    }
+
     const userId = buildSystemUserId(req.apiKey);
     const editMessage = buildEditMessage({ programId, instruction, scope }, currentProgram);
 
