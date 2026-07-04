@@ -92,8 +92,10 @@ export async function maybeApplySurgicalExternalEdit(
     return { ok: false, committed: false, stage: "pre" };
   }
 
-  // ── Mutation: applyEditPlan is non-transactional, so a throw here MAY have
-  //    partially committed. Treat it as committed to avoid a divergent fallback.
+  // ── Mutation: applyEditPlan runs its writes in one transaction under a
+  //    per-system advisory lock (PR #15/F8, F9) and converts write failures to
+  //    a zero-applied result, so a throw here is unexpected. Kept defensive:
+  //    treat an actual throw as possibly-committed to avoid a divergent fallback.
   let editResult: Awaited<ReturnType<SurgicalEditDeps["applyEditPlan"]>>;
   try {
     editResult = await deps.applyEditPlan(editPlan, undefined, trainingSystemId);

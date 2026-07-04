@@ -47,6 +47,10 @@ import { createHistoryRevertSystemDeps } from "../../lib/external-materializatio
 import { withExternalProgramLock } from "../../lib/external-materialization/serialization";
 import { reloadExternalTrainingSystemId } from "../../lib/external-materialization/program-store";
 import { logger } from "../../lib/logger";
+import {
+  acquireProgramAdvisoryLock,
+  acquireExternalProgramBlobLock,
+} from "../../lib/advisory-lock";
 
 const router = Router();
 
@@ -599,9 +603,16 @@ router.post(
         emitExternalEvent("surgical_succeeded", { programId, trainingSystemId, latencyMs: surgicalLatencyMs });
         const changes = outcome.result.changes;
         // Group the two blob writes (version snapshot + programData overwrite)
-        // in one transaction so they commit together.
+        // in one transaction so they commit together. Advisory locks (F9):
+        // the blob lock serializes blob writes for this program across
+        // instances; the training-system lock additionally prevents the blob
+        // write from interleaving with another instance's in-flight relational
+        // edit of the same system. Both release at commit/rollback. Lock order
+        // (system → blob) is the only multi-lock site, so no deadlock cycle.
         let version: { id: number; createdAt: Date } | undefined;
         await db.transaction(async (tx) => {
+          await acquireProgramAdvisoryLock(tx, trainingSystemId);
+          await acquireExternalProgramBlobLock(tx, programId);
           const [v] = await tx
             .insert(externalProgramVersionsTable)
             .values({
@@ -720,26 +731,33 @@ router.post(
       // Snapshot-before-edit: append an append-only version row capturing the
       // program state BEFORE this overwrite, so the edit is auditable and
       // reversible (Phase 1C). Written only after fail-loud passes, so a failed
-      // edit never leaves a spurious version.
-      const [version] = await db
-        .insert(externalProgramVersionsTable)
-        .values({
-          externalProgramId: programId,
-          apiKeyId: req.apiKeyId ?? null,
-          programSnapshot: currentProgram as unknown as Record<string, unknown>,
-          type: "edit",
-          instruction,
-          scope: scope ?? null,
-          changeSummary: changes as unknown as Record<string, unknown>,
-        })
-        .returning();
-
-      await db
-        .update(externalProgramsTable)
-        .set({
-          programData: updatedProgram as unknown as Record<string, unknown>,
-        })
-        .where(eq(externalProgramsTable.id, programId));
+      // edit never leaves a spurious version. The pair commits in one
+      // transaction under the blob advisory lock (F9): version + programData
+      // land together, serialized per program across instances. The LLM
+      // regeneration above completed before this transaction opened.
+      let version: { id: number; createdAt: Date } | undefined;
+      await db.transaction(async (tx) => {
+        await acquireExternalProgramBlobLock(tx, programId);
+        const [v] = await tx
+          .insert(externalProgramVersionsTable)
+          .values({
+            externalProgramId: programId,
+            apiKeyId: req.apiKeyId ?? null,
+            programSnapshot: currentProgram as unknown as Record<string, unknown>,
+            type: "edit",
+            instruction,
+            scope: scope ?? null,
+            changeSummary: changes as unknown as Record<string, unknown>,
+          })
+          .returning();
+        version = v;
+        await tx
+          .update(externalProgramsTable)
+          .set({
+            programData: updatedProgram as unknown as Record<string, unknown>,
+          })
+          .where(eq(externalProgramsTable.id, programId));
+      });
 
       res.json(
         buildStandardResponse({

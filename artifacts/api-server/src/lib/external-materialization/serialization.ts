@@ -7,11 +7,14 @@
  * multi-step (non-transactional) relational + blob flows safe: operations run
  * one at a time per program instead of racing.
  *
- * LIMITATION (documented, matches DR-0020/DR-0038): this lock is **per process**.
- * Under the Replit autoscale deployment (multiple instances) it does NOT
- * serialize across instances. A cross-instance guarantee would need a DB
- * advisory lock or a shared store; that is a rollout (2.7) consideration. Within
- * one instance this fully serializes concurrent requests.
+ * SCOPE (updated for audit F9): this lock is **per process** and serializes the
+ * FULL multi-transaction operation (materialize → surgical edit → blob write)
+ * within one instance. Cross-instance correctness now comes from Postgres
+ * advisory xact locks (lib/advisory-lock.ts) taken inside each write
+ * transaction: relational edits lock the training system, blob writes lock the
+ * external program. Those locks are transaction-scoped, so ACROSS instances
+ * the individual transactions serialize but the whole operation does not —
+ * keep this in-process mutex as the first line of defense within an instance.
  *
  * See docs/phase-2-external-surgical-edit.md §9 (Risk) and §11 (Rollout).
  */

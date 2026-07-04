@@ -29,6 +29,7 @@ import {
 } from "@workspace/db";
 import { eq, and, inArray, ne, sql } from "drizzle-orm";
 import type { Dbx } from "./db-executor";
+import { acquireProgramAdvisoryLock } from "./advisory-lock";
 import { logger } from "./logger";
 import type { EditPlan, EditChange } from "./edit-intent-service";
 import type { SystemSnapshot } from "./change-log-service";
@@ -1440,6 +1441,17 @@ export async function applyEditPlan(plan: EditPlan, intentFamily?: string, train
 
   try {
     txOutcome = await db.transaction(async (tx) => {
+
+  // ── Cross-instance serialization (audit F9) ────────────────────────────────
+  // Edits targeting the same training system take a Postgres advisory xact
+  // lock keyed by trainingSystemId, so two app instances can never interleave
+  // relational writes to one system. Acquired as the FIRST statement of the
+  // transaction (before any write) and released automatically at
+  // commit/rollback. All LLM work (interpretEditRequest, add-exercise
+  // resolution) completed before this transaction opened.
+  if (trainingSystemId != null) {
+    await acquireProgramAdvisoryLock(tx, trainingSystemId);
+  }
 
   const results: { applied: boolean; verified?: boolean; detail: string; newId?: number; insertedName?: string }[] = [];
   for (const prepared of preparedChanges) {
