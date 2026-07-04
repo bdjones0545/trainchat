@@ -29,7 +29,6 @@ import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
 import Chat from "@/pages/chat";
-import GuestStart from "@/pages/guest-start";
 
 // ─── Lazy-loaded: authenticated app pages ─────────────────────────────────────
 // Never needed on first load — only authenticated users reach these routes.
@@ -181,6 +180,42 @@ function PageSkeleton() {
 }
 
 /**
+ * BootstrapError — shown when the initial session bootstrap could not produce a
+ * user (server unreachable / bootstrap failed). Replaces the legacy GuestStart
+ * fallback. Retry re-runs bootstrap by remounting ChatPage via a full reload.
+ * Styling mirrors the ErrorBoundary fallback above — no new design language.
+ */
+function BootstrapError() {
+  return (
+    <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 p-6">
+      <div className="max-w-xs text-center space-y-2">
+        <p className="text-base font-semibold text-foreground">
+          Unable to connect to TrainChat
+        </p>
+        <p className="text-sm text-muted-foreground">
+          We couldn't establish a session with the server. Please retry in a
+          moment.
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-lg"
+        >
+          Retry
+        </button>
+        <button
+          onClick={() => window.location.assign("/")}
+          className="px-4 py-2 border border-border text-foreground text-sm font-medium rounded-lg"
+        >
+          Back to Home
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * ChatPage — universal entry point for /chat.
  */
 function ChatPage() {
@@ -221,7 +256,7 @@ function ChatPage() {
 
   if (me) return <Chat />;
   if (hadUser.current) return <Redirect to="/login" />;
-  return <GuestStart userMode="guest" />;
+  return <BootstrapError />;
 }
 
 const queryClient = new QueryClient({
