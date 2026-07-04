@@ -181,6 +181,29 @@ rollback/history unification (`system_change_log`) and transaction/concurrency h
 to later PRs (design doc §10, PR 2.5/2.6). Surgical edits still record blob snapshots in
 `external_program_versions`, same as regeneration.
 
+**History & revert unification (Phase 2.5).** `/program/:id/history` and `/program/:id/revert` now
+**dispatch on `trainingSystemId`** (after the ownership check, which is unchanged):
+
+- **Blob-backed (`trainingSystemId == null`)** — unchanged Phase 1C behavior: history reads
+  `external_program_versions`; revert writes a `revert` snapshot and restores the blob.
+- **Materialized (`trainingSystemId != null`)** — history reads the relational **`system_change_log`**
+  (mapped into the same `versions[]` shape); revert restores through **`restoreFromChange`**, reloads
+  the full system, reserializes it to the program blob, and persists the blob so future API reads stay
+  compatible. Materialized revert does **not** write an `external_program_versions` row — the
+  `system_change_log` restore entry is the audit.
+
+`external_program_versions` is **not** removed, non-materialized behavior is unchanged, and the
+**response shape is unchanged** (same `versions[]` / `updatedProgram`/`version`/`changeReceipt` keys).
+Ownership is enforced before any dispatch. A small dispatcher
+(`lib/external-materialization/history-revert.ts`, dependency-injected) decides the backing; the route
+only checks ownership and calls it.
+
+**Phase 2.6 caveat (not yet addressed):** the relational restore + reserialize + blob overwrite are
+separate statements with no wrapping transaction. On a failure **after** the relational restore, the
+blob is left **unchanged** (never overwritten with a partial/garbage value — no silent corruption), but
+it can transiently lag the restored system until the next successful operation. Atomicity/concurrency
+hardening is Phase 2.6.
+
 **Lazy materialization (Phase 2.3, flag-gated — dormant by default).** When
 `EXTERNAL_MATERIALIZATION_ENABLED=true`, `/program/edit` performs a **best-effort side effect** after
 the ownership check: if the program has no `trainingSystemId` yet, it materializes the blob into a

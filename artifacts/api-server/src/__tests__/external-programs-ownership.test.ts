@@ -41,6 +41,7 @@ const {
   mockMaybeMaterialize,
   mockSurgical,
   mockSurgicalEnabled,
+  mockSystemDeps,
 } = vi.hoisted(() => {
   // A fluent Drizzle chain that is itself a Promise resolving to `rows`. Every
   // builder method (.from/.leftJoin/.where/.orderBy/.limit/.values/.returning)
@@ -101,6 +102,15 @@ const {
         null,
     ),
     mockSurgicalEnabled: vi.fn((): boolean => false),
+    // Phase 2.5 relational history/revert collaborators (injected via the
+    // system-deps factory), controllable per test.
+    mockSystemDeps: {
+      resolveServiceUserId: vi.fn(async () => 99),
+      readChangeHistory: vi.fn(async () => [] as any[]),
+      restoreFromChange: vi.fn(async () => ({ changeLogId: 4242 })),
+      loadFullSystem: vi.fn(async () => ({ id: 909 }) as any),
+      serializeToProgram: vi.fn(() => ({ programName: "Restored", days: [] }) as any),
+    },
   };
 });
 
@@ -151,6 +161,13 @@ vi.mock("../lib/external-materialization", () => ({
   resolveExternalServiceUserId: vi.fn(async () => 1),
   maybeMaterializeOnEdit: mockMaybeMaterialize,
   maybeApplySurgicalExternalEdit: mockSurgical,
+}));
+
+// Phase 2.5: mock only the relational deps FACTORY (which imports the engine),
+// so the pure history/revert dispatcher runs for real while the blob path uses
+// the mocked db and the relational path uses controllable fakes.
+vi.mock("../lib/external-materialization/history-revert-deps", () => ({
+  createHistoryRevertSystemDeps: () => mockSystemDeps,
 }));
 
 vi.mock("../lib/exercise-service", () => ({
@@ -258,6 +275,12 @@ beforeEach(() => {
   });
   mockSurgicalEnabled.mockReturnValue(false);
   mockSurgical.mockResolvedValue(null);
+  // resetAllMocks clears the vi.fn impls on mockSystemDeps — re-seed defaults.
+  mockSystemDeps.resolveServiceUserId.mockResolvedValue(99);
+  mockSystemDeps.readChangeHistory.mockResolvedValue([]);
+  mockSystemDeps.restoreFromChange.mockResolvedValue({ changeLogId: 4242 });
+  mockSystemDeps.loadFullSystem.mockResolvedValue({ id: 909 });
+  mockSystemDeps.serializeToProgram.mockReturnValue({ programName: "Restored", days: [] });
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -976,5 +999,112 @@ describe("external programs — surgical edit wiring (Phase 2.4)", () => {
     expect(mockMaybeMaterialize).not.toHaveBeenCalled();
     expect(mockSurgical).not.toHaveBeenCalled();
     expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Phase 2.5 — materialized history/revert dispatch (relational backing).
+ *
+ * The pure dispatcher runs for real; the relational deps factory is mocked
+ * (mockSystemDeps). Blob programs still hit external_program_versions (covered
+ * by VER-* above); these cover the materialized branch.
+ *
+ *   MHR-01  materialized history reads the system change log (not blob)
+ *   MHR-02  materialized revert restores relationally + persists reserialized blob
+ *   MHR-03  materialized revert restore failure → 500, blob NOT overwritten
+ *   MHR-04  materialized revert unknown version → 404, blob NOT overwritten
+ *   MHR-05  non-materialized history never touches the change log (blob only)
+ */
+describe("external programs — materialized history/revert (Phase 2.5)", () => {
+  const MATERIALIZED_ROW = {
+    ...OWNED_ROW,
+    program: { ...OWNED_ROW.program, trainingSystemId: 909 },
+  };
+
+  it("MHR-01: materialized history reads from the system change log", async () => {
+    mockDb.select.mockReturnValueOnce(mockDb._rows([MATERIALIZED_ROW])); // findOwnedProgram
+    mockSystemDeps.readChangeHistory.mockResolvedValue([
+      { id: 11, source: "ai_edit", scope: "week", changeSummary: "Reduced", requestText: "reduce", restoredFromId: null, createdAt: "2026-02-02" },
+    ]);
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .get("/api/external/program/100/history")
+      .set("Authorization", "Bearer tc_owner");
+
+    expect(res.status).toBe(200);
+    expect(mockSystemDeps.readChangeHistory).toHaveBeenCalledWith(99, 909);
+    expect(res.body.data.versions[0]).toMatchObject({ versionId: 11, type: "ai_edit" });
+  });
+
+  it("MHR-02: materialized revert restores relationally and persists reserialized blob", async () => {
+    mockDb.select.mockReturnValueOnce(mockDb._rows([MATERIALIZED_ROW])); // findOwnedProgram
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 11 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockSystemDeps.restoreFromChange).toHaveBeenCalledWith(99, 11, 909);
+    expect(mockSystemDeps.loadFullSystem).toHaveBeenCalledWith(909);
+    expect(mockSystemDeps.serializeToProgram).toHaveBeenCalledTimes(1);
+    // Blob overwritten with the reserialized system; NO blob version row inserted.
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    // Backwards-compatible response shape.
+    expect(res.body.data).toMatchObject({ programId: 100, revertedFromVersionId: 11, version: 4242 });
+    expect(res.body.data).toHaveProperty("updatedProgram");
+    expect(res.body.data).toHaveProperty("changeReceipt");
+  });
+
+  it("MHR-03: materialized revert restore failure → 500 and blob NOT overwritten", async () => {
+    mockDb.select.mockReturnValueOnce(mockDb._rows([MATERIALIZED_ROW]));
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    mockSystemDeps.restoreFromChange.mockRejectedValue(new Error("db exploded"));
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 11 });
+
+    expect(res.status).toBe(500);
+    expect(res.body.error.code).toBe("REVERT_FAILED");
+    expect(mockDb.update).not.toHaveBeenCalled(); // blob untouched → no corruption
+  });
+
+  it("MHR-04: materialized revert unknown version → 404, blob NOT overwritten", async () => {
+    mockDb.select.mockReturnValueOnce(mockDb._rows([MATERIALIZED_ROW]));
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    mockSystemDeps.restoreFromChange.mockRejectedValue(new Error("Change 11 not found or access denied"));
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 11 });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error.code).toBe("NOT_FOUND");
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("MHR-05: non-materialized history uses the blob path (change log untouched)", async () => {
+    mockDb.select
+      .mockReturnValueOnce(mockDb._rows([OWNED_ROW])) // findOwnedProgram (trainingSystemId null)
+      .mockReturnValueOnce(mockDb._rows([{ versionId: 1, type: "edit" }])); // readBlobVersions
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .get("/api/external/program/100/history")
+      .set("Authorization", "Bearer tc_owner");
+
+    expect(res.status).toBe(200);
+    expect(mockSystemDeps.readChangeHistory).not.toHaveBeenCalled();
+    expect(res.body.data.versions[0]).toMatchObject({ versionId: 1 });
   });
 });
