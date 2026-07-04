@@ -36,6 +36,7 @@ import {
   maybeMaterializeOnEdit,
   maybeApplySurgicalExternalEdit,
   createDefaultSurgicalDeps,
+  emitExternalEvent,
 } from "../../lib/external-materialization";
 import {
   getExternalProgramHistory,
@@ -518,7 +519,8 @@ router.post(
     }
 
     const currentProgram = storedProgram.programData as unknown as ProgramStructure;
-    const surgicalEnabled = isExternalSurgicalEditEnabled();
+    const flagCtx = { apiKeyId: req.apiKeyId ?? null, orgId: req.apiKey?.orgId ?? null };
+    const surgicalEnabled = isExternalSurgicalEditEnabled(flagCtx);
 
     // ── Phase 2.6: serialize all materialized work for THIS program (per
     //    instance) so concurrent materialization / surgical edits never
@@ -543,7 +545,7 @@ router.post(
         },
         { apiKeyId: req.apiKeyId ?? null, orgId: req.apiKey?.orgId ?? null },
         {
-          enabled: isExternalMaterializationEnabled() || surgicalEnabled,
+          enabled: isExternalMaterializationEnabled(flagCtx) || surgicalEnabled,
           adapterDeps: createDefaultRoundTripDeps(() =>
             resolveExternalServiceUserId(storedProgram!.id),
           ),
@@ -565,10 +567,23 @@ router.post(
       const trainingSystemId =
         bridge.trainingSystemId ?? freshTsid ?? storedProgram!.trainingSystemId ?? null;
 
+      // Observability: materialization outcome.
+      if (bridge.reason === "materialized") {
+        emitExternalEvent("materialize_attempted", { programId });
+        emitExternalEvent("materialize_succeeded", { programId, trainingSystemId });
+      } else if (bridge.reason === "failed") {
+        emitExternalEvent("materialize_attempted", { programId });
+        emitExternalEvent("materialize_failed", { programId });
+      } else if (bridge.reason === "already_materialized") {
+        emitExternalEvent("materialize_skipped", { programId, trainingSystemId });
+      }
+
       if (!surgicalEnabled || trainingSystemId == null) {
         return { kind: "fallback" };
       }
 
+      emitExternalEvent("surgical_attempted", { programId, trainingSystemId });
+      const surgicalStarted = Date.now();
       const outcome = await maybeApplySurgicalExternalEdit(
         { trainingSystemId, instruction, scope: scope ?? null },
         createDefaultSurgicalDeps((err, stage) =>
@@ -578,8 +593,10 @@ router.post(
           ),
         ),
       );
+      const surgicalLatencyMs = Date.now() - surgicalStarted;
 
       if (outcome.ok) {
+        emitExternalEvent("surgical_succeeded", { programId, trainingSystemId, latencyMs: surgicalLatencyMs });
         const changes = outcome.result.changes;
         // Group the two blob writes (version snapshot + programData overwrite)
         // in one transaction so they commit together.
@@ -615,9 +632,13 @@ router.post(
 
       // committed === true → relational mutation committed but couldn't finalize
       // the blob → fail loud (do NOT regenerate; that would diverge).
-      if (outcome.committed) return { kind: "surgical_partial" };
+      if (outcome.committed) {
+        emitExternalEvent("surgical_edit_partial", { programId, trainingSystemId, stage: outcome.stage });
+        return { kind: "surgical_partial" };
+      }
 
       // committed === false → nothing changed relationally → safe fallback.
+      emitExternalEvent("surgical_fallback", { programId, trainingSystemId, stage: outcome.stage });
       return { kind: "fallback" };
     });
 
@@ -1191,10 +1212,11 @@ router.get(
         return;
       }
 
-      const { versions } = await getExternalProgramHistory(
+      const { versions, backing } = await getExternalProgramHistory(
         { id: owned.id, programData: owned.programData, trainingSystemId: owned.trainingSystemId },
         buildHistoryRevertDeps(),
       );
+      emitExternalEvent(backing === "system" ? "history_system" : "history_blob", { programId });
 
       res.json(buildStandardResponse({ programId, versions }));
     } catch (err) {
@@ -1270,6 +1292,7 @@ router.post(
       );
 
       if (!outcome.ok) {
+        emitExternalEvent("revert_failed", { programId, code: outcome.code });
         res.status(outcome.code === "NOT_FOUND" ? 404 : 500).json({
           success: false,
           data: null,
@@ -1279,6 +1302,7 @@ router.post(
         return;
       }
 
+      emitExternalEvent("revert_succeeded", { programId, backing: outcome.backing });
       res.json(
         buildStandardResponse({
           programId,

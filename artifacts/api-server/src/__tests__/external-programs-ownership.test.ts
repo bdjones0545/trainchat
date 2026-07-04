@@ -43,6 +43,7 @@ const {
   mockSurgicalEnabled,
   mockSystemDeps,
   mockReloadTsid,
+  mockEmit,
 } = vi.hoisted(() => {
   // A fluent Drizzle chain that is itself a Promise resolving to `rows`. Every
   // builder method (.from/.leftJoin/.where/.orderBy/.limit/.values/.returning)
@@ -121,6 +122,8 @@ const {
     },
     // Phase 2.6 fresh-read of the trainingSystemId under the lock.
     mockReloadTsid: vi.fn(async (): Promise<number | null> => null),
+    // Phase 2.7 observability emitter.
+    mockEmit: vi.fn(),
   };
 });
 
@@ -171,6 +174,7 @@ vi.mock("../lib/external-materialization", () => ({
   resolveExternalServiceUserId: vi.fn(async () => 1),
   maybeMaterializeOnEdit: mockMaybeMaterialize,
   maybeApplySurgicalExternalEdit: mockSurgical,
+  emitExternalEvent: mockEmit,
 }));
 
 // Phase 2.5: mock only the relational deps FACTORY (which imports the engine),
@@ -1146,5 +1150,86 @@ describe("external programs — materialized history/revert (Phase 2.5)", () => 
     expect(res.status).toBe(200);
     expect(mockSystemDeps.readChangeHistory).not.toHaveBeenCalled();
     expect(res.body.data.versions[0]).toMatchObject({ versionId: 1 });
+  });
+});
+
+/**
+ * Phase 2.7 — rollout observability + kill switch (route level).
+ *
+ *   OBS-01  surgical success emits surgical_attempted + surgical_succeeded
+ *   OBS-02  kill switch: surgical flag off → no surgical events, regeneration used
+ *   OBS-03  materialized history emits history_system; blob history emits history_blob
+ *   OBS-04  materialized revert (surgical flag OFF) still works + emits revert_succeeded
+ */
+describe("external programs — rollout observability & kill switch (Phase 2.7)", () => {
+  const MATERIALIZED_ROW = { ...OWNED_ROW, program: { ...OWNED_ROW.program, trainingSystemId: 909 } };
+
+  it("OBS-01: surgical success emits attempted + succeeded", async () => {
+    programExists();
+    mockSurgicalEnabled.mockReturnValue(true);
+    mockMaybeMaterialize.mockResolvedValue({ attempted: true, materialized: true, trainingSystemId: 909, reason: "materialized" });
+    mockSurgical.mockResolvedValue({ ok: true, result: { updatedProgram: { programName: "X", days: [] }, changes: [], coachSummary: "ok" } });
+    authState.apiKey = KEY_A;
+
+    await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    const events = mockEmit.mock.calls.map((c) => c[0]);
+    expect(events).toContain("surgical_attempted");
+    expect(events).toContain("surgical_succeeded");
+  });
+
+  it("OBS-02: kill switch — surgical flag off → no surgical events, regeneration used", async () => {
+    programExists();
+    mockSurgicalEnabled.mockReturnValue(false); // flag OFF (kill switch)
+    authState.apiKey = KEY_A;
+
+    await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    const events = mockEmit.mock.calls.map((c) => c[0]);
+    expect(events).not.toContain("surgical_attempted");
+    expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1); // fell back to regeneration
+  });
+
+  it("OBS-03: history emits history_system (materialized) / history_blob (blob)", async () => {
+    // materialized
+    mockDb.select.mockReturnValueOnce(mockDb._rows([MATERIALIZED_ROW]));
+    mockSystemDeps.readChangeHistory.mockResolvedValue([]);
+    authState.apiKey = KEY_A;
+    await supertest(await makeApp())
+      .get("/api/external/program/100/history")
+      .set("Authorization", "Bearer tc_owner");
+    expect(mockEmit.mock.calls.map((c) => c[0])).toContain("history_system");
+
+    // blob
+    mockEmit.mockClear();
+    mockDb.select
+      .mockReturnValueOnce(mockDb._rows([OWNED_ROW]))
+      .mockReturnValueOnce(mockDb._rows([{ versionId: 1, type: "edit" }]));
+    await supertest(await makeApp())
+      .get("/api/external/program/100/history")
+      .set("Authorization", "Bearer tc_owner");
+    expect(mockEmit.mock.calls.map((c) => c[0])).toContain("history_blob");
+  });
+
+  it("OBS-04: already-materialized revert is safe with surgical flag OFF and emits revert_succeeded", async () => {
+    mockSurgicalEnabled.mockReturnValue(false); // surgical off — dispatcher independent of flag
+    mockDb.select.mockReturnValueOnce(mockDb._rows([MATERIALIZED_ROW]));
+    mockDb.update.mockReturnValue(mockDb._rows(undefined));
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/100/revert")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ versionId: 11 });
+
+    expect(res.status).toBe(200);
+    expect(mockSystemDeps.restoreFromChange).toHaveBeenCalledWith(99, 11, 909);
+    expect(mockEmit.mock.calls.map((c) => c[0])).toContain("revert_succeeded");
   });
 });

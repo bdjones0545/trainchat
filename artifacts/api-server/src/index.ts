@@ -12,6 +12,7 @@ import { startBillingReconciliation } from "./lib/billingReconciliation";
 import { seedExerciseLibraryIfEmpty } from "./lib/exercise-seeder";
 import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
 import { seedWhitepaperPublicationsIfMissing } from "./lib/whitepaper-publications-seeder";
+import { runExternalMaterializationReadinessCheck } from "./lib/external-materialization";
 
 const rawPort = process.env["PORT"];
 
@@ -99,6 +100,10 @@ await initStripe();
 await seedExerciseLibraryIfEmpty();
 await seedCoachingKnowledgeIfEmpty();
 await seedWhitepaperPublicationsIfMissing();
+
+// Phase 2.7: best-effort, non-fatal — warn if the external materialization/
+// surgical flags could be active but migration 0002 hasn't been applied.
+runExternalMaterializationReadinessCheck().catch(() => {});
 
 app.listen(port, (err) => {
   if (err) {
