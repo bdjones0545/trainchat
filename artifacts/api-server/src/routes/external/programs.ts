@@ -51,6 +51,7 @@ import {
   acquireProgramAdvisoryLock,
   acquireExternalProgramBlobLock,
 } from "../../lib/advisory-lock";
+import { validateProgramStructure } from "../../lib/program-structure-schema";
 
 const router = Router();
 
@@ -335,6 +336,28 @@ router.post(
         return;
       }
 
+      // ── Pre-persistence schema gate (audit F5, defense in depth) ─────────
+      // The parse boundary in lib/ai.ts already validates, but this row is
+      // served back verbatim to API consumers — never persist or return a
+      // structurally invalid program as a success.
+      const generateValidation = validateProgramStructure(aiResponse.structuredData);
+      if (!generateValidation.valid) {
+        logger.warn(
+          { issues: generateValidation.issues },
+          "external-programs: generate produced structurally invalid program — returning 422, nothing persisted",
+        );
+        res.status(422).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: {
+            code: "GENERATION_FAILED",
+            message: "The AI produced a structurally invalid program. Nothing was saved — please retry.",
+          },
+        });
+        return;
+      }
+
       const safeProgram = stripInternalFields(aiResponse.structuredData);
 
       const [stored] = await db
@@ -434,6 +457,22 @@ router.post(
         emit("error", {
           code: "GENERATION_FAILED",
           message: "The AI did not produce a structured program.",
+        });
+        res.end();
+        return;
+      }
+
+      // Pre-persistence schema gate (audit F5) — same rule as the non-stream
+      // route: an invalid structure is an error event, never a `complete`.
+      const streamValidation = validateProgramStructure(aiResponse.structuredData);
+      if (!streamValidation.valid) {
+        logger.warn(
+          { issues: streamValidation.issues },
+          "external-programs: stream generate produced structurally invalid program — nothing persisted",
+        );
+        emit("error", {
+          code: "GENERATION_FAILED",
+          message: "The AI produced a structurally invalid program. Nothing was saved — please retry.",
         });
         res.end();
         return;
@@ -720,6 +759,29 @@ router.post(
             code: "EDIT_FAILED",
             message:
               "The edit could not be applied — the AI did not produce an updated program. The program was left unchanged. Try rephrasing the instruction with more detail.",
+          },
+        });
+        return;
+      }
+
+      // ── Pre-persistence schema gate (audit F5) ───────────────────────────
+      // Same fail-loud rule: a structurally invalid regenerated program must
+      // never overwrite the stored one. Leave programData untouched, no
+      // version row, return 422.
+      const editValidation = validateProgramStructure(aiResponse.structuredData);
+      if (!editValidation.valid) {
+        logger.warn(
+          { programId, issues: editValidation.issues },
+          "external-programs: edit produced structurally invalid program — returning 422, program unchanged",
+        );
+        res.status(422).json({
+          success: false,
+          data: null,
+          meta: null,
+          error: {
+            code: "EDIT_FAILED",
+            message:
+              "The edit could not be applied — the AI produced a structurally invalid program. The program was left unchanged. Try rephrasing the instruction.",
           },
         });
         return;

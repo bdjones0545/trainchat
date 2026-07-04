@@ -222,13 +222,22 @@ const KEY_A = { id: 1, orgId: "org-A" };
 const KEY_B_OTHER_ORG = { id: 2, orgId: "org-B" };
 const KEY_C_SAME_ORG = { id: 3, orgId: "org-A" };
 
+// Schema-valid (F5): AI output is validated before persistence, so the
+// fixture returned by mockGenerateAIResponse must be a structurally valid
+// program (≥1 named day with named exercises).
 const PROGRAM_DATA = {
   programName: "Test Program",
   description: "A program",
   whyItWorks: "because",
   progressionStrategy: "linear",
   intelligenceStatus: {},
-  days: [],
+  days: [
+    {
+      dayNumber: 1,
+      name: "Day 1 — Full Body",
+      exercises: [{ name: "Back Squat", sets: 3, reps: "5", rest: "2 min" }],
+    },
+  ],
 };
 
 // Program owned by KEY_A; the join yields the owning key's orgId.
@@ -1302,5 +1311,75 @@ describe("external programs — edit blob-transaction advisory locks (F9)", () =
       [TRAINING_SYSTEM_LOCK_CLASS, 909],
       [EXTERNAL_PROGRAM_LOCK_CLASS, 100],
     ]);
+  });
+});
+
+// ── AI-output schema gate on external routes (audit F5) ───────────────────────
+//
+// generateAIResponse is mocked here, so these tests exercise the ROUTE-level
+// pre-persistence gate directly: a malformed structuredData (which the parse
+// boundary in lib/ai.ts would normally have nulled) must never be persisted or
+// returned as a success. The parse boundary itself is covered in
+// program-structure-schema.test.ts.
+describe("external programs — AI output schema gate (F5)", () => {
+  const MALFORMED = {
+    programName: "Broken",
+    days: [{ exercises: [{ sets: "three" }] }], // unnamed day, unnamed exercise, string sets
+  };
+
+  it("F5-R01: generate with invalid AI output → 422 GENERATION_FAILED, nothing persisted", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: MALFORMED,
+      changeSummary: [],
+      content: "Done.",
+    });
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/generate")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ goal: "get faster" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("GENERATION_FAILED");
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
+  it("F5-R02: edit with invalid AI output → 422 EDIT_FAILED, program unchanged, no version row", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    mockGenerateAIResponse.mockResolvedValue({
+      structuredData: MALFORMED,
+      changeSummary: ["broke it"],
+      content: "Done.",
+    });
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.success).toBe(false);
+    expect(res.body.error.code).toBe("EDIT_FAILED");
+    // No version snapshot, no programData overwrite
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it("F5-R03: valid AI output still generates successfully (no false rejections)", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/generate")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ goal: "get faster" });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(mockDb.insert).toHaveBeenCalled();
   });
 });
