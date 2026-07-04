@@ -56,9 +56,19 @@ export {
   type SurgicalEditParams,
   type SurgicalEditDeps,
   type SurgicalEditResult,
+  type SurgicalEditOutcome,
 } from "./surgical";
 
 export { createDefaultSurgicalDeps } from "./surgical-deps";
+
+export {
+  withExternalProgramLock,
+  materializeOnce,
+  activeLockKeyCount,
+  type MaterializeOnceDeps,
+} from "./serialization";
+
+export { reloadExternalTrainingSystemId } from "./program-store";
 
 export {
   resolveExternalServiceUserId,

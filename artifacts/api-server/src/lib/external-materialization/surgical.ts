@@ -43,6 +43,16 @@ export interface SurgicalEditResult {
   coachSummary: string;
 }
 
+/**
+ * Discriminated outcome (Phase 2.6). `committed` distinguishes failures that
+ * happened AFTER a relational mutation may have committed (must NOT fall back to
+ * regeneration — that would leave the blob and training system divergent) from
+ * failures before any relational change (safe to fall back).
+ */
+export type SurgicalEditOutcome =
+  | { ok: true; result: SurgicalEditResult }
+  | { ok: false; committed: boolean; stage: string };
+
 /** Build the NL instruction handed to interpretEditRequest. */
 export function buildSurgicalEditMessage(instruction: string, scope?: string | null): string {
   return scope ? `${instruction} (scope: ${scope})` : instruction;
@@ -56,53 +66,70 @@ export function buildSurgicalEditMessage(instruction: string, scope?: string | n
 export async function maybeApplySurgicalExternalEdit(
   params: SurgicalEditParams,
   deps: SurgicalEditDeps,
-): Promise<SurgicalEditResult | null> {
+): Promise<SurgicalEditOutcome> {
   const { trainingSystemId, instruction, scope } = params;
 
+  // ── Pre-mutation stages: a failure here means nothing was committed → safe
+  //    to fall back to the regeneration path.
+  let editPlan: Awaited<ReturnType<SurgicalEditDeps["interpretEditRequest"]>>;
   try {
     const preSystem = await deps.loadFullSystem(trainingSystemId);
     if (!preSystem) {
       deps.onError?.(new Error("training system not found"), "load");
-      return null;
+      return { ok: false, committed: false, stage: "load" };
     }
-
     const systemContext = deps.serializeSystemForPrompt(preSystem);
-    const editPlan = await deps.interpretEditRequest(
+    editPlan = await deps.interpretEditRequest(
       buildSurgicalEditMessage(instruction, scope),
       systemContext,
     );
     if (!editPlan) {
-      // Could not interpret into a structured plan → fall back to regeneration.
       deps.onError?.(new Error("no edit plan produced"), "interpret");
-      return null;
+      return { ok: false, committed: false, stage: "interpret" };
     }
+  } catch (err) {
+    deps.onError?.(err, "pre");
+    return { ok: false, committed: false, stage: "pre" };
+  }
 
-    const editResult = await deps.applyEditPlan(editPlan, undefined, trainingSystemId);
-    if (!editResult || editResult.appliedCount <= 0) {
-      // Nothing was applied surgically → fall back so the user still gets an edit.
-      deps.onError?.(new Error("no changes applied"), "apply");
-      return null;
-    }
+  // ── Mutation: applyEditPlan is non-transactional, so a throw here MAY have
+  //    partially committed. Treat it as committed to avoid a divergent fallback.
+  let editResult: Awaited<ReturnType<SurgicalEditDeps["applyEditPlan"]>>;
+  try {
+    editResult = await deps.applyEditPlan(editPlan, undefined, trainingSystemId);
+  } catch (err) {
+    deps.onError?.(err, "apply");
+    return { ok: false, committed: true, stage: "apply" };
+  }
+  if (!editResult || editResult.appliedCount <= 0) {
+    // Clean no-op — nothing changed → safe to fall back.
+    deps.onError?.(new Error("no changes applied"), "apply_noop");
+    return { ok: false, committed: false, stage: "apply_noop" };
+  }
 
+  // ── Finalize: the relational mutation is committed. Any failure here MUST NOT
+  //    fall back (would leave blob and system divergent) — the caller fails loud.
+  try {
     const postSystem = await deps.loadFullSystem(trainingSystemId);
     if (!postSystem) {
       deps.onError?.(new Error("training system missing after apply"), "reload");
-      return null;
+      return { ok: false, committed: true, stage: "reload" };
     }
-
     const updatedProgram = deps.serializeToProgram(postSystem);
     if (!updatedProgram) {
       deps.onError?.(new Error("could not reserialize system"), "serialize");
-      return null;
+      return { ok: false, committed: true, stage: "serialize" };
     }
-
     return {
-      updatedProgram,
-      changes: editResult.details ?? [],
-      coachSummary: editResult.changeSummary ?? "Program updated.",
+      ok: true,
+      result: {
+        updatedProgram,
+        changes: editResult.details ?? [],
+        coachSummary: editResult.changeSummary ?? "Program updated.",
+      },
     };
   } catch (err) {
-    deps.onError?.(err, "exception");
-    return null;
+    deps.onError?.(err, "finalize");
+    return { ok: false, committed: true, stage: "finalize" };
   }
 }
