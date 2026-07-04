@@ -34,7 +34,14 @@ import supertest from "supertest";
 
 // ── Hoisted state & mocks ──────────────────────────────────────────────────────
 
-const { authState, mockDb, mockGenerateAIResponse, mockMaybeMaterialize } = vi.hoisted(() => {
+const {
+  authState,
+  mockDb,
+  mockGenerateAIResponse,
+  mockMaybeMaterialize,
+  mockSurgical,
+  mockSurgicalEnabled,
+} = vi.hoisted(() => {
   // A fluent Drizzle chain that is itself a Promise resolving to `rows`. Every
   // builder method (.from/.leftJoin/.where/.orderBy/.limit/.values/.returning)
   // returns the same chain, so any query shape used by the route resolves to
@@ -86,6 +93,14 @@ const { authState, mockDb, mockGenerateAIResponse, mockMaybeMaterialize } = vi.h
         reason: "flag_off",
       }),
     ),
+    mockSurgical: vi.fn(
+      async (
+        _params?: unknown,
+        _deps?: unknown,
+      ): Promise<{ updatedProgram: unknown; changes: string[]; coachSummary: string } | null> =>
+        null,
+    ),
+    mockSurgicalEnabled: vi.fn((): boolean => false),
   };
 });
 
@@ -130,9 +145,12 @@ vi.mock("../lib/ai", () => ({
 // side-effect call is observable without pulling the real engine/DB.
 vi.mock("../lib/external-materialization", () => ({
   isExternalMaterializationEnabled: vi.fn(() => false),
+  isExternalSurgicalEditEnabled: mockSurgicalEnabled,
   createDefaultRoundTripDeps: vi.fn(() => ({})),
+  createDefaultSurgicalDeps: vi.fn(() => ({})),
   resolveExternalServiceUserId: vi.fn(async () => 1),
   maybeMaterializeOnEdit: mockMaybeMaterialize,
+  maybeApplySurgicalExternalEdit: mockSurgical,
 }));
 
 vi.mock("../lib/exercise-service", () => ({
@@ -238,6 +256,8 @@ beforeEach(() => {
     trainingSystemId: null,
     reason: "flag_off",
   });
+  mockSurgicalEnabled.mockReturnValue(false);
+  mockSurgical.mockResolvedValue(null);
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -833,5 +853,128 @@ describe("external programs — lazy materialization wiring (Phase 2.3)", () => 
     expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1);
     expect(mockDb.insert).toHaveBeenCalledTimes(1); // snapshot-before-edit
     expect(mockDb.update).toHaveBeenCalledTimes(1); // programData overwrite
+  });
+});
+
+/**
+ * Phase 2.4 — surgical edit path (flag-gated; falls back to regeneration).
+ *
+ *   SURG-R01  flag off → regeneration used, surgical never called
+ *   SURG-R02  flag on + no trainingSystemId → falls back to regeneration
+ *   SURG-R03  flag on + trainingSystemId + surgical success → surgical response,
+ *             LLM NOT called, version snapshot + overwrite written
+ *   SURG-R04  surgical failure → falls back to regeneration
+ *   SURG-R05  cross-tenant edit → 404; neither bridge nor surgical is attempted
+ */
+describe("external programs — surgical edit wiring (Phase 2.4)", () => {
+  const SURGICAL_PROGRAM = { programName: "Surgically Edited", days: [] };
+
+  function enableSurgicalWithSystem() {
+    mockSurgicalEnabled.mockReturnValue(true);
+    mockMaybeMaterialize.mockResolvedValue({
+      attempted: true,
+      materialized: true,
+      trainingSystemId: 909,
+      reason: "materialized",
+    });
+  }
+
+  it("SURG-R01: flag off → regeneration path, surgical never called", async () => {
+    programExists();
+    authState.apiKey = KEY_A;
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    expect(mockSurgical).not.toHaveBeenCalled();
+    expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1); // regeneration
+  });
+
+  it("SURG-R02: flag on but no trainingSystemId → falls back to regeneration", async () => {
+    programExists();
+    mockSurgicalEnabled.mockReturnValue(true);
+    mockMaybeMaterialize.mockResolvedValue({
+      attempted: true,
+      materialized: false,
+      trainingSystemId: null,
+      reason: "failed",
+    });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    expect(mockSurgical).not.toHaveBeenCalled(); // no system → surgical skipped
+    expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1);
+  });
+
+  it("SURG-R03: flag on + materialized system + surgical success → surgical response, no LLM", async () => {
+    programExists();
+    enableSurgicalWithSystem();
+    mockSurgical.mockResolvedValue({
+      updatedProgram: SURGICAL_PROGRAM,
+      changes: ["set Squat 3→2"],
+      coachSummary: "Reduced Friday volume.",
+    });
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce Friday volume", scope: "week" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    // Surgical ran with the materialized system id; regeneration did NOT.
+    expect(mockSurgical).toHaveBeenCalledTimes(1);
+    expect(mockSurgical.mock.calls[0][0]).toMatchObject({ trainingSystemId: 909, instruction: "reduce Friday volume", scope: "week" });
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
+    // Response shape is backwards-compatible.
+    expect(res.body.data.updatedProgram).toEqual(SURGICAL_PROGRAM);
+    expect(res.body.data.changes).toEqual(["set Squat 3→2"]);
+    expect(res.body.data).toHaveProperty("coachSummary");
+    expect(res.body.data).toHaveProperty("version");
+    expect(res.body.data).toHaveProperty("changeReceipt");
+    // Version snapshot + overwrite persisted (existing audit pattern).
+    expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("SURG-R04: surgical failure → falls back to regeneration", async () => {
+    programExists();
+    enableSurgicalWithSystem();
+    mockSurgical.mockResolvedValue(null); // surgical failed
+    authState.apiKey = KEY_A;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_owner")
+      .send({ programId: 100, instruction: "reduce volume" });
+
+    expect(res.status).toBe(200);
+    expect(mockSurgical).toHaveBeenCalledTimes(1);
+    expect(mockGenerateAIResponse).toHaveBeenCalledTimes(1); // regeneration fallback
+  });
+
+  it("SURG-R05: cross-tenant edit → 404; neither bridge nor surgical attempted", async () => {
+    programExists();
+    mockSurgicalEnabled.mockReturnValue(true);
+    authState.apiKey = KEY_B_OTHER_ORG;
+
+    const res = await supertest(await makeApp())
+      .post("/api/external/program/edit")
+      .set("Authorization", "Bearer tc_intruder")
+      .send({ programId: 100, instruction: "sabotage" });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual(NOT_FOUND_BODY);
+    expect(mockMaybeMaterialize).not.toHaveBeenCalled();
+    expect(mockSurgical).not.toHaveBeenCalled();
+    expect(mockGenerateAIResponse).not.toHaveBeenCalled();
   });
 });

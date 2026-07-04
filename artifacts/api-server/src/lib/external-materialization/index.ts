@@ -46,7 +46,19 @@ export {
 export {
   isExternalMaterializationEnabled,
   EXTERNAL_MATERIALIZATION_FLAG,
+  isExternalSurgicalEditEnabled,
+  EXTERNAL_SURGICAL_EDIT_FLAG,
 } from "./feature-flag";
+
+export {
+  maybeApplySurgicalExternalEdit,
+  buildSurgicalEditMessage,
+  type SurgicalEditParams,
+  type SurgicalEditDeps,
+  type SurgicalEditResult,
+} from "./surgical";
+
+export { createDefaultSurgicalDeps } from "./surgical-deps";
 
 export {
   resolveExternalServiceUserId,

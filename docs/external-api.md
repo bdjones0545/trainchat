@@ -168,6 +168,19 @@ only *reads* user context by this id (never writes), the sentinel loads an empty
 generations are driven purely by the request payload and can never be contaminated by an internal
 user's stored data. (Was DR-0044; resolved 2026-07-03.)
 
+**Surgical edit (Phase 2.4, flag-gated — NOT the default path).** When
+`EXTERNAL_SURGICAL_EDIT_ENABLED=true`, `/program/edit` runs the internal deterministic edit pipeline
+instead of LLM regeneration. After ownership, it forces materialization (via the 2.3 bridge); if a
+`trainingSystemId` exists it runs `interpretEditRequest → applyEditPlan`, reloads the system, and
+reserializes it back to the program blob via the Phase 2.2 adapter, persisting the result with the
+**existing 1C audit pattern** (version snapshot → `programData` overwrite → **unchanged response
+shape**). **Fallbacks are explicit:** if the flag is off, or no training system materializes, or *any*
+surgical step fails, the request falls through to the current LLM regeneration path — existing clients
+are never broken. Non-goals for 2.4: the regeneration path is not removed, defaults are unchanged, and
+rollback/history unification (`system_change_log`) and transaction/concurrency hardening are deferred
+to later PRs (design doc §10, PR 2.5/2.6). Surgical edits still record blob snapshots in
+`external_program_versions`, same as regeneration.
+
 **Lazy materialization (Phase 2.3, flag-gated — dormant by default).** When
 `EXTERNAL_MATERIALIZATION_ENABLED=true`, `/program/edit` performs a **best-effort side effect** after
 the ownership check: if the program has no `trainingSystemId` yet, it materializes the blob into a
