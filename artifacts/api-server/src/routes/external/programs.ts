@@ -28,6 +28,12 @@ import {
 import { eq, and, desc } from "drizzle-orm";
 import { getSwapCandidates, findExerciseByName } from "../../lib/exercise-service";
 import { resolveSafeSwapBackstop } from "../../lib/swap-backstop-service";
+import {
+  isExternalMaterializationEnabled,
+  createDefaultRoundTripDeps,
+  resolveExternalServiceUserId,
+  maybeMaterializeOnEdit,
+} from "../../lib/external-materialization";
 import { logger } from "../../lib/logger";
 
 const router = Router();
@@ -499,6 +505,40 @@ router.post(
       });
       return;
     }
+
+    // ── Phase 2.3: lazy materialization (flag-gated, best-effort side effect) ──
+    // Runs AFTER ownership. When the flag is on and the program is not yet
+    // materialized, materialize it into a training_system and link
+    // trainingSystemId. This does NOT change the edit — the LLM regeneration
+    // path below is used regardless, and any failure is logged, not surfaced.
+    await maybeMaterializeOnEdit(
+      {
+        id: storedProgram.id,
+        programData: storedProgram.programData,
+        trainingSystemId: storedProgram.trainingSystemId,
+      },
+      { apiKeyId: req.apiKeyId ?? null, orgId: req.apiKey?.orgId ?? null },
+      {
+        enabled: isExternalMaterializationEnabled(),
+        adapterDeps: createDefaultRoundTripDeps(() =>
+          resolveExternalServiceUserId(storedProgram!.id),
+        ),
+        link: async (pid, systemId) => {
+          await db
+            .update(externalProgramsTable)
+            .set({ trainingSystemId: systemId })
+            .where(eq(externalProgramsTable.id, pid));
+        },
+        focusMode:
+          (storedProgram.requestContext as { focusMode?: string } | null)?.focusMode ??
+          null,
+        onError: (err) =>
+          logger.warn(
+            { err, programId: storedProgram!.id },
+            "external-programs: lazy materialization failed — continuing with blob edit path",
+          ),
+      },
+    );
 
     const currentProgram = storedProgram.programData as unknown as ProgramStructure;
     const userId = buildSystemUserId(req.apiKey);

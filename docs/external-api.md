@@ -168,6 +168,15 @@ only *reads* user context by this id (never writes), the sentinel loads an empty
 generations are driven purely by the request payload and can never be contaminated by an internal
 user's stored data. (Was DR-0044; resolved 2026-07-03.)
 
+**Lazy materialization (Phase 2.3, flag-gated — dormant by default).** When
+`EXTERNAL_MATERIALIZATION_ENABLED=true`, `/program/edit` performs a **best-effort side effect** after
+the ownership check: if the program has no `trainingSystemId` yet, it materializes the blob into a
+relational `training_systems` hierarchy (owned by a dedicated per-program anonymous service user) and
+links `external_programs.trainingSystemId`. This does **not** change the edit — the LLM regeneration
+path still runs regardless, the response shape is unchanged, and a materialization failure is logged
+and swallowed (the edit still succeeds). With the flag off (default) the edit path is byte-identical
+to before. Surgical editing over the materialized system arrives in a later PR (design doc §10, PR 2.4).
+
 ## 7. Response envelope
 
 All external responses use a consistent **`{ success, data, meta, error }`** shape (helper in
