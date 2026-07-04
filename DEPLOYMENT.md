@@ -44,6 +44,32 @@ TypeScript source (src/)
 
 **No migration runner.** Schema changes are applied via `drizzle-kit push` (see §5). There are no numbered migration files — the schema is always pushed as the authoritative definition.
 
+### Same-origin routing vs. dev preview proxy
+
+The frontend calls the backend with **relative** `/api/*` URLs (the web API client has no base
+URL). In **production**, Replit Autoscale (`[deployment] router = "application"` in `.replit`)
+serves the frontend and the api-server on the **same public origin**, so `/api/*` — including
+`/api/auth/bootstrap` — reaches the backend directly. That bootstrap is what authenticates the
+anonymous-first user and lets `ChatPage` render the advanced 3-panel **Chat** UI.
+
+A **standalone Vite dev/preview** server has no same-origin backend, so `/api/*` would 404,
+bootstrap would fail, and `ChatPage` would fall back to the guest **GuestStart** UI. To make the
+preview behave like production, `artifacts/trainchat/vite.config.ts` includes a **dev/preview-only**
+`/api` proxy (applied to both `server` and `preview`; it does **not** affect `vite build` output):
+
+```
+# 1. Run the api-server (needs DATABASE_URL, PORT, etc.) — e.g. on :8080
+pnpm --filter @workspace/api-server run build && PORT=8080 node artifacts/api-server/dist/index.mjs
+
+# 2. Point the proxy at it (defaults to http://localhost:8080 if unset) and run the frontend
+VITE_API_PROXY_TARGET=http://localhost:8080 PORT=5173 BASE_PATH=/ \
+  pnpm --filter @workspace/trainchat run dev     # or `run serve` for the built preview
+```
+
+Proxy target precedence: `VITE_API_PROXY_TARGET` → `API_PROXY_TARGET` → `http://localhost:8080`.
+With the api-server reachable, `/api/auth/bootstrap` succeeds and the preview renders the advanced
+Chat UI instead of GuestStart.
+
 ---
 
 ## 2. Hosting Environment

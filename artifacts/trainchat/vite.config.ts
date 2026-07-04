@@ -25,6 +25,32 @@ if (!basePath) {
   );
 }
 
+// ── Dev/preview-only API proxy ────────────────────────────────────────────────
+// In production the frontend and the Express api-server are served on the SAME
+// origin (Replit autoscale `router = "application"`), so the app's relative
+// `/api/*` calls — including `/api/auth/bootstrap` — reach the backend directly.
+//
+// In a standalone Vite dev/preview server there is no same-origin backend, so
+// those calls would 404, bootstrap would fail, and ChatPage would fall back to
+// the guest UI. This proxy forwards `/api/*` to the api-server during dev
+// (`vite`) and preview (`vite preview`) only. It has NO effect on `vite build`
+// output, so the production bundle is unchanged.
+//
+// Target precedence: VITE_API_PROXY_TARGET → API_PROXY_TARGET → localhost:8080.
+const apiProxyTarget =
+  process.env.VITE_API_PROXY_TARGET ??
+  process.env.API_PROXY_TARGET ??
+  "http://localhost:8080";
+
+const apiProxy = {
+  "/api": {
+    target: apiProxyTarget,
+    changeOrigin: true,
+    // Allow self-signed certs if the target is https in a dev tunnel.
+    secure: false,
+  },
+} as const;
+
 export default defineConfig({
   base: basePath,
   plugins: [
@@ -137,6 +163,8 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Dev-only: forward /api to the api-server (see apiProxy above).
+    proxy: apiProxy,
     fs: {
       strict: true,
       deny: ["**/.*"],
@@ -146,5 +174,7 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Preview-only: forward /api to the api-server (see apiProxy above).
+    proxy: apiProxy,
   },
 });
