@@ -500,20 +500,43 @@ validation), `DR-0009` (dual program model), `DR-0013` (two conflict hierarchies
   could read or edit another tenant's program by iterating ids. All lookups now route through
   `findOwnedProgram()` (`routes/external/programs.ts`), scoping to the caller's key or shared `orgId`
   and returning `404 NOT_FOUND` on non-ownership (no existence leak). Regression:
-  `external-programs-ownership.test.ts`. (First-party surgical-edit parity for external programs
-  remains open — Phase 2.)
+  `external-programs-ownership.test.ts`. (First-party surgical-edit parity delivered in Phase 2 —
+  `DR-0045`.)
 - ✅ **`DR-0043` (medium) — external programs had no change tracking / rollback. RESOLVED
   2026-07-03.** Phase 1C added the append-only `external_program_versions` table, snapshot-before-edit
   in `/program/edit` (additive `version`/`changeReceipt` response fields), `GET /program/:id/history`,
   and `POST /program/:id/revert` (writes a reverse snapshot before restoring). Ownership-scoped;
-  cross-tenant/cross-program → `404`. Edits are **still non-surgical** (LLM regeneration) until Phase 2
-  materialization. Tests: `external-programs-ownership.test.ts`.
+  cross-tenant/cross-program → `404`. (Surgical editing over the materialized system landed in
+  Phase 2 — `DR-0045`.) Tests: `external-programs-ownership.test.ts`.
 - ✅ **`DR-0044` (medium) — external attribution leak (`?? 1`). RESOLVED 2026-07-03.** Phase 1B/1E:
   `buildSystemUserId` no longer falls back to user #1 (which loaded that user's profile into external
   requests). It attributes to the key's `createdBy`, else a non-personal service sentinel (`-1`,
   logged). Creation always stores `apiKeyId`, and generate now writes a best-effort
   `generate_snapshot` baseline version. This closes **Phase 1** of external API parity; Phase 2
-  (materialize external programs into `training_systems` for true surgical edits) remains open.
+  (materialize external programs into `training_systems` for true surgical edits) is complete — see
+  `DR-0045`.
+- ✅ **`DR-0045` (high) — External API edit path used LLM regeneration, not surgical edits.
+  RESOLVED 2026-07-04 (Phase 2, feature-complete).**
+  *Previous:* the external API regenerated the **entire** program via `generateAIResponse` on every
+  edit, while first-party TrainChat used the deterministic surgical engine
+  (`interpretEditRequest → applyEditPlan → change_log → propagation`) — so external clients got a
+  weaker, unaudited product than the flagship claim.
+  *Current:* external programs can be **materialized** into the relational `training_systems`
+  hierarchy (owned by a dedicated per-program service user) and edited through the **identical
+  surgical engine**, with history/revert unified onto `system_change_log` for materialized programs
+  and blob `external_program_versions` retained for legacy ones. Lives in
+  `lib/external-materialization/*` (mapping, adapter, lazy bridge, surgical helper, history/revert
+  dispatcher, serialization, metrics, readiness) + `routes/external/programs.ts`.
+  *Rollout:* gated by `EXTERNAL_MATERIALIZATION_ENABLED` / `EXTERNAL_SURGICAL_EDIT_ENABLED` (both
+  **OFF by default**) plus per-key/org pilot allowlists; LLM regeneration remains the explicit
+  fallback on any failure or when flags are off. See `docs/external-api.md` and
+  `docs/phase-2-external-surgical-edit.md`.
+  *Remaining (does not block feature-completeness):*
+  (a) `DR-0006` — the engine calls (`applyEditPlan`/`restoreFromChange`) use the module `db`, not an
+  injected transaction handle, so the relational mutation cannot share one DB transaction with the
+  external blob writes; safety today rests on per-program serialization + fail-loud-after-commit.
+  (b) The Phase 2.6 serialization lock is **in-process only** — cross-instance advisory locking
+  (Postgres) is required before broad autoscale rollout.
 
 The **recurring root pattern** behind most of Class B is **"dual coexisting systems + defined-but-
 unwired scaffolding"** — new capability added beside legacy/intended code without retiring or wiring
