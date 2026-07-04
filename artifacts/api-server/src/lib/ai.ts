@@ -21,6 +21,7 @@ import { db, userProfilesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { OPENAI_MODELS } from "./openai-models";
+import { validateProgramStructure } from "./program-structure-schema";
 import {
   buildIntelligenceContext,
   buildDBExerciseContext,
@@ -2136,13 +2137,21 @@ function extractStructuredData(content: string): {
     const rawObjectMatch = normalized.match(/(\{[\s\S]{50,}\})\s*$/);
     if (rawObjectMatch) {
       try {
-        const candidate = JSON.parse(rawObjectMatch[1]) as ProgramStructure;
-        if (candidate?.days && Array.isArray(candidate.days) && candidate.days.length > 0) {
+        const candidate = JSON.parse(rawObjectMatch[1]) as unknown;
+        // Schema gate (audit F5): parsed ≠ valid. Only a structurally valid
+        // program crosses the boundary; anything else stays null so the
+        // existing retry/fallback paths handle it.
+        const validation = validateProgramStructure(candidate);
+        if (validation.valid) {
           const idx = normalized.lastIndexOf(rawObjectMatch[1]);
           const cleanContent = normalized.slice(0, idx).trim();
           logger.info("[ExtractStructuredData] Extracted program from raw JSON object (no fence)");
-          return { cleanContent, structuredData: candidate };
+          return { cleanContent, structuredData: candidate as ProgramStructure };
         }
+        logger.warn(
+          { issues: validation.issues },
+          "[ProgramStructureValidation] Raw-object candidate rejected — not a valid program structure",
+        );
       } catch {
         // not valid JSON — fall through
       }
@@ -2180,7 +2189,24 @@ function extractStructuredData(content: string): {
   }
 
   try {
-    const structuredData = JSON.parse(rawJson) as ProgramStructure;
+    const parsed = JSON.parse(rawJson) as unknown;
+
+    // ── Schema gate (audit F5) ────────────────────────────────────────────────
+    // The block parsed as JSON, but parsed ≠ valid: previously this was a bare
+    // cast, so a malformed model response (missing days, unnamed exercises,
+    // wrong types) flowed downstream as a "successful" program. Reject it here
+    // and return null — the same signal as a parse failure — so every existing
+    // retry/repair/fail-loud path applies unchanged.
+    const validation = validateProgramStructure(parsed);
+    if (!validation.valid) {
+      logger.warn(
+        { issues: validation.issues, rawJsonLength: rawJson.length },
+        "[ProgramStructureValidation] Fenced JSON rejected — not a valid program structure",
+      );
+      return { cleanContent: normalized, structuredData: null };
+    }
+
+    const structuredData = parsed as ProgramStructure;
     // Strip the matched fence block from normalized content
     const cleanContent = normalized.replace(jsonMatch[0], "").trim();
     logger.info(
