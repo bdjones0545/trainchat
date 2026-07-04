@@ -246,6 +246,10 @@ Until that drift is reconciled, apply **additive** schema changes with hand-writ
 ```bash
 # Run in the Replit shell — additive only (CREATE TABLE + FKs, no DROP). Do NOT run drizzle push.
 psql "$DATABASE_URL" -f lib/db/manual-migrations/0001_external_program_versions.sql
+
+# Phase 2.1 — adds the nullable external_programs.training_system_id FK (ADD COLUMN + FK, no DROP).
+# Additive and unused by production code today; safe to apply anytime.
+psql "$DATABASE_URL" -f lib/db/manual-migrations/0002_external_programs_training_system_id.sql
 ```
 
 The migration is idempotent (`IF NOT EXISTS` + `duplicate_object` guards) and DDL-identical to the
