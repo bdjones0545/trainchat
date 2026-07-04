@@ -37,6 +37,12 @@ import {
   maybeApplySurgicalExternalEdit,
   createDefaultSurgicalDeps,
 } from "../../lib/external-materialization";
+import {
+  getExternalProgramHistory,
+  revertExternalProgramVersion,
+  type HistoryRevertDeps,
+} from "../../lib/external-materialization/history-revert";
+import { createHistoryRevertSystemDeps } from "../../lib/external-materialization/history-revert-deps";
 import { logger } from "../../lib/logger";
 
 const router = Router();
@@ -1044,11 +1050,74 @@ router.get(
   },
 );
 
+// ─── Phase 2.5: history/revert dependency wiring ─────────────────────────────
+// Blob-backed collaborators use this route's db (so external_program_versions
+// behavior is unchanged and testable against the mocked db); relational
+// collaborators come from the default system-deps factory. The dispatcher in
+// lib/external-materialization/history-revert.ts decides blob vs system based
+// on trainingSystemId.
+function buildHistoryRevertDeps(): HistoryRevertDeps {
+  return {
+    // ── blob backing (Phase 1C, unchanged) ──
+    readBlobVersions: (pid) =>
+      db
+        .select({
+          versionId: externalProgramVersionsTable.id,
+          type: externalProgramVersionsTable.type,
+          instruction: externalProgramVersionsTable.instruction,
+          scope: externalProgramVersionsTable.scope,
+          changeSummary: externalProgramVersionsTable.changeSummary,
+          revertedFromVersionId: externalProgramVersionsTable.revertedFromVersionId,
+          createdAt: externalProgramVersionsTable.createdAt,
+        })
+        .from(externalProgramVersionsTable)
+        .where(eq(externalProgramVersionsTable.externalProgramId, pid))
+        .orderBy(desc(externalProgramVersionsTable.id)),
+    findBlobVersion: async (pid, versionId) => {
+      const [v] = await db
+        .select()
+        .from(externalProgramVersionsTable)
+        .where(
+          and(
+            eq(externalProgramVersionsTable.id, versionId),
+            eq(externalProgramVersionsTable.externalProgramId, pid),
+          ),
+        )
+        .limit(1);
+      return v;
+    },
+    writeBlobRevertSnapshot: async ({ programId, apiKeyId, currentProgramData, versionId }) => {
+      const [row] = await db
+        .insert(externalProgramVersionsTable)
+        .values({
+          externalProgramId: programId,
+          apiKeyId,
+          programSnapshot: currentProgramData as Record<string, unknown>,
+          type: "revert",
+          revertedFromVersionId: versionId,
+        })
+        .returning();
+      return { id: row?.id, createdAt: row?.createdAt ?? null };
+    },
+    overwriteBlob: async (pid, programData) => {
+      await db
+        .update(externalProgramsTable)
+        .set({ programData: programData as Record<string, unknown> })
+        .where(eq(externalProgramsTable.id, pid));
+    },
+    stripInternalFields: (program) => stripInternalFields(program as ProgramStructure),
+    // ── relational backing ──
+    ...createHistoryRevertSystemDeps(),
+    onError: (err, stage) =>
+      logger.warn({ err, stage }, "external-programs: history/revert relational step failed"),
+  };
+}
+
 // ─── GET /api/external/program/:id/history ───────────────────────────────────
-// Append-only version history for a program (Phase 1C). Ownership-scoped: a
-// non-owned or unknown program returns the standard 404 NOT_FOUND with no
-// existence leak. Full snapshots are omitted from the list (retrieve a specific
-// version by reverting to it); metadata is returned for each version.
+// Version history for a program. Ownership-scoped (identical 404 for missing +
+// cross-tenant, no leak). Phase 2.5: dispatches on trainingSystemId — blob
+// programs read external_program_versions; materialized programs read the
+// relational system_change_log. Response shape is unchanged.
 
 router.get(
   "/external/program/:id/history",
@@ -1078,27 +1147,12 @@ router.get(
         return;
       }
 
-      const versions = await db
-        .select({
-          versionId: externalProgramVersionsTable.id,
-          type: externalProgramVersionsTable.type,
-          instruction: externalProgramVersionsTable.instruction,
-          scope: externalProgramVersionsTable.scope,
-          changeSummary: externalProgramVersionsTable.changeSummary,
-          revertedFromVersionId:
-            externalProgramVersionsTable.revertedFromVersionId,
-          createdAt: externalProgramVersionsTable.createdAt,
-        })
-        .from(externalProgramVersionsTable)
-        .where(eq(externalProgramVersionsTable.externalProgramId, programId))
-        .orderBy(desc(externalProgramVersionsTable.id));
-
-      res.json(
-        buildStandardResponse({
-          programId,
-          versions,
-        }),
+      const { versions } = await getExternalProgramHistory(
+        { id: owned.id, programData: owned.programData, trainingSystemId: owned.trainingSystemId },
+        buildHistoryRevertDeps(),
       );
+
+      res.json(buildStandardResponse({ programId, versions }));
     } catch (err) {
       logger.error({ err }, "external-programs: history failed");
       const e = buildErrorResponse("INTERNAL_ERROR", "Failed to load history.");
@@ -1157,66 +1211,33 @@ router.post(
         return;
       }
 
-      // The version must belong to THIS program. A version id from another
-      // program simply does not match, yielding the same 404 (no leak).
-      const [version] = await db
-        .select()
-        .from(externalProgramVersionsTable)
-        .where(
-          and(
-            eq(externalProgramVersionsTable.id, versionId),
-            eq(externalProgramVersionsTable.externalProgramId, programId),
-          ),
-        )
-        .limit(1);
+      // Phase 2.5: dispatch on trainingSystemId — blob programs revert the blob
+      // snapshot (unchanged); materialized programs restore through the
+      // relational path and reserialize the blob. On any relational failure the
+      // blob is left unchanged (no corruption).
+      const outcome = await revertExternalProgramVersion(
+        { id: owned.id, programData: owned.programData, trainingSystemId: owned.trainingSystemId },
+        { versionId, apiKeyId: req.apiKeyId ?? null },
+        buildHistoryRevertDeps(),
+      );
 
-      if (!version) {
-        res.status(404).json({
+      if (!outcome.ok) {
+        res.status(outcome.code === "NOT_FOUND" ? 404 : 500).json({
           success: false,
           data: null,
           meta: null,
-          error: { code: "NOT_FOUND", message: "Version not found." },
+          error: { code: outcome.code, message: outcome.message },
         });
         return;
       }
 
-      // Write a "revert" snapshot of the CURRENT state first, so the rollback
-      // is itself reversible, then restore the selected snapshot.
-      const [revertVersion] = await db
-        .insert(externalProgramVersionsTable)
-        .values({
-          externalProgramId: programId,
-          apiKeyId: req.apiKeyId ?? null,
-          programSnapshot: owned.programData as unknown as Record<string, unknown>,
-          type: "revert",
-          revertedFromVersionId: versionId,
-        })
-        .returning();
-
-      const restoredProgram = stripInternalFields(
-        version.programSnapshot as unknown as ProgramStructure,
-      );
-
-      await db
-        .update(externalProgramsTable)
-        .set({
-          programData: restoredProgram as unknown as Record<string, unknown>,
-        })
-        .where(eq(externalProgramsTable.id, programId));
-
       res.json(
         buildStandardResponse({
           programId,
-          updatedProgram: restoredProgram,
-          revertedFromVersionId: versionId,
-          // Additive receipt/version metadata.
-          version: revertVersion?.id ?? null,
-          changeReceipt: {
-            versionId: revertVersion?.id ?? null,
-            type: "revert" as const,
-            revertedFromVersionId: versionId,
-            snapshotAt: revertVersion?.createdAt ?? null,
-          },
+          updatedProgram: outcome.updatedProgram,
+          revertedFromVersionId: outcome.revertedFromVersionId,
+          version: outcome.version,
+          changeReceipt: outcome.changeReceipt,
         }),
       );
     } catch (err) {
