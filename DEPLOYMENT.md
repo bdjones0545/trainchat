@@ -204,6 +204,27 @@ pnpm --filter db push-force
 ```
 Only use `push-force` when you have confirmed the change is safe and tested it against a dev snapshot first.
 
+### ⚠️ `drizzle-kit push` is currently unsafe — apply new tables manually
+
+The live DB has drifted from the schema files: several production objects are **not** modeled in
+`lib/db/src/schema/*.ts` (`user_sessions` — intentionally external — plus `training_methods`,
+`goal_knowledge_graph`, `exercise_product_links`, and ~12 `product_directory` columns). Because push
+treats the schema as the desired end-state, it wants to **DROP** all of them, and will abort (or, with
+`push-force`, destroy data). This also means the auto-push in `scripts/post-merge.sh` cannot safely
+apply new schema right now.
+
+Until that drift is reconciled, apply **additive** schema changes with hand-written SQL in
+`lib/db/manual-migrations/` instead of push. For the `external_program_versions` table
+(External API parity Phase 1C):
+
+```bash
+# Run in the Replit shell — additive only (CREATE TABLE + FKs, no DROP). Do NOT run drizzle push.
+psql "$DATABASE_URL" -f lib/db/manual-migrations/0001_external_program_versions.sql
+```
+
+The migration is idempotent (`IF NOT EXISTS` + `duplicate_object` guards) and DDL-identical to the
+Drizzle model, so once the unrelated drift is reconciled a future push will see it already in sync.
+
 ### Session table
 
 Sessions are stored in a `user_sessions` table via `connect-pg-simple`. The table is created automatically (`createTableIfMissing: true`) on first startup — no manual migration needed.
