@@ -416,45 +416,52 @@ const SEED_PUBLICATIONS: SeedPublication[] = [
 ];
 
 export async function seedWhitepaperPublicationsIfMissing(): Promise<void> {
-  const targetSlugs = SEED_PUBLICATIONS.map((p) => p.slug);
+  try {
+    const targetSlugs = SEED_PUBLICATIONS.map((p) => p.slug);
 
-  const existing = await db
-    .select({ slug: whitepaperPublicationsTable.slug })
-    .from(whitepaperPublicationsTable)
-    .where(inArray(whitepaperPublicationsTable.slug, targetSlugs));
+    const existing = await db
+      .select({ slug: whitepaperPublicationsTable.slug })
+      .from(whitepaperPublicationsTable)
+      .where(inArray(whitepaperPublicationsTable.slug, targetSlugs));
 
-  const existingSlugs = new Set(existing.map((r) => r.slug));
-  const toInsert = SEED_PUBLICATIONS.filter((p) => !existingSlugs.has(p.slug));
+    const existingSlugs = new Set(existing.map((r) => r.slug));
+    const toInsert = SEED_PUBLICATIONS.filter((p) => !existingSlugs.has(p.slug));
 
-  if (toInsert.length === 0) {
-    logger.info("[WhitepaperSeeder] All seed publications already present — skipping");
-    return;
+    if (toInsert.length === 0) {
+      logger.info("[WhitepaperSeeder] All seed publications already present — skipping");
+      return;
+    }
+
+    const now = new Date();
+
+    for (const pub of toInsert) {
+      await db
+        .insert(whitepaperPublicationsTable)
+        .values({
+          topicId: null,
+          title: pub.title,
+          slug: pub.slug,
+          code: pub.code,
+          subtitle: pub.subtitle,
+          abstract: pub.abstract,
+          bodyJson: pub.bodyJson,
+          citationsJson: pub.citationsJson,
+          seoMetadataJson: pub.seoMetadataJson,
+          keywords: pub.keywords,
+          estimatedPages: pub.estimatedPages,
+          status: "published",
+          publishedAt: now,
+        })
+        .onConflictDoNothing();
+
+      logger.info({ slug: pub.slug }, "[WhitepaperSeeder] Seeded publication");
+    }
+
+    logger.info({ count: toInsert.length }, "[WhitepaperSeeder] Seed complete");
+  } catch (err) {
+    logger.error(
+      { err },
+      "[WhitepaperSeeder] Auto-seed failed — whitepaper publications may be missing.",
+    );
   }
-
-  const now = new Date();
-
-  for (const pub of toInsert) {
-    await db
-      .insert(whitepaperPublicationsTable)
-      .values({
-        topicId: null,
-        title: pub.title,
-        slug: pub.slug,
-        code: pub.code,
-        subtitle: pub.subtitle,
-        abstract: pub.abstract,
-        bodyJson: pub.bodyJson,
-        citationsJson: pub.citationsJson,
-        seoMetadataJson: pub.seoMetadataJson,
-        keywords: pub.keywords,
-        estimatedPages: pub.estimatedPages,
-        status: "published",
-        publishedAt: now,
-      })
-      .onConflictDoNothing();
-
-    logger.info({ slug: pub.slug }, "[WhitepaperSeeder] Seeded publication");
-  }
-
-  logger.info({ count: toInsert.length }, "[WhitepaperSeeder] Seed complete");
 }

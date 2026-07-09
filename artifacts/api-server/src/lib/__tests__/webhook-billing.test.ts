@@ -145,18 +145,20 @@ describe("detectPlanFromLookupKey()", () => {
     expect(result).toEqual({ plan: "pro", billingInterval: "monthly" });
   });
 
-  // ── Legacy plans ───────────────────────────────────────────────────────────
+  // ── Legacy lookup keys unify into the single paid "pro" tier ────────────────
+  // All paid Stripe lookup keys now resolve to plan "pro"; only the billing
+  // interval (monthly/yearly) is preserved from the key.
 
-  it("trainchat_starter_monthly → starter / monthly", () => {
+  it("legacy starter monthly lookup key maps to pro / monthly", () => {
     expect(detectPlanFromLookupKey("trainchat_starter_monthly")).toEqual({
-      plan: "starter",
+      plan: "pro",
       billingInterval: "monthly",
     });
   });
 
-  it("trainchat_starter_yearly → starter / yearly", () => {
+  it("legacy starter yearly lookup key maps to pro / yearly", () => {
     expect(detectPlanFromLookupKey("trainchat_starter_yearly")).toEqual({
-      plan: "starter",
+      plan: "pro",
       billingInterval: "yearly",
     });
   });
@@ -175,16 +177,16 @@ describe("detectPlanFromLookupKey()", () => {
     });
   });
 
-  it("trainchat_elite_monthly → elite / monthly", () => {
+  it("legacy elite monthly lookup key maps to pro / monthly", () => {
     expect(detectPlanFromLookupKey("trainchat_elite_monthly")).toEqual({
-      plan: "elite",
+      plan: "pro",
       billingInterval: "monthly",
     });
   });
 
-  it("trainchat_elite_yearly → elite / yearly", () => {
+  it("legacy elite yearly lookup key maps to pro / yearly", () => {
     expect(detectPlanFromLookupKey("trainchat_elite_yearly")).toEqual({
-      plan: "elite",
+      plan: "pro",
       billingInterval: "yearly",
     });
   });
@@ -320,13 +322,13 @@ describe("buildSyncPayload()", () => {
     expect(payload!.plan).toBe("pro");
   });
 
-  it("maps trainchat_starter_monthly lookup_key to plan=starter", async () => {
+  it("maps legacy trainchat_starter_monthly lookup_key to plan=pro / monthly", async () => {
     const payload = await buildSyncPayload(
       makeSub({
         items: { data: [{ price: { id: "price_starter", lookup_key: "trainchat_starter_monthly" } }] },
       })
     );
-    expect(payload!.plan).toBe("starter");
+    expect(payload!.plan).toBe("pro");
     expect(payload!.billingInterval).toBe("monthly");
   });
 
