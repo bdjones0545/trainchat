@@ -155,7 +155,23 @@ router.post("/subscription/confirm", requireAuth, async (req: any, res): Promise
         typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
 
       if (priceId && customerId) {
-        const { plan, billingInterval } = detectPlanInterval(priceId);
+        // detectPlanInterval throws on unknown price IDs (misconfigured STRIPE_PRICE_* env vars).
+        // Fall back to a safe default (pro/monthly) + log so ops can investigate, but never
+        // block the user from getting their paid access confirmed.
+        let plan: "pro" | "starter" | "elite" = "pro";
+        let billingInterval: "monthly" | "yearly" = "monthly";
+        try {
+          const detected = detectPlanInterval(priceId);
+          plan = detected.plan as "pro" | "starter" | "elite";
+          billingInterval = detected.billingInterval;
+        } catch (detectErr: any) {
+          logger.error(
+            { err: detectErr.message, priceId, userId },
+            "[StripeRouter] /subscription/confirm — detectPlanInterval failed for price. " +
+            "Falling back to pro/monthly. Check STRIPE_PRICE_* env vars."
+          );
+        }
+
         const periodEnd = sub.current_period_end
           ? new Date(sub.current_period_end * 1000)
           : new Date();

@@ -1,2 +1,3 @@
 - [Performance Intelligence Directory — Phase 1–3](directory-phases.md) — Phase 3 complete: exercise_product_links table, exercise-product data layer, EquipmentAwareProgramming component, knowledge graph now has exercise node.
 - [Research Intelligence Engine — Phases 1–7](research-intelligence-phases.md) — All 8 phases built; Phase 7 wires research layer into performance-intelligence/index.ts; profile version bumped to 2.
+- [Stripe Billing Entitlement Architecture](stripe-billing-entitlement.md) — Root cause of "paid but still free" + the two-layer webhook fix; self-heal startup job; why stripe.accounts goes missing.

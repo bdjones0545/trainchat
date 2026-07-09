@@ -673,14 +673,62 @@ export class WebhookHandlers {
       );
     }
 
-    // Layer 1: StripeSync — verifies signature using STRIPE_WEBHOOK_SECRET,
-    // syncs data to stripe.* tables. Throws on invalid signature → returns 400.
-    const sync = await getStripeSync();
-    await sync.processWebhook(payload, signature);
+    // ── Layer 1a: Raw Stripe SDK signature verification ───────────────────────
+    //
+    // Verifies the webhook signature using STRIPE_WEBHOOK_SECRET from the
+    // environment. This does NOT depend on stripe.accounts, StripeSync DB
+    // state, or any managed-webhook registration — only the env var secret.
+    //
+    // This is the primary, authoritative check. An invalid signature throws
+    // immediately → the route returns HTTP 400 → Stripe marks the delivery
+    // as failed (which is correct; we never partially process a bad signature).
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      logger.error(
+        "[WebhookHandlers] STRIPE_WEBHOOK_SECRET is not set — cannot verify webhook signatures. " +
+        "Add it to Replit Secrets."
+      );
+      throw new Error("STRIPE_WEBHOOK_SECRET is required to verify webhook signatures");
+    }
 
-    // Layer 2: Business logic — runs after verified event.
-    // Parse raw payload as JSON (StripeSync already verified the signature).
-    const event = JSON.parse(payload.toString("utf8"));
+    const stripeRaw = await getUncachableStripeClient();
+    let event: any;
+    try {
+      event = stripeRaw.webhooks.constructEvent(payload, signature, webhookSecret);
+    } catch (sigErr: any) {
+      logger.error(
+        { err: sigErr.message },
+        "[WebhookHandlers] Webhook signature verification FAILED — " +
+        "invalid signature or mismatched STRIPE_WEBHOOK_SECRET. " +
+        "Verify STRIPE_WEBHOOK_SECRET matches the signing secret for this endpoint in the Stripe dashboard."
+      );
+      throw sigErr;
+    }
+
+    // ── Layer 1b: StripeSync data sync (best-effort, non-blocking) ────────────
+    //
+    // Syncs raw event data to stripe.* tables for analytics and backfill.
+    // Runs AFTER signature is verified so business logic is never gated on
+    // StripeSync infrastructure health.
+    //
+    // Common failure: "stripe.accounts does not exist" — this means migration
+    // 0046 from stripe-replit-sync did not complete in this environment. The
+    // business logic (premium entitlement update) will still run correctly
+    // because it reads from our users table, not from stripe.* tables.
+    // FIX: Re-initialize the Stripe integration or run stripe-replit-sync
+    // migrations manually to create stripe.accounts.
+    try {
+      const sync = await getStripeSync();
+      await sync.processWebhook(payload, signature);
+    } catch (syncErr: any) {
+      logger.error(
+        { err: syncErr.message, eventType: event.type, eventId: event.id },
+        "[WebhookHandlers] StripeSync.processWebhook failed — stripe.* tables not updated. " +
+        "Business logic will still run. " +
+        "If error is 'stripe.accounts does not exist', re-initialize the Stripe integration."
+      );
+      // Intentionally NOT re-throwing — business logic runs regardless.
+    }
 
     if (!HANDLED_EVENTS.has(event.type)) {
       logger.debug({ eventType: event.type }, "[WebhookHandlers] event type not handled — skipping");

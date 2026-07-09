@@ -13,6 +13,7 @@ import { seedExerciseLibraryIfEmpty } from "./lib/exercise-seeder";
 import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
 import { seedWhitepaperPublicationsIfMissing } from "./lib/whitepaper-publications-seeder";
 import { runExternalMaterializationReadinessCheck } from "./lib/external-materialization";
+import { runSubscriptionSelfHeal } from "./lib/subscriptionSelfHeal";
 
 const rawPort = process.env["PORT"];
 
@@ -91,12 +92,47 @@ async function initStripe() {
     // This is a backstop against webhook drift — ensures premium access is never
     // held indefinitely after a payment failure lifecycle concludes.
     startBillingReconciliation();
-  } catch (err) {
-    logger.warn({ err }, "Stripe initialization failed — payments unavailable");
+  } catch (err: any) {
+    // ── IMPORTANT: This catch covers the findOrCreateManagedWebhook failure ──
+    //
+    // Known failure mode: "stripe.accounts does not exist" — migration 0046 from
+    // stripe-replit-sync did not complete because its FK-cascade step failed on
+    // existing data in the production DB.
+    //
+    // Consequences:
+    //   - Managed webhook was NOT registered with Stripe
+    //   - StripeSync data sync will not run
+    //   - BUT: webhooks can still be processed by /api/stripe/webhook because
+    //     WebhookHandlers.processWebhook now uses raw Stripe SDK signature
+    //     verification (Layer 1a) which does NOT depend on stripe.accounts
+    //   - Subscription self-heal will still run below to fix any orphaned users
+    //
+    // Resolution: Re-initialize the Stripe integration (stripe-replit-sync
+    // migrations will re-run and create stripe.accounts).
+    logger.error(
+      { err: err?.message ?? String(err) },
+      "Stripe initialization FAILED — managed webhook not registered. " +
+      "Webhook delivery will rely on STRIPE_WEBHOOK_SECRET direct verification. " +
+      "Fix: ensure stripe-replit-sync migration 0046 (stripe.accounts) has run in production. " +
+      "Payments and plan upgrades will still process correctly via the raw SDK webhook path."
+    );
   }
 }
 
 await initStripe();
+
+// ─── Subscription self-heal ───────────────────────────────────────────────────
+//
+// Detects users who have a Stripe customer ID but no subscription synced —
+// the classic "webhook was never processed" scenario (e.g. stripe.accounts
+// was missing when the checkout.session.completed event arrived).
+//
+// Runs after initStripe so any DB schema setup has completed first.
+// Best-effort: errors are logged but never crash the server.
+runSubscriptionSelfHeal().catch((err: unknown) => {
+  logger.error({ err }, "[Startup] Subscription self-heal threw unexpectedly");
+});
+
 await seedExerciseLibraryIfEmpty();
 await seedCoachingKnowledgeIfEmpty();
 await seedWhitepaperPublicationsIfMissing();

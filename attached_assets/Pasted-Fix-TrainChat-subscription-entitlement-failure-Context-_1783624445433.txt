@@ -1,0 +1,122 @@
+Fix TrainChat subscription entitlement failure.
+
+Context:
+Lisa Jones bought the $49.99/month TrainChat subscription. Stripe shows the subscription/payment, but TrainChat still treats her account as free.
+
+Audit result:
+The root failure appears to be Stripe entitlement sync, not frontend gating. On server boot, StripeSync fails during managed webhook initialization:
+
+error: relation "stripe.accounts" does not exist
+at StripeSync.findOrCreateManagedWebhook
+at initStripe (artifacts/api-server/src/index.ts)
+
+Because this error is swallowed as a warning, the app boots but webhooks never reliably register/process, so paid Stripe subscriptions do not update the users table.
+
+Goal:
+Safely fix the Stripe subscription sync pipeline and immediately restore Lisa’s premium access.
+
+Tasks:
+
+1. Confirm production database state
+
+* Check whether schema `stripe` exists.
+* Check which tables exist inside `stripe`.
+* Specifically verify whether `stripe.accounts` exists.
+* Check Lisa’s user row:
+
+  * email
+  * plan
+  * plan_status
+  * stripe_customer_id
+  * stripe_subscription_id
+  * stripe_price_id
+  * billing_interval
+  * current_period_end
+
+2. Immediate remediation for Lisa
+
+* From Stripe dashboard/API, retrieve Lisa Jones’s active subscription:
+
+  * customer id
+  * subscription id
+  * price id
+  * status
+  * current_period_end
+  * cancel_at_period_end
+* Update Lisa’s users row to match the live Stripe subscription.
+* Use the same state that syncUserSubscription would write:
+
+  * plan = 'pro'
+  * plan_status = 'active'
+  * stripe_customer_id = actual Stripe customer id
+  * stripe_subscription_id = actual Stripe subscription id
+  * stripe_price_id = actual Stripe price id
+  * billing_interval = 'monthly'
+  * current_period_end = actual Stripe period end
+  * cancel_at_period_end = actual Stripe value
+  * updated_at = NOW()
+* After update, call/read `/api/subscription` for Lisa or inspect the DB to verify she now receives premium access.
+* Do not invent Stripe IDs. Use actual Stripe values.
+
+3. Fix StripeSync infrastructure
+
+* Determine why `stripe.accounts` is missing.
+* Inspect the migration/setup path used by `stripe-replit-sync`.
+* Run or add the missing migration/setup required by the library so `stripe.accounts` exists.
+* Do not hand-create an incompatible table unless the library schema is verified.
+* Prefer the official Replit Stripe integration setup/migration path if available.
+* After fix, restart the server and confirm logs show:
+  `Stripe webhook configured`
+* Confirm the old boot warning no longer appears.
+
+4. Verify Stripe webhook delivery
+
+* Confirm the webhook endpoint exists in Stripe and points to:
+  `/api/stripe/webhook`
+  on the deployed Replit domain.
+* Confirm webhook signing secret matches production `STRIPE_WEBHOOK_SECRET`.
+* Confirm live/test mode consistency:
+
+  * live Stripe subscription must use `sk_live_`
+  * test subscription must use `sk_test_`
+* Replay or resend Lisa’s latest Stripe event if safe.
+* Confirm webhook returns 2xx and updates/keeps the correct user subscription state.
+
+5. Verify `/api/subscription/confirm` fallback
+
+* Compare the live Stripe subscription price id to `STRIPE_PRICE_TRAINCHAT_MONTHLY`.
+* If mismatched, update the Replit secret or code mapping.
+* Confirm `detectPlanInterval(priceId)` recognizes the active monthly price.
+* Ensure checkout success confirmation no longer throws.
+
+6. Add defensive logging
+
+* Do not swallow Stripe initialization failures silently.
+* Keep the app booting if appropriate, but log clearly:
+
+  * missing Stripe schema/table
+  * failed managed webhook registration
+  * webhook verification failure
+  * price id not recognized
+  * user lookup failure during subscription sync
+* Make logs searchable and specific.
+
+7. Add regression tests
+   Add tests for:
+
+* checkout.session.completed with metadata.userId updates the correct user to pro/active.
+* customer.subscription.updated keeps active subscription state in sync.
+* unknown price id produces a clear error/log.
+* webhook failure does not falsely mark user as premium.
+* `/api/subscription` returns premium after DB subscription fields are active.
+
+Deliver:
+
+* Exact root cause confirmed.
+* Files changed.
+* SQL or migration used.
+* Lisa remediation confirmation.
+* Proof from logs that Stripe webhook configuration now succeeds.
+* Proof that Lisa’s `/api/subscription` now returns premium/pro.
+* Test results.
+  Do not deploy until typecheck/tests pass.

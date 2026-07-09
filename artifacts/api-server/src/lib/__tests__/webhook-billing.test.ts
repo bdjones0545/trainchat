@@ -27,10 +27,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.mock() calls are hoisted to the top of the file by vitest at transform
 // time. Any variable they reference must also be hoisted with vi.hoisted()
 // so it is initialised before the factory runs.
-const { mockStripeSync } = vi.hoisted(() => ({
+const { mockStripeSync, mockConstructEvent } = vi.hoisted(() => ({
   mockStripeSync: {
     processWebhook: vi.fn(),
   },
+  // Primary signature verifier (Layer 1a) — raw Stripe SDK webhooks.constructEvent.
+  // Succeeds by default; override in individual tests to simulate bad signatures.
+  mockConstructEvent: vi.fn(),
 }));
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
@@ -54,7 +57,18 @@ vi.mock("../logger", () => ({
 
 vi.mock("../stripeClient", () => ({
   getStripeSync: vi.fn().mockResolvedValue(mockStripeSync),
-  getUncachableStripeClient: vi.fn(),
+  // Returns a minimal Stripe client used for both price lookups (buildSyncPayload)
+  // and raw webhook signature verification (Layer 1a of processWebhook).
+  // `webhooks.constructEvent` is the primary signature verifier — override
+  // mockConstructEvent in individual tests to simulate signature failures.
+  getUncachableStripeClient: vi.fn().mockResolvedValue({
+    webhooks: {
+      constructEvent: mockConstructEvent,
+    },
+    prices: {
+      retrieve: vi.fn().mockResolvedValue({ id: "price_test", lookup_key: "trainchat_monthly" }),
+    },
+  }),
 }));
 
 // stripeStorage mock — all methods start as passing no-ops
@@ -82,6 +96,7 @@ import {
   WebhookHandlers,
 } from "../webhookHandlers";
 import { stripeStorage } from "../stripeStorage";
+import { getUncachableStripeClient } from "../stripeClient";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -414,11 +429,41 @@ describe("buildSyncPayload()", () => {
 // 5. WebhookHandlers.processWebhook()
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ── Shared helper: re-wire getUncachableStripeClient after vi.clearAllMocks() ──
+//
+// vi.clearAllMocks() resets mockReturnValue / mockImplementation but does NOT
+// remove the mock factory. We must manually re-establish the return value so
+// the returned object has .webhooks.constructEvent available for Layer 1a.
+function resetStripeClient() {
+  (getUncachableStripeClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+    webhooks: { constructEvent: mockConstructEvent },
+    prices: {
+      retrieve: vi.fn().mockResolvedValue({ id: "price_test", lookup_key: "trainchat_monthly" }),
+    },
+  });
+}
+
 describe("WebhookHandlers.processWebhook()", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Default: StripeSync succeeds, hasProcessedEvent returns false
+
+    // STRIPE_WEBHOOK_SECRET must be set — Layer 1a checks for it before calling
+    // the raw SDK. Tests that intentionally omit it should delete it explicitly.
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret";
+
+    // Layer 1a default: raw SDK constructEvent succeeds by parsing the Buffer.
+    // Override mockConstructEvent in individual tests to simulate bad signatures.
+    mockConstructEvent.mockImplementation((buf: Buffer) =>
+      JSON.parse(buf.toString("utf8"))
+    );
+
+    // Re-wire getUncachableStripeClient after clearAllMocks() reset it.
+    resetStripeClient();
+
+    // Layer 1b default: StripeSync data sync succeeds (best-effort, non-blocking).
     mockStripeSync.processWebhook.mockResolvedValue(undefined);
+
+    // Default: event has not been processed yet.
     (stripeStorage.hasProcessedEvent as ReturnType<typeof vi.fn>).mockResolvedValue(false);
     (stripeStorage.markEventProcessed as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
   });
@@ -431,31 +476,43 @@ describe("WebhookHandlers.processWebhook()", () => {
     ).rejects.toThrow(/Payload must be a Buffer/);
   });
 
-  it("non-buffer error is thrown before StripeSync is called", async () => {
+  it("non-buffer error is thrown before any Stripe SDK calls", async () => {
     await expect(
       WebhookHandlers.processWebhook("not a buffer" as any, "sig")
     ).rejects.toThrow();
+    expect(mockConstructEvent).not.toHaveBeenCalled();
     expect(mockStripeSync.processWebhook).not.toHaveBeenCalled();
   });
 
-  // ── Invalid signature → StripeSync throws ─────────────────────────────────
+  // ── Invalid signature → raw SDK throws (Layer 1a is the primary gate) ─────
 
-  it("propagates StripeSync signature error (caller returns HTTP 400)", async () => {
-    mockStripeSync.processWebhook.mockRejectedValue(
-      new Error("No signatures found matching the expected signature for payload")
-    );
+  it("propagates raw SDK signature error to caller (returns HTTP 400)", async () => {
+    mockConstructEvent.mockImplementation(() => {
+      throw new Error("No signatures found matching the expected signature for payload");
+    });
     const payload = makeBuffer(makeEvent("customer.subscription.updated"));
     await expect(
       WebhookHandlers.processWebhook(payload, "bad_signature")
     ).rejects.toThrow(/No signatures found/);
   });
 
-  it("does not write to DB when signature verification fails", async () => {
-    mockStripeSync.processWebhook.mockRejectedValue(new Error("signature error"));
+  it("does not write to DB when raw SDK signature verification fails", async () => {
+    mockConstructEvent.mockImplementation(() => {
+      throw new Error("signature mismatch");
+    });
     const payload = makeBuffer(makeEvent("invoice.paid"));
     await expect(WebhookHandlers.processWebhook(payload, "x")).rejects.toThrow();
     expect(stripeStorage.hasProcessedEvent).not.toHaveBeenCalled();
     expect(stripeStorage.markEventProcessed).not.toHaveBeenCalled();
+  });
+
+  it("throws if STRIPE_WEBHOOK_SECRET is not set", async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    const payload = makeBuffer(makeEvent("customer.subscription.updated"));
+    await expect(
+      WebhookHandlers.processWebhook(payload, "sig")
+    ).rejects.toThrow(/STRIPE_WEBHOOK_SECRET/);
+    expect(stripeStorage.hasProcessedEvent).not.toHaveBeenCalled();
   });
 
   // ── Unhandled event type ───────────────────────────────────────────────────
@@ -545,9 +602,9 @@ describe("WebhookHandlers.processWebhook()", () => {
     expect(stripeStorage.markEventProcessed).toHaveBeenCalledWith(event2.id, event2.type);
   });
 
-  // ── Signature is passed through to StripeSync ─────────────────────────────
+  // ── Raw SDK receives correct arguments (Layer 1a) ─────────────────────────
 
-  it("passes raw Buffer and signature string to StripeSync unchanged", async () => {
+  it("passes raw Buffer and signature string to raw SDK constructEvent", async () => {
     (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     const event = makeEvent("customer.subscription.updated");
@@ -555,7 +612,26 @@ describe("WebhookHandlers.processWebhook()", () => {
     const sig = "t=1234,v1=abc123";
     await WebhookHandlers.processWebhook(buf, sig);
 
-    expect(mockStripeSync.processWebhook).toHaveBeenCalledWith(buf, sig);
+    expect(mockConstructEvent).toHaveBeenCalledWith(buf, sig, "whsec_test_secret");
+  });
+
+  // ── StripeSync failure is non-blocking (Layer 1b) ──────────────────────────
+
+  it("continues business logic when StripeSync.processWebhook fails (stripe.accounts missing scenario)", async () => {
+    // Layer 1b failure — the classic production issue: stripe.accounts doesn't exist
+    mockStripeSync.processWebhook.mockRejectedValue(
+      new Error('relation "stripe.accounts" does not exist')
+    );
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const event = makeEvent("customer.subscription.updated");
+    // Must NOT throw — StripeSync failure is best-effort
+    await expect(WebhookHandlers.processWebhook(makeBuffer(event), "sig")).resolves.toBeUndefined();
+
+    // Business logic still ran (idempotency check was called)
+    expect(stripeStorage.hasProcessedEvent).toHaveBeenCalled();
+    // Event was marked processed after business logic
+    expect(stripeStorage.markEventProcessed).toHaveBeenCalledWith(event.id, event.type);
   });
 
   // ── All HANDLED_EVENTS are routed ─────────────────────────────────────────
@@ -580,5 +656,208 @@ describe("WebhookHandlers.processWebhook()", () => {
 
     // idempotency check must have run — meaning it entered business-logic path
     expect(stripeStorage.hasProcessedEvent).toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Regression tests — Lisa Jones billing entitlement failure
+//
+// Root cause: stripe.accounts missing in production caused findOrCreateManagedWebhook
+// to fail on boot, silently preventing webhook delivery; STRIPE_WEBHOOK_SECRET
+// was correct but StripeSync was the sole verifier so events were never processed.
+//
+// These tests lock down the invariants that the fix must uphold:
+//   RT-01  checkout.session.completed with metadata.userId → user upgraded to pro/active
+//   RT-02  customer.subscription.updated → keeps active subscription in sync
+//   RT-03  Unknown price ID (lookup_key miss + no env var) → logged, falls back to pro
+//   RT-04  Webhook failure does not falsely grant premium to wrong user
+//   RT-05  StripeSync failure (stripe.accounts missing) → entitlement still written
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe("Regression: billing entitlement delivery", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_test_secret";
+    mockConstructEvent.mockImplementation((buf: Buffer) =>
+      JSON.parse(buf.toString("utf8"))
+    );
+    resetStripeClient();
+    mockStripeSync.processWebhook.mockResolvedValue(undefined);
+    (stripeStorage.hasProcessedEvent as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    (stripeStorage.markEventProcessed as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+  });
+
+  // ── RT-01: checkout.session.completed upgrades user to pro/active ───────────
+
+  it("RT-01: checkout.session.completed with metadata.userId writes pro/active to correct user", async () => {
+    const userId = 35; // Lisa Jones scenario
+    const checkoutEvent = {
+      id: "evt_checkout_rt01",
+      type: "checkout.session.completed",
+      data: {
+        object: {
+          id: "cs_test_rt01",
+          customer: "cus_UqdJC5GQ8Nzvjh",
+          subscription: "sub_rt01_active",
+          metadata: { userId: String(userId) },
+          customer_details: { email: "lisa.jones@trainchat.ai" },
+        },
+      },
+    };
+
+    // getUser by metadata.userId returns the user
+    (stripeStorage.getUser as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: userId,
+      stripeCustomerId: "cus_UqdJC5GQ8Nzvjh",
+      plan: "free",
+    });
+
+    // subscription expand returns an active sub — override the stripe client for this test
+    (getUncachableStripeClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      webhooks: { constructEvent: mockConstructEvent },
+      subscriptions: {
+        retrieve: vi.fn().mockResolvedValue({
+          id: "sub_rt01_active",
+          status: "active",
+          customer: "cus_UqdJC5GQ8Nzvjh",
+          cancel_at_period_end: false,
+          current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 3600,
+          trial_end: null,
+          items: {
+            data: [{ price: { id: "price_rt01", lookup_key: "trainchat_monthly" } }],
+          },
+        }),
+      },
+      prices: { retrieve: vi.fn().mockResolvedValue({ id: "price_rt01", lookup_key: "trainchat_monthly" }) },
+    });
+
+    await WebhookHandlers.processWebhook(makeBuffer(checkoutEvent), "sig_rt01");
+
+    expect(stripeStorage.syncUserSubscription).toHaveBeenCalledWith(
+      userId,
+      expect.objectContaining({
+        plan: "pro",
+        planStatus: "active",
+        stripeSubscriptionId: "sub_rt01_active",
+        stripeCustomerId: "cus_UqdJC5GQ8Nzvjh",
+      })
+    );
+    expect(stripeStorage.markEventProcessed).toHaveBeenCalledWith("evt_checkout_rt01", "checkout.session.completed");
+  });
+
+  // ── RT-02: customer.subscription.updated syncs active state ─────────────────
+
+  it("RT-02: customer.subscription.updated keeps subscription state in sync", async () => {
+    const existingUser = { id: 99, stripeCustomerId: "cus_rt02", plan: "pro" };
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(existingUser);
+
+    const subUpdatedEvent = makeEvent("customer.subscription.updated", {
+      id: "sub_rt02",
+      customer: "cus_rt02",
+      status: "active",
+      cancel_at_period_end: false,
+      current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 3600,
+      items: { data: [{ price: { id: "price_rt02", lookup_key: "trainchat_monthly" } }] },
+    });
+
+    await WebhookHandlers.processWebhook(makeBuffer(subUpdatedEvent), "sig_rt02");
+
+    expect(stripeStorage.syncUserSubscription).toHaveBeenCalledWith(
+      existingUser.id,
+      expect.objectContaining({
+        stripeSubscriptionId: "sub_rt02",
+        plan: "pro",
+        planStatus: "active",
+      })
+    );
+  });
+
+  // ── RT-03: Unknown price ID → clear log, falls back to pro ──────────────────
+
+  it("RT-03: unknown lookup_key for subscription → falls back to pro/monthly without throwing", async () => {
+    const existingUser = { id: 77, stripeCustomerId: "cus_rt03", plan: "free" };
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(existingUser);
+
+    // Stripe prices.retrieve also returns unknown key
+    (getUncachableStripeClient as ReturnType<typeof vi.fn>).mockResolvedValue({
+      webhooks: { constructEvent: mockConstructEvent },
+      prices: {
+        retrieve: vi.fn().mockResolvedValue({ id: "price_unknown_rt03", lookup_key: "some_gym_plan_weekly" }),
+      },
+    });
+
+    const unknownPriceEvent = makeEvent("customer.subscription.updated", {
+      customer: "cus_rt03",
+      id: "sub_rt03",
+      items: { data: [{ price: { id: "price_unknown_rt03", lookup_key: "some_gym_plan_weekly" } }] },
+    });
+
+    // Must not throw — should degrade gracefully
+    await expect(
+      WebhookHandlers.processWebhook(makeBuffer(unknownPriceEvent), "sig_rt03")
+    ).resolves.toBeUndefined();
+
+    // User still receives access (defaulted to pro) — paid user must not be locked out
+    expect(stripeStorage.syncUserSubscription).toHaveBeenCalledWith(
+      existingUser.id,
+      expect.objectContaining({ plan: "pro" })
+    );
+  });
+
+  // ── RT-04: Webhook failure does not falsely grant premium to wrong user ──────
+
+  it("RT-04: signature failure does not falsely mark any user as premium", async () => {
+    // Simulate a tampered / replayed webhook with wrong signature
+    mockConstructEvent.mockImplementation(() => {
+      throw new Error("No signatures found matching the expected signature for payload");
+    });
+
+    const badEvent = makeEvent("customer.subscription.created", {
+      customer: "cus_attacker",
+      id: "sub_rt04",
+    });
+
+    await expect(
+      WebhookHandlers.processWebhook(makeBuffer(badEvent), "bad_sig_rt04")
+    ).rejects.toThrow(/No signatures found/);
+
+    // No DB writes — attacker does not get upgraded
+    expect(stripeStorage.syncUserSubscription).not.toHaveBeenCalled();
+    expect(stripeStorage.markEventProcessed).not.toHaveBeenCalled();
+    expect(stripeStorage.linkStripeCustomer).not.toHaveBeenCalled();
+  });
+
+  // ── RT-05: StripeSync stripe.accounts missing → entitlement still written ────
+
+  it("RT-05: StripeSync stripe.accounts error does not prevent plan upgrade from being written", async () => {
+    // This is the exact Lisa Jones production failure mode:
+    // stripe.accounts doesn't exist → StripeSync.processWebhook throws → user stays on free
+    //
+    // After the fix: StripeSync failure is non-blocking, business logic still runs.
+    mockStripeSync.processWebhook.mockRejectedValue(
+      new Error('relation "stripe.accounts" does not exist')
+    );
+
+    const user = { id: 35, stripeCustomerId: "cus_UqdJC5GQ8Nzvjh", plan: "free" };
+    (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(user);
+
+    const subCreatedEvent = makeEvent("customer.subscription.created", {
+      id: "sub_lisa_rt05",
+      customer: "cus_UqdJC5GQ8Nzvjh",
+      status: "active",
+      items: { data: [{ price: { id: "price_rt05", lookup_key: "trainchat_monthly" } }] },
+    });
+
+    // Must NOT throw
+    await expect(
+      WebhookHandlers.processWebhook(makeBuffer(subCreatedEvent), "sig_rt05")
+    ).resolves.toBeUndefined();
+
+    // Plan upgrade was written despite StripeSync failure
+    expect(stripeStorage.syncUserSubscription).toHaveBeenCalledWith(
+      user.id,
+      expect.objectContaining({ plan: "pro", planStatus: "active" })
+    );
+    expect(stripeStorage.markEventProcessed).toHaveBeenCalled();
   });
 });
