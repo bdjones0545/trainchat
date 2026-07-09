@@ -4,7 +4,7 @@
 // Used by both webhookHandlers.ts and stripe.ts (confirm endpoint).
 //
 // Single subscription: trainchat_monthly at $49.99/mo
-// Legacy plans (starter, pro, elite) are still supported for existing subscribers.
+// Legacy price IDs (starter, pro, elite) are still detected but all resolve to "pro".
 
 import type { PlanTier, BillingInterval } from "@workspace/db";
 import { logger } from "./logger";
@@ -16,7 +16,7 @@ import { logger } from "./logger";
 
 const PRICE_IDS = {
   TRAINCHAT_MONTHLY: process.env.STRIPE_PRICE_TRAINCHAT_MONTHLY ?? "",
-  // Legacy plan IDs — retained for webhook plan detection on existing subscribers
+  // Legacy price IDs — kept so existing subscriber webhooks are still recognised
   STARTER_MONTHLY: process.env.STRIPE_PRICE_STARTER_MONTHLY ?? "",
   STARTER_YEARLY:  process.env.STRIPE_PRICE_STARTER_YEARLY  ?? "",
   PRO_MONTHLY:     process.env.STRIPE_PRICE_PRO_MONTHLY     ?? "",
@@ -25,13 +25,10 @@ const PRICE_IDS = {
   ELITE_YEARLY:    process.env.STRIPE_PRICE_ELITE_YEARLY    ?? "",
 };
 
-// Exported for use in the plan-map API endpoint and webhook handlers
+// Exported for use in the plan-map API endpoint and webhook handlers.
+// All paid tiers map to "pro" — there is one plan.
 export const PLAN_PRICE_MAP = {
   trainchat: { monthly: PRICE_IDS.TRAINCHAT_MONTHLY, yearly: "" },
-  // Legacy entries — used only for existing subscriber detection
-  starter: { monthly: PRICE_IDS.STARTER_MONTHLY, yearly: PRICE_IDS.STARTER_YEARLY },
-  pro:     { monthly: PRICE_IDS.PRO_MONTHLY,     yearly: PRICE_IDS.PRO_YEARLY },
-  elite:   { monthly: PRICE_IDS.ELITE_MONTHLY,   yearly: PRICE_IDS.ELITE_YEARLY },
 } as const;
 
 // ─── Startup validation ────────────────────────────────────────────────────────
@@ -95,17 +92,17 @@ export function validateBillingConfig(): void {
 // back to a default plan. This surfaces misconfiguration immediately.
 
 export function detectPlanInterval(priceId: string): { plan: PlanTier; billingInterval: BillingInterval } {
+  // All paid price IDs (current + legacy) resolve to "pro"
   const monthlyMap: Record<string, PlanTier> = {};
   const yearlyMap: Record<string, PlanTier> = {};
 
   if (PRICE_IDS.TRAINCHAT_MONTHLY) monthlyMap[PRICE_IDS.TRAINCHAT_MONTHLY] = "pro";
-  // Legacy plan detection
-  if (PRICE_IDS.STARTER_MONTHLY) monthlyMap[PRICE_IDS.STARTER_MONTHLY] = "starter";
-  if (PRICE_IDS.PRO_MONTHLY)     monthlyMap[PRICE_IDS.PRO_MONTHLY]     = "pro";
-  if (PRICE_IDS.ELITE_MONTHLY)   monthlyMap[PRICE_IDS.ELITE_MONTHLY]   = "elite";
-  if (PRICE_IDS.STARTER_YEARLY)  yearlyMap[PRICE_IDS.STARTER_YEARLY]   = "starter";
-  if (PRICE_IDS.PRO_YEARLY)      yearlyMap[PRICE_IDS.PRO_YEARLY]       = "pro";
-  if (PRICE_IDS.ELITE_YEARLY)    yearlyMap[PRICE_IDS.ELITE_YEARLY]     = "elite";
+  if (PRICE_IDS.STARTER_MONTHLY)   monthlyMap[PRICE_IDS.STARTER_MONTHLY]   = "pro";
+  if (PRICE_IDS.PRO_MONTHLY)       monthlyMap[PRICE_IDS.PRO_MONTHLY]       = "pro";
+  if (PRICE_IDS.ELITE_MONTHLY)     monthlyMap[PRICE_IDS.ELITE_MONTHLY]     = "pro";
+  if (PRICE_IDS.STARTER_YEARLY)    yearlyMap[PRICE_IDS.STARTER_YEARLY]     = "pro";
+  if (PRICE_IDS.PRO_YEARLY)        yearlyMap[PRICE_IDS.PRO_YEARLY]         = "pro";
+  if (PRICE_IDS.ELITE_YEARLY)      yearlyMap[PRICE_IDS.ELITE_YEARLY]       = "pro";
 
   if (yearlyMap[priceId]) {
     return { plan: yearlyMap[priceId], billingInterval: "yearly" };

@@ -32,17 +32,16 @@ import type { PlanTier, BillingInterval } from "@workspace/db";
 // Both paths are tried before throwing, so the setup script and env vars are
 // independently sufficient.
 
-// Env-var fallback map (populated at startup; missing vars are safely skipped)
+// Env-var fallback map (populated at startup; missing vars are safely skipped).
+// All paid price IDs resolve to "pro" — legacy starter/elite tiers are unified.
 const PLAN_PRICE_MAP: Record<string, PlanTier> = {
-  // Current single plan
   [process.env.STRIPE_PRICE_TRAINCHAT_MONTHLY ?? ""]: "pro",
-  // Legacy plans — existing subscribers retain access
-  [process.env.STRIPE_PRICE_STARTER_MONTHLY ?? ""]: "starter",
+  [process.env.STRIPE_PRICE_STARTER_MONTHLY ?? ""]: "pro",
   [process.env.STRIPE_PRICE_PRO_MONTHLY ?? ""]: "pro",
-  [process.env.STRIPE_PRICE_ELITE_MONTHLY ?? ""]: "elite",
-  [process.env.STRIPE_PRICE_STARTER_YEARLY ?? ""]: "starter",
+  [process.env.STRIPE_PRICE_ELITE_MONTHLY ?? ""]: "pro",
+  [process.env.STRIPE_PRICE_STARTER_YEARLY ?? ""]: "pro",
   [process.env.STRIPE_PRICE_PRO_YEARLY ?? ""]: "pro",
-  [process.env.STRIPE_PRICE_ELITE_YEARLY ?? ""]: "elite",
+  [process.env.STRIPE_PRICE_ELITE_YEARLY ?? ""]: "pro",
 };
 delete (PLAN_PRICE_MAP as Record<string, PlanTier>)[""];
 
@@ -54,7 +53,8 @@ const YEARLY_PRICE_IDS = new Set([
 
 // Matches current: trainchat_monthly
 // Matches legacy:  trainchat_(starter|pro|elite)_(monthly|yearly)
-const LOOKUP_KEY_RE = /^trainchat_(?:(starter|pro|elite)_)?(monthly|yearly)$/;
+// All paid variants resolve to "pro" — legacy tier names are discarded.
+const LOOKUP_KEY_RE = /^trainchat_(?:(?:starter|pro|elite)_)?(monthly|yearly)$/;
 
 export function detectPlanFromLookupKey(
   lookupKey: string | null | undefined
@@ -63,19 +63,7 @@ export function detectPlanFromLookupKey(
   const m = lookupKey.match(LOOKUP_KEY_RE);
   if (!m) return null;
 
-  // m[1] = tier (undefined for new single plan), m[2] = interval
-  const interval = m[2] as BillingInterval;
-
-  // New single plan: trainchat_monthly → maps to "pro" internally
-  if (!m[1]) {
-    return { plan: "pro", billingInterval: interval };
-  }
-
-  // Legacy plans: trainchat_starter_monthly, trainchat_pro_yearly, etc.
-  return {
-    plan: m[1] as PlanTier,
-    billingInterval: interval,
-  };
+  return { plan: "pro", billingInterval: m[1] as BillingInterval };
 }
 
 export function detectPlanFromPriceId(priceId: string, lookupKey?: string | null): PlanTier {

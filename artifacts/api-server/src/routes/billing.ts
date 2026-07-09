@@ -1,8 +1,9 @@
 // ─── /api/billing/* routes ────────────────────────────────────────────────────
 //
 // Checkout, subscription status, and portal session endpoints.
-// Single subscription: trainchat_monthly at $49.99/mo
-// Legacy tiers (starter, pro, elite) still accepted for backward compatibility.
+// Single subscription: trainchat_monthly at $49.99/mo.
+// Legacy tier names (starter, pro, elite) still accepted so existing integrations
+// and external API clients don't break — they all resolve to the same plan.
 
 import { Router, type IRouter } from "express";
 import { requireAuth } from "../middlewares/auth";
@@ -12,26 +13,12 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-// ─── Lookup key format ────────────────────────────────────────────────────────
-//
-// Current:  trainchat_monthly
-// Legacy:   trainchat_(starter|pro|elite)_(monthly|yearly)
-//
-// When the caller passes tier="trainchat", interval="monthly"
-//   → buildLookupKey produces "trainchat_monthly"
-// When legacy tiers are passed (existing integrations), they still work.
-
-function buildLookupKey(tier: string, billingInterval: string): string {
-  if (tier === "trainchat") {
-    // New single subscription — no tier prefix
-    return `trainchat_monthly`;
-  }
-  // Legacy: trainchat_pro_monthly, etc.
-  return `trainchat_${tier}_${billingInterval}`;
+// All tiers resolve to "trainchat_monthly" — there is one plan.
+function buildLookupKey(_tier: string, _billingInterval: string): string {
+  return "trainchat_monthly";
 }
 
-// "trainchat" is the canonical new tier.
-// Legacy tiers retained for existing integrations / external API clients.
+// "trainchat" is the canonical tier. Legacy names accepted for compatibility.
 const VALID_TIERS = new Set(["trainchat", "starter", "pro", "elite"]);
 const VALID_INTERVALS = new Set(["monthly", "yearly"]);
 
@@ -48,7 +35,7 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
     const { tier, billingInterval } = req.body as { tier?: string; billingInterval?: string };
 
     if (!tier || !VALID_TIERS.has(tier)) {
-      res.status(400).json({ error: "tier must be one of: trainchat, starter, pro, elite" });
+      res.status(400).json({ error: "Invalid tier. Use \"trainchat\"." });
       return;
     }
 

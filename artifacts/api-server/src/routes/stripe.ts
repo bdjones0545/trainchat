@@ -158,11 +158,11 @@ router.post("/subscription/confirm", requireAuth, async (req: any, res): Promise
         // detectPlanInterval throws on unknown price IDs (misconfigured STRIPE_PRICE_* env vars).
         // Fall back to a safe default (pro/monthly) + log so ops can investigate, but never
         // block the user from getting their paid access confirmed.
-        let plan: "pro" | "starter" | "elite" = "pro";
+        let plan: "pro" = "pro";
         let billingInterval: "monthly" | "yearly" = "monthly";
         try {
           const detected = detectPlanInterval(priceId);
-          plan = detected.plan as "pro" | "starter" | "elite";
+          plan = "pro"; // all paid price IDs resolve to pro
           billingInterval = detected.billingInterval;
         } catch (detectErr: any) {
           logger.error(

@@ -18,33 +18,30 @@ export interface PlanFeatures {
   sessionLogging: boolean;
 }
 
-// All subscribed tiers (starter, pro, elite — legacy or current) unlock everything.
+// "pro" (and legacy starter/elite values in existing DB rows) unlock everything.
 // "free" retains the limited feature set.
 export function getPlanFeatures(plan: PlanTier): PlanFeatures {
-  switch (plan) {
-    case "starter":
-    case "pro":
-    case "elite":
-      return {
-        unlimitedMessages: true,
-        adaptationContext: true,
-        memoryContext: true,
-        insightHints: true,
-        programEvolution: true,
-        priorityAI: true,
-        sessionLogging: true,
-      };
-    default:
-      return {
-        unlimitedMessages: false,
-        adaptationContext: false,
-        memoryContext: false,
-        insightHints: false,
-        programEvolution: false,
-        priorityAI: false,
-        sessionLogging: false,
-      };
+  const isPaid = plan === "pro" || plan === "starter" || plan === "elite";
+  if (isPaid) {
+    return {
+      unlimitedMessages: true,
+      adaptationContext: true,
+      memoryContext: true,
+      insightHints: true,
+      programEvolution: true,
+      priorityAI: true,
+      sessionLogging: true,
+    };
   }
+  return {
+    unlimitedMessages: false,
+    adaptationContext: false,
+    memoryContext: false,
+    insightHints: false,
+    programEvolution: false,
+    priorityAI: false,
+    sessionLogging: false,
+  };
 }
 
 // ─── Subscription access check ────────────────────────────────────────────────
@@ -179,8 +176,9 @@ export const PLAN_DISPLAY: Record<
   PlanTier,
   { name: string; price: number; yearlyPrice: number; badge?: string }
 > = {
-  free: { name: "Free", price: 0, yearlyPrice: 0 },
+  free:    { name: "Free",      price: 0,     yearlyPrice: 0 },
+  pro:     { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
+  // Legacy DB values — same display as pro
   starter: { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
-  pro: { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
-  elite: { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
+  elite:   { name: "TrainChat", price: 49.99, yearlyPrice: 49.99 * 12 },
 };
