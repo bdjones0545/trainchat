@@ -1,0 +1,59 @@
+Audit TrainChat subscription entitlement failure.
+
+Context:
+Lisa Jones purchased the $49.99/month TrainChat subscription. The payment/subscription appears in Stripe, but her TrainChat account still behaves like the free tier and does not unlock premium features.
+
+Goal:
+Find exactly why a successful Stripe subscription is not granting premium access.
+
+Audit end-to-end:
+
+1. Stripe checkout creation
+
+* Find the route/service that creates Stripe checkout sessions.
+* Confirm it attaches the correct TrainChat user identifier, email, metadata, customer ID, and price ID.
+* Check whether checkout is tied to authenticated user ID or only customer email.
+
+2. Stripe webhook handling
+
+* Find webhook route(s).
+* Confirm supported events include checkout.session.completed, customer.subscription.created/updated/deleted, invoice.paid, and invoice.payment_failed.
+* Confirm webhook signature verification uses the correct STRIPE_WEBHOOK_SECRET.
+* Confirm webhook updates the correct local user/subscription/entitlement records.
+* Check for silent failures, swallowed errors, or idempotency problems.
+
+3. Subscription database mapping
+
+* Identify all subscription/customer/plan fields.
+* Confirm active Stripe subscriptions map to app premium status.
+* Check if user lookup is by email, userId, stripeCustomerId, or metadata.
+* Look specifically for mismatch risks where Lisa paid with one email but logs in with another.
+
+4. Premium gate logic
+
+* Find every place that decides whether a user is free or premium.
+* Confirm it reads from the same source the webhook updates.
+* Check API route guards, frontend feature flags, token limits, model access, program limits, and any cached user/session payload.
+
+5. Replit production configuration
+
+* Confirm production has required secrets:
+  STRIPE_SECRET_KEY
+  STRIPE_WEBHOOK_SECRET
+  any PRICE_ID / MONTHLY_PRICE_ID / PREMIUM_PRICE_ID variables
+* Confirm live/test Stripe mode is consistent.
+* Confirm webhook endpoint URL matches the deployed Replit domain.
+
+6. Runtime evidence
+
+* Search recent logs for Stripe webhook errors, signature failures, unknown customer, missing user, missing metadata, database update failures, or 500s.
+* If possible, inspect the database row for Lisa Jones / her email and compare it to the Stripe customer/subscription record.
+
+Deliver:
+
+* Root cause, with file paths and exact code references.
+* Whether this is a Stripe webhook issue, account-email mismatch, entitlement-read issue, cache/session issue, or missing env config.
+* Exact minimal fix.
+* A safe one-off remediation to grant Lisa premium immediately without breaking future billing sync.
+* Add/describe a regression test covering “paid Stripe subscription unlocks premium for the correct user.”
+  Do not change code until the root cause is identified and explained.
