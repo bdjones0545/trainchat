@@ -1,4 +1,4 @@
 - [Performance Intelligence Directory — Phase 1–3](directory-phases.md) — Phase 3 complete: exercise_product_links table, exercise-product data layer, EquipmentAwareProgramming component, knowledge graph now has exercise node.
 - [Research Intelligence Engine — Phases 1–7](research-intelligence-phases.md) — All 8 phases built; Phase 7 wires research layer into performance-intelligence/index.ts; profile version bumped to 2.
 - [Stripe Billing Entitlement Architecture](stripe-billing-entitlement.md) — Root cause of "paid but still free" + the two-layer webhook fix; self-heal startup job; why stripe.accounts goes missing.
-- [Kevin Integration Architecture](kevin-integration.md) — All 18 phases scaffolded; fail-open design; all Kevin off by default; migration in lib/db/manual-migrations/0004_kevin_integration.sql.
+- [Kevin Integration Architecture](kevin-integration.md) — All production phases complete; dual-consent enforcement; outcome retry worker; SSE injection via transformHint; migration 0005 applied.

@@ -25,6 +25,12 @@ import { getLastMonthlyPlan } from "../lib/program-architecture-engine";
 import { fireFirstBuildEmail } from "../lib/retentionEmails";
 import { logger } from "../lib/logger";
 import type { ProgramStructure } from "../lib/ai";
+import {
+  buildKevinGenerationProvenance,
+  type TrainChatKevinContext,
+  type KevinGenerationProvenance,
+} from "./kevin-context-service";
+import { enqueueKevinEvent } from "./kevin-event-service";
 
 // ── Shared types ──────────────────────────────────────────────────────────────
 
@@ -49,12 +55,19 @@ export interface SaveProgramParams {
   editSubtype?: string | null;
   requestText: string;
   extractedConstraints?: SaveProgramConstraints | null;
+  /**
+   * Optional Kevin context retrieved before generation.
+   * When present, provenance is stored in decisionMetadata and a
+   * trainchat.program.generated event is enqueued (fail-open, non-blocking).
+   */
+  kevinContext?: TrainChatKevinContext;
 }
 
 export interface SaveProgramResult {
   system: { id: number; [key: string]: unknown };
   isUpdate: boolean;
   changeLogId: number | undefined;
+  kevinProvenance?: KevinGenerationProvenance;
 }
 
 // ── buildInitialBuildSummary ──────────────────────────────────────────────────
@@ -236,6 +249,7 @@ export async function saveOrUpdateProgram(
           programDays: structuredData.days.length,
           programGoal: extractedConstraints?.primaryGoal ?? null,
           programSport: extractedConstraints?.sportFocus ?? null,
+          ...(params.kevinContext ? buildKevinGenerationProvenance(params.kevinContext) : {}),
         },
       });
     } catch (logErr) {
@@ -243,5 +257,28 @@ export async function saveOrUpdateProgram(
     }
   }
 
-  return { system, isUpdate, changeLogId };
+  // ── Kevin: enqueue trainchat.program.generated event (fail-open) ──────────
+  // Fired whenever a program is saved (new or updated). Allows Kevin to observe
+  // generation outcomes for future memory enrichment.
+  // Never blocks the save result — fires after commit, catches all errors.
+  const kevinProvenance = params.kevinContext
+    ? buildKevinGenerationProvenance(params.kevinContext)
+    : undefined;
+
+  if (params.kevinContext) {
+    enqueueKevinEvent({
+      eventType: "trainchat.program.generated",
+      userId: params.userId,
+      summary: {
+        goal_category: params.extractedConstraints?.primaryGoal ?? "unspecified",
+        generation_source: "authenticated_app",
+        kevin_context_used: params.kevinContext.available,
+        training_style: params.focusMode,
+      },
+    }).catch((err: unknown) => {
+      logger.warn({ err }, "[ProgramBuildService] Failed to enqueue Kevin program.generated event — non-fatal");
+    });
+  }
+
+  return { system, isUpdate, changeLogId, kevinProvenance };
 }

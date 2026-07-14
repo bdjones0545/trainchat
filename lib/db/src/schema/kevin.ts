@@ -300,9 +300,11 @@ export type KevinOutcomeType = (typeof KEVIN_OUTCOME_TYPES)[number];
 
 export const KEVIN_FORWARD_STATUSES = [
   "pending",
-  "sent",
+  "processing",
+  "forwarded",
   "failed",
   "skipped",
+  "dead_lettered",
 ] as const;
 export type KevinForwardStatus = (typeof KEVIN_FORWARD_STATUSES)[number];
 
@@ -347,6 +349,8 @@ export const kevinTrainingOutcomesTable = pgTable(
 
     lastForwardError: text("last_forward_error"),
 
+    nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+
     traceId: text("trace_id"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -354,6 +358,8 @@ export const kevinTrainingOutcomesTable = pgTable(
       .defaultNow(),
 
     forwardedAt: timestamp("forwarded_at", { withTimezone: true }),
+
+    deadLetteredAt: timestamp("dead_lettered_at", { withTimezone: true }),
   },
   (t) => [
     index("idx_kevin_outcomes_user").on(t.userIdPseudonymous),

@@ -17,6 +17,7 @@ import { runSubscriptionSelfHeal } from "./lib/subscriptionSelfHeal";
 import { getKevinConfig } from "./lib/kevin-config";
 import { seedKevinCapabilities } from "./lib/kevin-capability-service";
 import { startKevinEventWorker, stopKevinEventWorker } from "./services/kevin-event-service";
+import { startKevinOutcomeWorker, stopKevinOutcomeWorker } from "./services/kevin-outcome-service";
 
 const rawPort = process.env["PORT"];
 
@@ -160,14 +161,21 @@ runExternalMaterializationReadinessCheck().catch(() => {});
     if (kevinCfg.eventDispatchEnabled) {
       startKevinEventWorker();
     }
+    if (kevinCfg.outcomeForwardingEnabled) {
+      startKevinOutcomeWorker();
+    }
   }
 }
 
-// Graceful shutdown — stops Kevin event worker cleanly before process exits
-process.on("SIGTERM", () => {
-  logger.info("[Process] SIGTERM received — stopping Kevin event worker");
+// Graceful shutdown — stops Kevin workers cleanly before process exits
+function _stopKevinWorkers(signal: string): void {
+  logger.info({ signal }, "[Process] Signal received — stopping Kevin workers");
   stopKevinEventWorker();
-});
+  stopKevinOutcomeWorker();
+}
+
+process.on("SIGTERM", () => _stopKevinWorkers("SIGTERM"));
+process.on("SIGINT",  () => _stopKevinWorkers("SIGINT"));
 
 app.listen(port, (err) => {
   if (err) {

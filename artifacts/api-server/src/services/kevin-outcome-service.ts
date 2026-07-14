@@ -9,10 +9,12 @@
 //   - Clinical outcomes are NEVER inferred
 //   - Forwarding failure NEVER affects user feedback submission or session completion
 //
-// Outcome forwarding is:
-//   - Asynchronous
-//   - Non-blocking
-//   - Fail-open
+// Outcome lifecycle:
+//   pending → processing → forwarded
+//                       ↘ failed (→ retry) → dead_lettered after MAX_ATTEMPTS
+//
+// Worker design mirrors the Kevin event worker (same retry schedule, batch
+// claim, circuit-breaker, concurrency-safe state transitions).
 
 import { db } from "@workspace/db";
 import {
@@ -20,13 +22,34 @@ import {
   type KevinOutcomeType,
   type InsertKevinTrainingOutcome,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and, lte, isNull, or, inArray } from "drizzle-orm";
 import { sendKevinOutcome } from "../lib/kevin-client";
 import { KevinError } from "../lib/kevin-client";
 import { getKevinConfig } from "../lib/kevin-config";
+import { isKevinCircuitAllowed } from "../lib/kevin-circuit-breaker";
 import { deriveKevinPseudonymousId, deriveKevinPseudonymousOrgId } from "../lib/kevin-pseudonym";
 import { logger } from "../lib/logger";
 import crypto from "crypto";
+
+// ─── Retry schedule ───────────────────────────────────────────────────────────
+
+const RETRY_DELAYS_MS = [
+  30_000,        // 30 seconds
+  120_000,       // 2 minutes
+  480_000,       // 8 minutes
+  1_800_000,     // 30 minutes
+  7_200_000,     // 2 hours
+];
+
+const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
+
+function nextRetryDelay(attempts: number): number {
+  return RETRY_DELAYS_MS[Math.min(attempts, RETRY_DELAYS_MS.length - 1)];
+}
+
+const WORKER_POLL_MS = 30_000;   // poll every 30s (outcomes are lower-frequency)
+const WORKER_BATCH = 10;
+const STALE_PROCESSING_MINUTES = 10; // recover rows stuck in "processing"
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -46,7 +69,7 @@ export interface RecordKevinOutcomeInput {
 }
 
 /**
- * Records a training outcome locally and schedules async forwarding to Kevin.
+ * Records a training outcome locally and marks it pending for the worker.
  * Non-blocking — the calling workflow is never affected by outcome errors.
  */
 export async function recordKevinOutcome(
@@ -61,11 +84,8 @@ export async function recordKevinOutcome(
     : null;
   const traceId = input.traceId ?? crypto.randomUUID();
 
-  let outcomeId: number | undefined;
-
-  // ── Persist locally first ─────────────────────────────────────────────────
   try {
-    const [row] = await db
+    await db
       .insert(kevinTrainingOutcomesTable)
       .values({
         applicationId: config.applicationId,
@@ -81,95 +101,275 @@ export async function recordKevinOutcome(
         completionStatus: input.completionStatus,
         forwardStatus: "pending",
         forwardAttempts: 0,
+        nextRetryAt: new Date(),
         traceId,
-      } satisfies Omit<InsertKevinTrainingOutcome, "id" | "createdAt" | "forwardedAt" | "lastForwardError">)
-      .returning({ id: kevinTrainingOutcomesTable.id });
-    outcomeId = row?.id;
-  } catch (err) {
+      } satisfies Omit<InsertKevinTrainingOutcome, "id" | "createdAt" | "forwardedAt" | "deadLetteredAt">)
+      .catch((err: unknown) => {
+        logger.error({ err, outcomeType: input.outcomeType }, "[KevinOutcome] Failed to record outcome — skipping");
+      });
+  } catch {
     // Never block the caller
-    logger.error({ err, outcomeType: input.outcomeType }, "[KevinOutcome] Failed to record outcome — skipping");
+  }
+}
+
+// ─── Durable retry worker ─────────────────────────────────────────────────────
+
+let _outcomeWorkerTimer: ReturnType<typeof setInterval> | null = null;
+let _outcomeWorkerStopping = false;
+
+/**
+ * Starts the Kevin outcome forwarding worker.
+ * Called once from index.ts after startup. Safe to call multiple times.
+ */
+export function startKevinOutcomeWorker(): void {
+  if (_outcomeWorkerTimer) {
+    logger.warn("[KevinOutcome] Worker already running — skipping duplicate start");
     return;
   }
 
-  // ── Forward to Kevin asynchronously ───────────────────────────────────────
-  if (config.outcomeForwardingEnabled && outcomeId !== undefined) {
-    forwardOutcomeAsync(outcomeId, {
-      userIdPseudonymous,
-      orgId: orgIdPseudonymous ?? undefined,
-      outcomeType: input.outcomeType,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      contextRequestId: input.contextRequestId,
-      resultSummary: sanitizeOutcomeSummary(input.resultSummary ?? {}),
-      wasUseful: input.wasUseful,
-      wasModified: input.wasModified,
-      completionStatus: input.completionStatus,
-      traceId,
-    }).catch((err: unknown) => {
-      logger.warn({ err, outcomeId }, "[KevinOutcome] Async forwarding failed — outcome remains locally recorded");
+  const config = getKevinConfig();
+  if (!config.integrationEnabled || !config.outcomeForwardingEnabled) {
+    logger.info("[KevinOutcome] Outcome forwarding disabled — worker not started");
+    return;
+  }
+
+  _outcomeWorkerStopping = false;
+  logger.info({ pollMs: WORKER_POLL_MS }, "[KevinOutcome] Starting outcome forwarding worker");
+
+  _outcomeWorkerTimer = setInterval(() => {
+    if (_outcomeWorkerStopping) return;
+    flushPendingKevinTrainingOutcomes().catch((err) => {
+      logger.error({ err }, "[KevinOutcome] Worker tick failed");
     });
+  }, WORKER_POLL_MS);
+
+  if (_outcomeWorkerTimer.unref) _outcomeWorkerTimer.unref();
+}
+
+/**
+ * Stops the Kevin outcome worker. Called on graceful shutdown.
+ */
+export function stopKevinOutcomeWorker(): void {
+  _outcomeWorkerStopping = true;
+  if (_outcomeWorkerTimer) {
+    clearInterval(_outcomeWorkerTimer);
+    _outcomeWorkerTimer = null;
+    logger.info("[KevinOutcome] Outcome forwarding worker stopped");
   }
 }
 
-// ─── Async forwarding ─────────────────────────────────────────────────────────
+/**
+ * Processes pending outcomes. Exported for testing and manual flush.
+ */
+export async function flushPendingKevinTrainingOutcomes(): Promise<{
+  processed: number;
+  forwarded: number;
+  failed: number;
+}> {
+  const config = getKevinConfig();
+  if (!config.integrationEnabled || !config.outcomeForwardingEnabled) {
+    return { processed: 0, forwarded: 0, failed: 0 };
+  }
+  if (!isKevinCircuitAllowed()) {
+    logger.debug("[KevinOutcome] Circuit open — skipping flush");
+    return { processed: 0, forwarded: 0, failed: 0 };
+  }
 
-async function forwardOutcomeAsync(
-  outcomeId: number,
-  payload: {
-    userIdPseudonymous: string;
-    orgId?: string;
-    outcomeType: string;
-    entityType?: string;
-    entityId?: string;
-    contextRequestId?: number;
-    resultSummary: Record<string, unknown>;
-    wasUseful?: boolean;
-    wasModified?: boolean;
-    completionStatus?: string;
-    traceId: string;
-  },
-): Promise<void> {
-  try {
-    await sendKevinOutcome({
-      ...payload,
-      contextRequestId: payload.contextRequestId !== undefined
-        ? String(payload.contextRequestId)
-        : undefined,
+  const now = new Date();
+
+  // ── Recover stale processing rows (stuck > STALE_PROCESSING_MINUTES) ────────
+  const staleThreshold = new Date(now.getTime() - STALE_PROCESSING_MINUTES * 60_000);
+  await db
+    .update(kevinTrainingOutcomesTable)
+    .set({ forwardStatus: "pending", nextRetryAt: new Date() })
+    .where(
+      and(
+        eq(kevinTrainingOutcomesTable.forwardStatus, "processing"),
+        lte(kevinTrainingOutcomesTable.createdAt, staleThreshold),
+      ),
+    )
+    .catch((err: unknown) => {
+      logger.warn({ err }, "[KevinOutcome] Stale-processing recovery failed — continuing");
     });
 
+  // ── Claim a batch of pending/failed outcomes ──────────────────────────────
+  let claimedIds: number[] = [];
+  try {
+    const rows = await db
+      .select({ id: kevinTrainingOutcomesTable.id })
+      .from(kevinTrainingOutcomesTable)
+      .where(
+        and(
+          or(
+            eq(kevinTrainingOutcomesTable.forwardStatus, "pending"),
+            eq(kevinTrainingOutcomesTable.forwardStatus, "failed"),
+          ),
+          or(
+            isNull(kevinTrainingOutcomesTable.nextRetryAt),
+            lte(kevinTrainingOutcomesTable.nextRetryAt, now),
+          ),
+        ),
+      )
+      .limit(WORKER_BATCH);
+
+    if (rows.length === 0) return { processed: 0, forwarded: 0, failed: 0 };
+    claimedIds = rows.map((r) => r.id);
+
     await db
       .update(kevinTrainingOutcomesTable)
-      .set({
-        forwardStatus: "sent",
-        forwardedAt: new Date(),
-        lastForwardError: null,
-      })
-      .where(eq(kevinTrainingOutcomesTable.id, outcomeId));
-
-    logger.info(
-      { outcomeId, outcomeType: payload.outcomeType },
-      "[KevinOutcome] Outcome forwarded to Kevin",
-    );
+      .set({ forwardStatus: "processing" })
+      .where(inArray(kevinTrainingOutcomesTable.id, claimedIds));
   } catch (err) {
-    const errMsg = err instanceof KevinError ? err.message : String(err);
-    const attempts = 1;
-
-    await db
-      .update(kevinTrainingOutcomesTable)
-      .set({
-        forwardStatus: "failed",
-        forwardAttempts: attempts,
-        lastForwardError: errMsg.slice(0, 500),
-      })
-      .where(eq(kevinTrainingOutcomesTable.id, outcomeId));
-
-    // Don't rethrow — forwarding failure must not affect user
+    logger.error({ err }, "[KevinOutcome] Failed to claim outcomes — skipping tick");
+    return { processed: 0, forwarded: 0, failed: 0 };
   }
+
+  // ── Load and dispatch ──────────────────────────────────────────────────────
+  const outcomes = await db
+    .select()
+    .from(kevinTrainingOutcomesTable)
+    .where(inArray(kevinTrainingOutcomesTable.id, claimedIds));
+
+  let forwarded = 0;
+  let failed = 0;
+
+  for (const outcome of outcomes) {
+    try {
+      await sendKevinOutcome({
+        userIdPseudonymous: outcome.userIdPseudonymous,
+        orgId: outcome.orgId ?? undefined,
+        outcomeType: outcome.outcomeType,
+        entityType: outcome.entityType ?? undefined,
+        entityId: outcome.entityId ?? undefined,
+        contextRequestId: outcome.contextRequestId !== null && outcome.contextRequestId !== undefined
+          ? String(outcome.contextRequestId)
+          : undefined,
+        resultSummary: (outcome.resultSummary as Record<string, unknown>) ?? {},
+        wasUseful: outcome.wasUseful ?? undefined,
+        wasModified: outcome.wasModified ?? undefined,
+        completionStatus: outcome.completionStatus ?? undefined,
+        traceId: outcome.traceId ?? crypto.randomUUID(),
+      });
+
+      await markOutcomeForwarded(outcome.id);
+      forwarded++;
+    } catch (err) {
+      const errorMsg = err instanceof KevinError ? err.message : String(err);
+      const newAttempts = outcome.forwardAttempts + 1;
+
+      if (newAttempts >= MAX_ATTEMPTS) {
+        await deadLetterOutcome(outcome.id, errorMsg);
+        logger.error(
+          { id: outcome.id, attempts: newAttempts, error: errorMsg },
+          "[KevinOutcome] Outcome dead-lettered after max attempts",
+        );
+      } else {
+        await markOutcomeFailed(outcome.id, errorMsg, newAttempts);
+        logger.warn(
+          { id: outcome.id, attempts: newAttempts, nextRetryMs: nextRetryDelay(newAttempts) },
+          "[KevinOutcome] Outcome forward failed — will retry",
+        );
+      }
+      failed++;
+    }
+  }
+
+  return { processed: claimedIds.length, forwarded, failed };
+}
+
+// ─── State transitions ────────────────────────────────────────────────────────
+
+export async function markOutcomeForwarded(id: number): Promise<void> {
+  await db
+    .update(kevinTrainingOutcomesTable)
+    .set({ forwardStatus: "forwarded", forwardedAt: new Date(), lastForwardError: null })
+    .where(eq(kevinTrainingOutcomesTable.id, id));
+}
+
+export async function markOutcomeFailed(
+  id: number,
+  error: string,
+  attempts: number,
+): Promise<void> {
+  const delay = nextRetryDelay(attempts);
+  await db
+    .update(kevinTrainingOutcomesTable)
+    .set({
+      forwardStatus: "failed",
+      forwardAttempts: attempts,
+      lastForwardError: error.slice(0, 500),
+      nextRetryAt: new Date(Date.now() + delay),
+    })
+    .where(eq(kevinTrainingOutcomesTable.id, id));
+}
+
+export async function deadLetterOutcome(id: number, error: string): Promise<void> {
+  await db
+    .update(kevinTrainingOutcomesTable)
+    .set({
+      forwardStatus: "dead_lettered",
+      lastForwardError: error.slice(0, 500),
+      deadLetteredAt: new Date(),
+    })
+    .where(eq(kevinTrainingOutcomesTable.id, id));
+}
+
+// ─── Admin: manual dead-letter retry ──────────────────────────────────────────
+
+/**
+ * Resets a dead-lettered outcome to pending so the worker retries it.
+ * Admin-only. Preserves the record and logs the admin action.
+ */
+export async function retryDeadLetteredOutcome(
+  id: number,
+  adminEmail: string,
+): Promise<void> {
+  await db
+    .update(kevinTrainingOutcomesTable)
+    .set({
+      forwardStatus: "pending",
+      forwardAttempts: 0,
+      lastForwardError: `Manually retried by admin (${adminEmail})`,
+      nextRetryAt: new Date(),
+      deadLetteredAt: null,
+    })
+    .where(
+      and(
+        eq(kevinTrainingOutcomesTable.id, id),
+        eq(kevinTrainingOutcomesTable.forwardStatus, "dead_lettered"),
+      ),
+    );
+
+  logger.info({ id, adminEmail }, "[KevinOutcome] Dead-lettered outcome reset to pending by admin");
+}
+
+// ─── Queue stats ──────────────────────────────────────────────────────────────
+
+export async function getKevinOutcomeQueueStats(): Promise<{
+  pending: number;
+  processing: number;
+  forwarded: number;
+  failed: number;
+  deadLettered: number;
+  skipped: number;
+}> {
+  const rows = await db
+    .select({ forwardStatus: kevinTrainingOutcomesTable.forwardStatus })
+    .from(kevinTrainingOutcomesTable);
+
+  const counts = { pending: 0, processing: 0, forwarded: 0, failed: 0, deadLettered: 0, skipped: 0 };
+  for (const r of rows) {
+    if (r.forwardStatus === "pending") counts.pending++;
+    else if (r.forwardStatus === "processing") counts.processing++;
+    else if (r.forwardStatus === "forwarded") counts.forwarded++;
+    else if (r.forwardStatus === "failed") counts.failed++;
+    else if (r.forwardStatus === "dead_lettered") counts.deadLettered++;
+    else if (r.forwardStatus === "skipped") counts.skipped++;
+  }
+  return counts;
 }
 
 // ─── Convenience factories ────────────────────────────────────────────────────
-//
-// These helpers encode the semantic distinctions required by the spec.
 
 /**
  * Records that a program was generated (not yet accepted or used).
@@ -191,6 +391,7 @@ export function recordProgramGenerated(
 
 /**
  * Records session feedback — distinguishes sentiment from clinical outcome.
+ * difficulty/energy/pain: 1–5 numeric scores from the user.
  */
 export function recordSessionFeedbackOutcome(
   userId: number,
@@ -204,8 +405,17 @@ export function recordSessionFeedbackOutcome(
     : scores.difficulty >= 4 ? "negative"
     : "neutral";
 
-  const outcomeType: KevinOutcomeType =
-    overallSentiment === "positive" ? "feedback_positive" : "feedback_negative";
+  // Choose a specific outcome type that matches the observed score pattern
+  let outcomeType: KevinOutcomeType;
+  if (scores.difficulty >= 4) {
+    outcomeType = "too_hard";
+  } else if (scores.difficulty <= 2) {
+    outcomeType = "too_easy";
+  } else if (overallSentiment === "positive") {
+    outcomeType = "feedback_positive";
+  } else {
+    outcomeType = "feedback_negative";
+  }
 
   recordKevinOutcome({
     userId,
@@ -224,6 +434,7 @@ export function recordSessionFeedbackOutcome(
 
 /**
  * Records that a session was completed (observable event — not clinical outcome).
+ * Note: completed ≠ effective or positive adaptation.
  */
 export function recordSessionCompleted(
   userId: number,
@@ -264,6 +475,7 @@ export function recordExerciseSubstituted(
 const FORBIDDEN_OUTCOME_KEYS = new Set([
   "email", "name", "phone", "address", "dob", "injury_detail",
   "diagnosis", "medication", "raw_text", "prompt", "api_key", "token",
+  "health_condition", "injury", "pain", "pregnancy", "guardian",
 ]);
 
 function sanitizeOutcomeSummary(

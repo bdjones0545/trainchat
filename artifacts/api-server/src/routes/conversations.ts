@@ -100,6 +100,11 @@ import {
 // ── Phase 2 service imports ───────────────────────────────────────────────────
 import { buildCompleteEvent } from "../services/streaming-response-service";
 import { saveOrUpdateProgram } from "../services/program-build-service";
+import {
+  requestTrainChatKevinContext,
+  buildKevinContextPromptFragment,
+  type TrainChatKevinContext,
+} from "../services/kevin-context-service";
 import { interpretMutationRequest } from "../services/mutation-execution-service";
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { sharedRateLimit } from "../lib/shared-rate-limiter";
@@ -4924,6 +4929,44 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
+  // ── Kevin context enrichment (REBUILD_PROGRAM / new build, fail-open) ───────
+  // Kevin context is DATA — it never overrides the user's current request,
+  // safety rules, or validated constraints. Applied only when capability mode
+  // is "draft", "recommend", or "auto" (not "observe"). In "observe" mode the
+  // context is retrieved and logged for audit but NOT injected into the prompt.
+  //
+  // Consent requirement: BOTH training_preferences AND program_history_summary
+  // must be granted. If either is missing, this is a no-op for this turn.
+  let _sseKevinContext: TrainChatKevinContext | undefined;
+  if (execPlan.action === "REBUILD_PROGRAM") {
+    _sseKevinContext = await requestTrainChatKevinContext({
+      userId,
+      workflow: "program_generation",
+      entityType: "program",
+      questionSummary: "Return applicable saved training preferences and prior accepted modification patterns.",
+      depth: 0,
+    }).catch((err: unknown) => {
+      logger.warn({ err }, "[Kevin:SSE] Context retrieval failed (non-fatal) — continuing without Kevin context");
+      return undefined;
+    });
+
+    if (_sseKevinContext?.contextApplied) {
+      const kevinFragment = buildKevinContextPromptFragment(_sseKevinContext);
+      if (kevinFragment) {
+        transformHint = transformHint
+          ? `${transformHint}\n\n${kevinFragment}`
+          : kevinFragment;
+        logger.info(
+          {
+            memoriesCount: _sseKevinContext.memoriesCount,
+            capabilityMode: _sseKevinContext.capabilityMode,
+          },
+          "[Kevin:SSE] Context fragment injected into generation prompt",
+        );
+      }
+    }
+  }
+
   // Stage 5: Apply Changes — AI generates the program (this is the longest stage)
   emit(buildStageEvent("applying", intentResult.type, execPlan.action, _narrationCtx));
 
@@ -5216,6 +5259,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         editSubtype: intentResult.editSubtype ?? null,
         requestText: parsed.data.content,
         extractedConstraints: extractedConstraints ?? null,
+        kevinContext: _sseKevinContext,
       });
       systemSaved = true;
       autoSavedSystemId = _saveResultSSE.system.id as number;

@@ -26,6 +26,11 @@ import { getKevinConfig } from "../lib/kevin-config";
 import { getKevinCircuitStatus } from "../lib/kevin-circuit-breaker";
 import { getAllKevinCapabilities } from "../lib/kevin-capability-service";
 import { getKevinEventQueueStats } from "../services/kevin-event-service";
+import {
+  getKevinOutcomeQueueStats,
+  retryDeadLetteredOutcome,
+} from "../services/kevin-outcome-service";
+import { kevinTrainingOutcomesTable } from "@workspace/db";
 import { checkKevinHealth, KevinError } from "../lib/kevin-client";
 import { logger } from "../lib/logger";
 
@@ -173,6 +178,68 @@ router.get(
     } catch (err) {
       logger.error({ err }, "[KevinAdmin] Failed to fetch capabilities");
       res.status(500).json({ error: "Failed to fetch capabilities" });
+    }
+  },
+);
+
+// ─── GET /admin/kevin/outcomes ────────────────────────────────────────────────
+
+router.get(
+  "/admin/kevin/outcomes",
+  requireAuth,
+  requireAdmin,
+  async (_req, res): Promise<void> => {
+    try {
+      const stats = await getKevinOutcomeQueueStats();
+
+      const deadLettered = await db
+        .select({
+          id: kevinTrainingOutcomesTable.id,
+          outcomeType: kevinTrainingOutcomesTable.outcomeType,
+          forwardAttempts: kevinTrainingOutcomesTable.forwardAttempts,
+          lastForwardError: kevinTrainingOutcomesTable.lastForwardError,
+          deadLetteredAt: kevinTrainingOutcomesTable.deadLetteredAt,
+          createdAt: kevinTrainingOutcomesTable.createdAt,
+        })
+        .from(kevinTrainingOutcomesTable)
+        .where(eq(kevinTrainingOutcomesTable.forwardStatus, "dead_lettered"))
+        .orderBy(desc(kevinTrainingOutcomesTable.deadLetteredAt))
+        .limit(10);
+
+      res.json({ stats, recentDeadLettered: deadLettered });
+    } catch (err) {
+      logger.error({ err }, "[KevinAdmin] Failed to fetch outcome stats");
+      res.status(500).json({ error: "Failed to fetch outcome stats" });
+    }
+  },
+);
+
+// ─── POST /admin/kevin/outcomes/:id/retry ─────────────────────────────────────
+
+router.post(
+  "/admin/kevin/outcomes/:id/retry",
+  requireAuth,
+  requireAdmin,
+  async (req, res): Promise<void> => {
+    const id = parseInt(String(req.params["id"]), 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: "Invalid outcome id" });
+      return;
+    }
+
+    try {
+      // Resolve admin email for the audit trail
+      const userId = req.session.userId as number;
+      const [user] = await db
+        .select({ email: usersTable.email })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId));
+
+      await retryDeadLetteredOutcome(id, user?.email ?? "unknown");
+      res.json({ ok: true, message: "Outcome reset to pending" });
+    } catch (err) {
+      logger.error({ err, id }, "[KevinAdmin] Failed to retry dead-lettered outcome");
+      res.status(500).json({ error: "Failed to retry outcome" });
     }
   },
 );

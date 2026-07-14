@@ -1,0 +1,1035 @@
+Act as a world-renowned full-stack software architect, distributed-systems engineer, AI-agent infrastructure specialist, exercise-programming platform architect, and security engineer.
+
+You are working inside the existing TrainChat Replit repository.
+
+The TrainChat × Kevin integration foundation is already implemented. Do not rebuild it. Do not create duplicate services, duplicate tables, or parallel architecture.
+
+Your job is to complete the missing production functionality and verify the live integration end to end.
+
+Do not deploy automatically.
+
+# Current completed implementation
+
+The repository already contains:
+
+## Foundation
+
+```text
+lib/db/src/schema/kevin.ts
+kevin-config.ts
+kevin-pseudonym.ts
+kevin-circuit-breaker.ts
+kevin-client.ts
+kevin-consent-service.ts
+kevin-capability-service.ts
+```
+
+## Services
+
+```text
+kevin-context-service.ts
+kevin-event-service.ts
+kevin-outcome-service.ts
+```
+
+## Routes
+
+```text
+routes/kevin-internal.ts
+routes/kevin-admin.ts
+routes/kevin-memory.ts
+```
+
+## Existing wire-ins
+
+```text
+index.ts
+routes/session-feedback.ts
+routes/index.ts
+lib/db/manual-migrations/0004_kevin_integration.sql
+docs/kevin-integration.md
+```
+
+The current system includes:
+
+* seven Kevin database tables
+* typed environment validation
+* HMAC-SHA256 pseudonymous user identifiers
+* circuit breaker
+* typed Kevin/Hermes HTTP client
+* memory consent CRUD
+* capability-mode resolution
+* durable Kevin event queue
+* event retry worker
+* training outcome recording
+* Kevin signal intake
+* internal service-token authentication
+* recursion guard
+* admin diagnostics
+* user-facing memory settings
+* capability seeding
+* graceful shutdown
+* fail-open session-feedback integration
+* idempotent migration
+* documentation
+
+TypeScript is currently clean and the migration has been applied.
+
+# Missing functionality
+
+Complete the following four areas:
+
+1. verify the live Kevin/Hermes API contracts
+2. connect Kevin context to TrainChat program generation
+3. add durable outcome forwarding retries
+4. complete end-to-end tests and production-readiness verification
+
+Do not enable cross-application identity linking in this phase.
+
+---
+
+# Part 1 — Inspect repository reality
+
+Before changing code, inspect:
+
+* the current implementation of `kevin-client.ts`
+* the current implementation of `kevin-context-service.ts`
+* the current implementation of `kevin-outcome-service.ts`
+* the current event retry worker
+* `program-build-service.ts`
+* all actual program-generation entry points
+* session generation
+* regeneration
+* program editing
+* external API generation
+* user authentication
+* organization or tenant resolution
+* memory consent resolution
+* capability evaluation
+* prompt construction
+* program validation
+* transactional save logic
+* advisory locking
+* current tests
+
+Identify the canonical internal authenticated generation workflow.
+
+Do not initially wire Kevin into every generation path.
+
+Choose one production path representing authenticated first-party TrainChat program or session generation.
+
+Document why that path was selected.
+
+---
+
+# Part 2 — Verify Kevin/Hermes endpoint contracts
+
+Do not assume the scaffolded client paths match the live Kevin runtime.
+
+Using the configured environment when available, verify the actual contracts for:
+
+```text
+health
+capabilities
+context retrieval
+event ingestion
+outcome ingestion
+signal intake
+```
+
+For each outbound endpoint document:
+
+```text
+HTTP method
+exact path
+authentication headers
+request schema
+response schema
+timeout
+maximum response size
+error responses
+idempotency behavior
+circuit-breaker behavior
+retry behavior
+```
+
+Inspect Kevin’s current API implementation or live API responses where access is available.
+
+Do not invent endpoints.
+
+If `KEVIN_HERMES_BASE_URL` is not configured or the live endpoint is unavailable:
+
+* preserve the client implementation
+* classify each unverified endpoint as pending
+* create exact contract documentation
+* keep corresponding feature flags disabled
+* do not fake success
+* do not block the rest of the implementation
+
+## Required client behavior
+
+Ensure `kevin-client.ts` uses typed methods equivalent to:
+
+```ts
+checkKevinHealth()
+requestKevinContext()
+sendKevinEvent()
+sendKevinOutcome()
+```
+
+Each method must:
+
+* check the master feature flag
+* use server-only authentication
+* use strict timeouts
+* participate in the circuit breaker where appropriate
+* limit response size
+* validate the response schema
+* sanitize external error messages
+* avoid logging secrets
+* classify unsupported endpoints accurately
+
+Suggested error classifications:
+
+```text
+KEVIN_DISABLED
+KEVIN_NOT_CONFIGURED
+KEVIN_UNAVAILABLE
+KEVIN_TIMEOUT
+KEVIN_AUTH
+KEVIN_BUSY
+KEVIN_INVALID_RESPONSE
+KEVIN_UNSUPPORTED_ENDPOINT
+KEVIN_CIRCUIT_OPEN
+KEVIN_HTTP
+```
+
+---
+
+# Part 3 — Wire Kevin context into program generation
+
+Connect `kevin-context-service.ts` to the selected canonical authenticated generation workflow in `program-build-service.ts` or the actual production equivalent.
+
+Do not connect it to unauthenticated or external API generation by default.
+
+## Required order of operations
+
+The generation flow must be:
+
+```text
+1. authenticate user
+2. resolve tenant or organization
+3. validate generation request
+4. load current TrainChat program constraints
+5. load current TrainChat safety restrictions
+6. load current TrainChat preferences
+7. evaluate Kevin master feature flag
+8. evaluate KEVIN_CONTEXT_RETRIEVAL_ENABLED
+9. evaluate training-context capability
+10. evaluate memory consent
+11. create pseudonymous user identifier
+12. request bounded Kevin context
+13. merge only validated optional context
+14. call the existing TrainChat generation engine
+15. run all existing deterministic validation
+16. save through existing transaction and advisory lock
+17. store context provenance
+18. enqueue sanitized generation event
+```
+
+Kevin must be optional.
+
+Any Kevin error must result in an empty context object and normal TrainChat generation.
+
+## Context priority
+
+Apply context in this order:
+
+```text
+1. current explicit user request
+2. safety restrictions and contraindication controls
+3. current program structure
+4. current equipment availability
+5. current session-duration requirements
+6. explicit preferences stored in TrainChat
+7. optional Kevin memory
+8. default generation behavior
+```
+
+Kevin context must never override items 1–6.
+
+## Allowed Kevin context
+
+Kevin may provide:
+
+```text
+preferred training style
+preferred session duration
+equipment preferences
+preferred exercise categories
+disliked exercise categories
+prior accepted substitutions
+preferred coaching tone
+recurring edit patterns
+broad adherence patterns
+prior accepted program modifications
+```
+
+Kevin must not provide or override:
+
+```text
+medical diagnoses
+raw injury notes
+pain reports
+medications
+pregnancy information
+raw coach notes
+email addresses
+phone numbers
+billing details
+authentication data
+another user’s memory
+another organization’s memory
+arbitrary exercise IDs
+arbitrary database records
+```
+
+## Safe prompt integration
+
+Do not append raw Kevin output directly to the system prompt.
+
+Create a structured and bounded prompt fragment.
+
+Example:
+
+```text
+OPTIONAL SAVED TRAINING PREFERENCES
+
+The following information is optional historical preference context.
+It must not override the current user request, safety restrictions,
+available equipment, program rules, or current session constraints.
+
+- Preferred session duration: 45 minutes
+- Preferred training emphasis: strength
+- Previously accepted substitution pattern: split squat → step-up
+- Coaching tone: concise
+
+Use only relevant preferences. Ignore conflicts with the current request.
+```
+
+Escape or sanitize delimiter-breaking content.
+
+Do not store or expose hidden chain-of-thought.
+
+## Context request input
+
+Use only minimal safe information.
+
+Suggested input:
+
+```ts
+{
+  applicationId: "trainchat",
+  workflow: "program_generation",
+  orgId,
+  pseudonymousUserId,
+  goalCategory,
+  sessionDurationCategory,
+  equipmentCategories,
+  programPhaseCategory,
+  question: "Return applicable saved training preferences and prior accepted modification patterns.",
+  traceId,
+  depth: 0
+}
+```
+
+Do not send the full user prompt unless absolutely required.
+
+Do not send raw names, emails, health notes, or full historical workouts.
+
+## Provenance
+
+Store server-side metadata on the generated program, generation record, or related audit record.
+
+Use the repository’s existing metadata pattern where possible.
+
+Suggested metadata:
+
+```json
+{
+  "kevin_context_used": true,
+  "kevin_context_request_id": "string",
+  "kevin_memories_count": 3,
+  "kevin_context_confidence": 0.82,
+  "kevin_context_status": "success",
+  "kevin_trace_id": "string"
+}
+```
+
+If the current schema cannot safely hold this metadata:
+
+* create an additive migration or related provenance table
+* do not force incompatible fields into unrelated columns
+* preserve existing API response contracts
+
+## Response compatibility
+
+Do not break existing API responses.
+
+Kevin provenance should remain server-side initially.
+
+If a new optional field is added to a first-party response, verify that all existing clients tolerate it.
+
+Do not change External API responses in this phase.
+
+---
+
+# Part 4 — Generation event wire-in
+
+After a successful generation, enqueue a sanitized event:
+
+```text
+trainchat.program.generated
+```
+
+or the canonical event type matching the actual workflow.
+
+Example payload:
+
+```json
+{
+  "goal_category": "strength",
+  "session_duration_minutes": 45,
+  "exercise_count": 7,
+  "movement_categories": ["squat", "push", "pull"],
+  "generation_source": "authenticated_first_party",
+  "kevin_context_used": true,
+  "kevin_memories_count": 3
+}
+```
+
+Do not send:
+
+* full workout text
+* exercise coaching descriptions
+* raw user prompt
+* health notes
+* names
+* emails
+* exact internal user IDs
+* API keys
+* secrets
+
+The enqueue call must be fail-open and non-blocking.
+
+A successful TrainChat generation must never be rolled back because Kevin event enqueueing fails.
+
+Use a stable idempotency key based on the generated entity ID.
+
+Example:
+
+```text
+trainchat.program.generated:{programId}
+```
+
+Do not use timestamps alone.
+
+---
+
+# Part 5 — Durable outcome retry worker
+
+The current outcome service records failed forwarding but does not retry durably.
+
+Complete the outcome lifecycle.
+
+## Required statuses
+
+Use the existing schema where possible. Otherwise add an idempotent migration.
+
+Outcome forwarding should support:
+
+```text
+pending
+processing
+forwarded
+failed
+dead_lettered
+```
+
+Use existing field names if they differ, but preserve these semantics.
+
+## Required service functions
+
+Implement or complete functions equivalent to:
+
+```ts
+recordKevinTrainingOutcome()
+forwardKevinTrainingOutcome()
+flushPendingKevinTrainingOutcomes()
+markOutcomeForwarded()
+markOutcomeFailed()
+deadLetterOutcome()
+startKevinOutcomeWorker()
+stopKevinOutcomeWorker()
+```
+
+## Retry schedule
+
+Use the same retry strategy as the event queue:
+
+```text
+attempt 1: 30 seconds
+attempt 2: 2 minutes
+attempt 3: 8 minutes
+attempt 4: 30 minutes
+attempt 5: 2 hours
+```
+
+After five failed attempts:
+
+```text
+status = dead_lettered
+```
+
+Preserve the final sanitized error.
+
+Do not delete the outcome.
+
+## Worker requirements
+
+The worker must:
+
+* run only when the master integration flag is enabled
+* respect `KEVIN_OUTCOME_FORWARDING_ENABLED`
+* start exactly once per process
+* stop safely during SIGTERM and SIGINT
+* not keep tests alive
+* process bounded batches
+* claim rows concurrency-safely
+* recover stale `processing` rows
+* avoid holding database transactions during network calls
+* use the circuit breaker
+* preserve organization and user isolation
+* use pseudonymous user identifiers
+* never forward raw sensitive data
+
+Use the existing event worker as the architectural model where appropriate.
+
+Do not duplicate low-level worker logic unnecessarily if a safe reusable queue-worker utility can be extracted without broad refactoring.
+
+## Initial outcomes
+
+Continue recording session-feedback outcomes.
+
+Ensure the following distinctions remain separate:
+
+```text
+feedback submitted
+workout accepted
+workout modified
+session started
+session completed
+session partially completed
+session skipped
+positive feedback
+negative feedback
+too easy
+too hard
+too long
+too short
+exercise disliked
+exercise preferred
+```
+
+Do not infer that:
+
+```text
+accepted = successful
+completed = effective
+positive feedback = clinical improvement
+```
+
+Only record outcomes TrainChat can directly observe.
+
+---
+
+# Part 6 — Consent enforcement
+
+Before requesting Kevin context, verify the user has granted the appropriate memory consent.
+
+At minimum require consent for:
+
+```text
+training_preferences
+program_history_summary
+```
+
+If either is not granted:
+
+* return a controlled `consent_required` or empty context result
+* continue normal generation
+* do not call Kevin
+* audit only the minimum necessary status
+* do not repeatedly prompt the user during every generation request
+
+Cross-application context must remain disabled.
+
+Do not create identity links.
+
+Do not enable:
+
+```text
+cross_application_context
+```
+
+even if the capability row exists.
+
+Confirm revocation immediately stops future Kevin context requests.
+
+Revocation does not need to delete historical Kevin memory unless a verified deletion endpoint exists.
+
+Document that limitation clearly.
+
+---
+
+# Part 7 — Capability enforcement
+
+Require the correct capability for generation enrichment.
+
+Suggested capability:
+
+```text
+program_generation_context
+```
+
+or use the existing canonical capability name from the repository.
+
+Rules:
+
+```text
+disabled
+→ no context request
+
+observe
+→ context may be retrieved and audited but must not alter generation
+
+recommend
+→ context may be surfaced as non-binding evidence
+
+draft
+→ context may influence a draft program, still fully validated
+
+require_approval
+→ no automatic user-facing use unless the existing workflow includes approval
+
+auto
+→ may enrich generation but can never bypass safety or validation
+```
+
+For the first live release, use:
+
+```text
+observe
+```
+
+for general users and optionally:
+
+```text
+draft
+```
+
+for one internal test account.
+
+Do not silently treat `observe` as permission to modify the generated workout.
+
+If the current service does not distinguish “retrieved” from “applied,” add that distinction.
+
+Store:
+
+```text
+context_retrieved
+context_applied
+```
+
+separately.
+
+---
+
+# Part 8 — External API protection
+
+Explicitly verify these External API routes:
+
+```text
+/program/session
+/program/generate
+/program/edit
+/exercises
+```
+
+Kevin context must remain disabled for external API consumers by default.
+
+Do not let external API clients:
+
+* provide a Kevin user ID
+* provide a global identity ID
+* opt themselves into cross-application memory
+* access first-party user memory
+* control capability modes
+* control consent
+* pass arbitrary trace origins
+* bypass rate limits
+
+External API events may only be queued if an explicit application-level setting permits them.
+
+Do not alter existing response contracts.
+
+---
+
+# Part 9 — Admin diagnostics
+
+Extend the existing Kevin admin diagnostics only where necessary.
+
+Add visibility for:
+
+## Context generation
+
+```text
+workflow
+context status
+context retrieved
+context applied
+memory count
+confidence
+duration
+trace ID
+created time
+```
+
+## Outcome queue
+
+```text
+outcome type
+forward status
+attempts
+last error
+next retry
+forwarded time
+dead-lettered state
+```
+
+Add an ADMIN-only manual retry for dead-lettered outcomes if consistent with the existing admin architecture.
+
+Manual retry must:
+
+* preserve the record
+* reset it safely to pending
+* retain retry history
+* audit the admin action
+* preserve idempotency
+* remain org-scoped
+
+Do not expose raw prompts, secrets, full user memory, or sensitive training data.
+
+---
+
+# Part 10 — Tests
+
+Add tests following the repository’s established conventions.
+
+## Live contract tests
+
+Where a live Kevin environment is available:
+
+* health endpoint succeeds
+* authentication works
+* context request contract is accepted
+* event contract is accepted
+* outcome contract is accepted
+* malformed payloads fail predictably
+* client classifies errors correctly
+
+Skip live tests cleanly when required environment variables are unavailable.
+
+Do not make CI depend on an external Kevin runtime unless the repository already supports gated integration tests.
+
+## Generation integration tests
+
+Test:
+
+* generation succeeds with all Kevin flags disabled
+* generation succeeds when Kevin is unavailable
+* generation succeeds when the circuit is open
+* no consent prevents Kevin network call
+* revoked consent prevents Kevin network call
+* disabled capability prevents Kevin network call
+* observe mode retrieves but does not apply context
+* draft mode may apply validated context
+* current user request overrides Kevin memory
+* safety restriction overrides Kevin memory
+* current equipment overrides Kevin memory
+* current duration constraint overrides Kevin memory
+* malformed Kevin response is ignored
+* cross-user context cannot be loaded
+* cross-org context cannot be loaded
+* pseudonymous ID is used instead of raw user ID
+* advisory locking remains active
+* transaction rollback behavior remains unchanged
+* generated program validation still runs
+* existing response contract remains compatible
+* generation event enqueue is non-blocking
+* event idempotency key is stable
+
+## Outcome retry tests
+
+Test:
+
+* pending outcome is forwarded
+* successful forward marks `forwarded`
+* failed forward increments attempts
+* retry timestamps match the required schedule
+* fifth failure dead-letters
+* dead-lettered outcomes are preserved
+* stale processing outcome is recovered
+* concurrent workers do not double-forward
+* circuit-open outcomes remain queued
+* worker starts once
+* worker stops safely
+* stop is safe when not running
+* graceful shutdown stops both event and outcome workers
+* feedback submission succeeds if outcome recording fails
+* feedback submission succeeds if outcome forwarding fails
+* no raw sensitive data is forwarded
+* manual retry remains org-scoped
+
+## External API tests
+
+Test:
+
+* Kevin context is disabled by default
+* External API response contracts remain unchanged
+* client cannot supply arbitrary Kevin identity
+* client cannot access another user’s memory
+* client cannot enable cross-application context
+
+## Security tests
+
+Test:
+
+* Kevin secrets are server-only
+* pseudonym key is not logged
+* service token is not logged
+* raw user IDs do not appear in outbound requests
+* email addresses do not appear in outbound context payloads
+* health-related raw fields do not appear in outbound context payloads
+* arbitrary Kevin exercise IDs are ignored
+* arbitrary Kevin routes are ignored
+* prompt injection cannot alter capability or consent checks
+* hidden prompts are not returned to the client
+
+---
+
+# Part 11 — Verification
+
+Run the repository’s actual commands for:
+
+```text
+TypeScript typecheck
+targeted Kevin tests
+program-generation tests
+session-feedback tests
+External API tests
+integration tests
+migration verification
+fresh database migration
+existing database reconciliation
+production build
+lint
+client-bundle secret search
+server-log secret search
+```
+
+Also confirm:
+
+* server starts normally with Kevin disabled
+* server starts normally without `KEVIN_HERMES_BASE_URL`
+* event worker starts once
+* outcome worker starts once
+* both workers stop on SIGTERM
+* both workers stop on SIGINT
+* Kevin timeout does not delay generation beyond the configured bound
+* circuit breaker opens and recovers correctly
+* no optional Kevin failure blocks a valid TrainChat workflow
+* no External API behavior changes unexpectedly
+* no cross-application identity linking is active
+
+---
+
+# Part 12 — Staged activation plan
+
+Do not activate all capabilities automatically.
+
+Document and prepare this rollout.
+
+## Stage 1 — Live health verification
+
+```text
+KEVIN_INTEGRATION_ENABLED=true
+KEVIN_HERMES_BASE_URL=<verified URL>
+KEVIN_HERMES_API_KEY=<server-only secret>
+```
+
+Keep all other flags false.
+
+Verify health and circuit state.
+
+## Stage 2 — Context retrieval in observe mode
+
+```text
+KEVIN_CONTEXT_RETRIEVAL_ENABLED=true
+```
+
+Use one internal test user.
+
+Set:
+
+```text
+program_generation_context = observe
+```
+
+Verify context retrieval but confirm it does not alter generation.
+
+## Stage 3 — Context application for internal test account
+
+Set the internal test account or scope to:
+
+```text
+program_generation_context = draft
+```
+
+Verify safe preferences influence generation without overriding current constraints.
+
+## Stage 4 — Event delivery
+
+```text
+KEVIN_EVENT_DISPATCH_ENABLED=true
+```
+
+Verify one generated-program event moves from pending to sent.
+
+## Stage 5 — Outcome delivery
+
+```text
+KEVIN_OUTCOME_FORWARDING_ENABLED=true
+```
+
+Verify one feedback outcome is forwarded and retry behavior works.
+
+## Stage 6 — Signal intake
+
+```text
+KEVIN_INTERNAL_SERVICE_TOKEN=<strong random secret>
+KEVIN_SIGNAL_INTAKE_ENABLED=true
+```
+
+Verify authentication, deduplication, and recursion limits.
+
+Do not activate cross-application memory.
+
+---
+
+# Constraints
+
+Do not:
+
+* rebuild completed Kevin infrastructure
+* create duplicate Kevin tables
+* create duplicate Kevin clients
+* replace TrainChat’s generation engine
+* let Kevin directly generate the final program
+* bypass program validation
+* bypass safety rules
+* bypass advisory locks
+* bypass transactions
+* bypass authentication
+* bypass rate limits
+* bypass consent
+* expose raw user IDs
+* expose emails
+* expose health-related raw data
+* enable cross-application identity linking
+* enable cross-application memory
+* modify External API contracts
+* allow arbitrary exercise IDs from Kevin
+* allow arbitrary URLs from Kevin
+* store chain-of-thought
+* expose hidden prompts
+* fake unverified Kevin endpoints
+* deploy automatically
+
+---
+
+# Final delivery report
+
+Return:
+
+1. repository inspection findings
+2. canonical generation path selected
+3. exact generation hook added
+4. context priority implementation
+5. consent enforcement
+6. capability-mode behavior
+7. provenance storage
+8. generation event wire-in
+9. outcome retry worker implementation
+10. worker lifecycle behavior
+11. live Kevin/Hermes endpoint matrix
+12. verified endpoints
+13. pending endpoints
+14. files created
+15. files modified
+16. migration changes
+17. tests added
+18. exact commands run
+19. verification results
+20. External API findings
+21. security findings
+22. known limitations
+23. staged activation instructions
+24. rollback instructions
+25. confirmation that no deployment occurred
+
+Classify the result as:
+
+```text
+PRODUCTION READY
+PRODUCTION READY WITH DOCUMENTED LIMITATIONS
+NOT PRODUCTION READY
+```
+
+Do not classify it as production-ready if:
+
+* generation can be blocked by Kevin
+* consent is not enforced
+* external API behavior changed unexpectedly
+* outcome retries are not durable
+* cross-user or cross-org isolation is unverified
+* the live Kevin context contract remains incompatible
+* typecheck, migration verification, or core generation tests fail
+
+The goal of this pass is not more scaffolding.
+
+The goal is a verified, production-safe closed loop:
+
+```text
+Kevin memory
+      ↓
+optional bounded generation context
+      ↓
+TrainChat generation and validation
+      ↓
+user feedback and completion
+      ↓
+durable outcome forwarding
+      ↓
+Kevin learns
+```
