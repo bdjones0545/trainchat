@@ -4,6 +4,8 @@ import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { trackLearningEvent } from "../lib/globalLearningService";
 import { logger } from "../lib/logger";
+import { enqueueKevinEvent } from "../services/kevin-event-service";
+import { recordSessionFeedbackOutcome } from "../services/kevin-outcome-service";
 
 const router: IRouter = Router();
 
@@ -47,6 +49,36 @@ router.post("/session-feedback", requireAuth, async (req, res): Promise<void> =>
         savedProgramId: savedProgramId ?? null,
       },
     });
+
+    // ── Kevin: enqueue feedback event (non-blocking, fail-open) ───────────
+    // Feedback failure must NEVER affect response — enqueued asynchronously.
+    const entityId = String(entry.id);
+    enqueueKevinEvent({
+      userId,
+      eventType: "trainchat.feedback.submitted",
+      entityType: "session_feedback",
+      entityId,
+      summary: {
+        difficulty_score: difficultyScore,
+        energy_score: energyResponseScore,
+        overall_sentiment:
+          difficultyScore <= 3 && energyResponseScore >= 3
+            ? "positive"
+            : difficultyScore >= 4
+              ? "negative"
+              : "neutral",
+        generation_source: "authenticated_app",
+      },
+      idempotencyKey: `trainchat.feedback.submitted:${entry.id}`,
+      origin: "trainchat_feedback",
+    }).catch(() => {});
+
+    // ── Kevin: record outcome (non-blocking, fail-open) ───────────────────
+    recordSessionFeedbackOutcome(
+      userId,
+      entityId,
+      { difficulty: difficultyScore, energy: energyResponseScore, pain: painResponseScore },
+    );
 
     res.status(201).json({ ...entry, createdAt: entry.createdAt.toISOString() });
   } catch (err) {

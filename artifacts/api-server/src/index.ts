@@ -14,6 +14,9 @@ import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
 import { seedWhitepaperPublicationsIfMissing } from "./lib/whitepaper-publications-seeder";
 import { runExternalMaterializationReadinessCheck } from "./lib/external-materialization";
 import { runSubscriptionSelfHeal } from "./lib/subscriptionSelfHeal";
+import { getKevinConfig } from "./lib/kevin-config";
+import { seedKevinCapabilities } from "./lib/kevin-capability-service";
+import { startKevinEventWorker, stopKevinEventWorker } from "./services/kevin-event-service";
 
 const rawPort = process.env["PORT"];
 
@@ -140,6 +143,31 @@ await seedWhitepaperPublicationsIfMissing();
 // Phase 2.7: best-effort, non-fatal — warn if the external materialization/
 // surgical flags could be active but migration 0002 hasn't been applied.
 runExternalMaterializationReadinessCheck().catch(() => {});
+
+// ─── Kevin integration startup ─────────────────────────────────────────────
+//
+// 1. Seed default capability rows (idempotent) so admin diagnostics work.
+// 2. Start the event dispatch worker if KEVIN_EVENT_DISPATCH_ENABLED=true.
+//
+// Both are best-effort: failures are logged but never crash the server.
+// Kevin being unavailable must NEVER stop TrainChat from operating.
+{
+  const kevinCfg = getKevinConfig();
+  if (kevinCfg.integrationEnabled) {
+    seedKevinCapabilities().catch((err: unknown) => {
+      logger.warn({ err }, "[Kevin] Capability seed failed — will retry on next startup");
+    });
+    if (kevinCfg.eventDispatchEnabled) {
+      startKevinEventWorker();
+    }
+  }
+}
+
+// Graceful shutdown — stops Kevin event worker cleanly before process exits
+process.on("SIGTERM", () => {
+  logger.info("[Process] SIGTERM received — stopping Kevin event worker");
+  stopKevinEventWorker();
+});
 
 app.listen(port, (err) => {
   if (err) {

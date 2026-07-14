@@ -38,6 +38,9 @@ import whitepaperAdminRouter from "./whitepapers-admin";
 import whitepaperPublicRouter from "./whitepapers-public";
 import metaCapiRouter from "./meta-capi";
 import performanceProfileRouter from "./performance-profile";
+import kevinInternalRouter from "./kevin-internal";
+import kevinAdminRouter from "./kevin-admin";
+import kevinMemoryRouter from "./kevin-memory";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -90,5 +93,13 @@ router.use(whitepaperAdminRouter);
 router.use(whitepaperPublicRouter);
 router.use(metaCapiRouter);
 router.use(performanceProfileRouter);
+
+// ─── Kevin Integration ────────────────────────────────────────────────────────
+// Internal signal intake (service-token auth, not user session)
+router.use(kevinInternalRouter);
+// Admin diagnostics (requireAdmin guard)
+router.use(kevinAdminRouter);
+// User-facing memory consent settings (requireAuth guard)
+router.use(kevinMemoryRouter);
 
 export default router;
