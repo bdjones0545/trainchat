@@ -1,0 +1,1681 @@
+Act as a world-renowned full-stack software architect, distributed-systems engineer, AI-agent infrastructure specialist, exercise-programming platform architect, security engineer, and Apple-level product designer.
+
+You are working inside the existing TrainChat Replit repository.
+
+Your objective is to inspect TrainChat’s current production architecture and prepare it for a secure, bidirectional integration with Kevin, the persistent executive intelligence and institutional-memory runtime shared across the TrainEfficiency ecosystem.
+
+Do not immediately copy TrainEfficiency code into TrainChat.
+
+First inspect repository reality, identify reusable patterns, and adapt the architecture to TrainChat’s actual data model, authentication system, APIs, generation workflows, edit workflows, feedback model, and deployment environment.
+
+Do not deploy automatically.
+
+---
+
+# Strategic relationship
+
+Kevin is not TrainChat’s workout-generation engine.
+
+Kevin must not replace:
+
+* TrainChat’s program-generation engine
+* exercise selection logic
+* progression and regression rules
+* session editing logic
+* safety validation
+* training constraints
+* user feedback processing
+* existing OpenAI or model-provider integrations
+* deterministic validation
+* rate limiting
+* transactional generation and editing
+* the existing TrainChat External API
+
+TrainChat remains responsible for producing and editing workouts.
+
+Kevin provides:
+
+* persistent cross-session memory
+* historical context
+* user and coach preference synthesis
+* recurring-pattern detection
+* product and operational intelligence
+* institutional learning
+* cross-application context when explicitly authorized
+* executive awareness
+* environment and architecture monitoring
+* outcome learning
+* contextual navigation assistance
+
+The desired relationship is:
+
+```text
+TrainChat request
+      ↓
+TrainChat authenticates and validates
+      ↓
+TrainChat optionally requests safe context from Kevin
+      ↓
+Kevin returns concise memories, preferences, patterns, and prior outcomes
+      ↓
+TrainChat generates or edits the program
+      ↓
+TrainChat validates and stores the result
+      ↓
+User provides feedback or completes the session
+      ↓
+TrainChat records the outcome
+      ↓
+A sanitized outcome event is sent asynchronously to Kevin
+      ↓
+Kevin learns without becoming the source of truth for the workout
+```
+
+Kevin must enrich TrainChat, not control it.
+
+---
+
+# Current known TrainChat context
+
+TrainChat currently includes or has previously implemented:
+
+* authenticated training sessions
+* program generation
+* program editing
+* exercise retrieval
+* an external production API
+* `/program/session`
+* `/program/generate`
+* `/program/edit`
+* `/exercises`
+* transactional generation and editing
+* database advisory locks
+* shared rate limiting
+* Zod validation
+* Sentry
+* CORS hardening
+* session regeneration
+* security documentation
+* CI verification
+
+Inspect the repository and verify all of these assumptions before changing anything.
+
+Do not rely only on this prompt if file names, endpoints, or architecture have changed.
+
+---
+
+# Primary objective
+
+Prepare TrainChat for a phased Kevin integration with:
+
+1. shared Kevin client infrastructure
+2. application identity and service authentication
+3. safe user-context retrieval
+4. training-event delivery
+5. workout-feedback outcome delivery
+6. Kevin signal intake
+7. memory and consent controls
+8. prompt-injection protections
+9. cross-application isolation
+10. durable retries
+11. circuit breaking
+12. observability
+13. front-end transparency
+14. staged activation
+
+The initial implementation must remain fail-open for optional Kevin intelligence.
+
+Kevin being unavailable must never stop a valid TrainChat workout from being generated, edited, viewed, or completed.
+
+---
+
+# Phase 0 — Repository and architecture audit
+
+Before implementing anything, inspect and document:
+
+## Application architecture
+
+Identify:
+
+* server entry point
+* route registration
+* authentication middleware
+* database and ORM
+* migration system
+* user model
+* organization or tenant model
+* coach model
+* athlete model
+* workout model
+* program model
+* session model
+* exercise model
+* generation service
+* edit service
+* feedback service
+* completion tracking
+* model-provider abstraction
+* background jobs
+* feature-flag conventions
+* audit logging
+* rate limiting
+* error reporting
+* front-end routing
+* settings pages
+* admin capabilities
+* test setup
+* deployment lifecycle
+
+## Existing workflow map
+
+Trace the full production path for:
+
+```text
+new user onboarding
+training preference collection
+program/session creation
+program generation
+session regeneration
+program edit
+individual exercise substitution
+feedback submission
+session completion
+program completion
+external API generation
+external API editing
+```
+
+Document the canonical business functions where integration hooks should be added.
+
+Do not add Kevin hooks at duplicate or non-production code paths.
+
+## Data sensitivity audit
+
+Classify every field TrainChat stores or sends as:
+
+```text
+public
+operational
+personal
+sensitive training data
+health-related
+credential
+secret
+```
+
+Pay special attention to:
+
+* injury information
+* pain reports
+* medical restrictions
+* body weight
+* body composition
+* age
+* date of birth
+* pregnancy status
+* disability information
+* medications
+* exact health conditions
+* athlete names
+* email addresses
+* phone numbers
+* guardian information
+* payment records
+
+Kevin must not receive raw sensitive or health-related information unless a future explicit consent and data-governance system authorizes it.
+
+For the initial implementation, use sanitized summaries and categorical constraints only.
+
+Example:
+
+```text
+Allowed:
+"User has a lower-body movement restriction."
+
+Not allowed:
+"John Smith tore his right ACL on March 4 and had surgery at..."
+```
+
+---
+
+# Phase 1 — Shared application identity
+
+Kevin will eventually serve multiple products.
+
+Every request from TrainChat to Kevin must identify TrainChat as the source application.
+
+Add or document:
+
+```text
+KEVIN_INTEGRATION_ENABLED
+KEVIN_HERMES_BASE_URL
+KEVIN_HERMES_API_KEY
+KEVIN_CONTEXT_RETRIEVAL_ENABLED
+KEVIN_EVENT_DISPATCH_ENABLED
+KEVIN_OUTCOME_FORWARDING_ENABLED
+KEVIN_SIGNAL_INTAKE_ENABLED
+KEVIN_INTERNAL_SERVICE_TOKEN
+KEVIN_APPLICATION_ID=trainchat
+```
+
+Use the repository’s existing environment-variable validation system.
+
+Rules:
+
+* all Kevin behavior defaults to disabled
+* all secrets remain server-only
+* no secret may appear in browser bundles
+* no Kevin URL or secret should be returned unnecessarily to the client
+* the master flag must disable every Kevin network call
+* TrainChat must continue normally when all Kevin flags are false
+
+Every outbound Kevin request should include safe metadata equivalent to:
+
+```json
+{
+  "application_id": "trainchat",
+  "environment": "production-or-development",
+  "org_id": "optional-org-id",
+  "user_id": "application-scoped-pseudonymous-id",
+  "trace_id": "string"
+}
+```
+
+Do not send raw email addresses as Kevin user identifiers.
+
+Create an application-scoped pseudonymous identifier using a stable server-side mapping or one-way keyed transformation consistent with repository security standards.
+
+Do not expose the transformation key.
+
+---
+
+# Phase 2 — TrainChat Kevin client
+
+Create a typed Kevin client using TrainChat’s service conventions.
+
+Suggested file:
+
+```text
+server/services/kevin-client.ts
+```
+
+Adapt the actual path to repository conventions.
+
+Support typed methods for:
+
+```ts
+checkKevinHealth()
+getKevinCapabilities()
+requestKevinContext()
+sendKevinEvent()
+sendKevinOutcome()
+```
+
+Do not implement a method unless the corresponding Kevin/Hermes contract exists or is explicitly classified as pending.
+
+For every method define:
+
+* HTTP method
+* endpoint
+* request schema
+* response schema
+* timeout
+* maximum response size
+* error classification
+* circuit-breaker participation
+* retry behavior
+* feature flag
+* audit behavior
+
+Suggested error classes:
+
+```text
+KEVIN_DISABLED
+KEVIN_NOT_CONFIGURED
+KEVIN_UNAVAILABLE
+KEVIN_TIMEOUT
+KEVIN_AUTH
+KEVIN_BUSY
+KEVIN_INVALID_RESPONSE
+KEVIN_UNSUPPORTED_ENDPOINT
+KEVIN_CIRCUIT_OPEN
+KEVIN_HTTP
+```
+
+Never return raw Kevin errors directly to end users.
+
+---
+
+# Phase 3 — Circuit breaker and graceful degradation
+
+Implement a process-local circuit breaker unless the repository already contains a reusable distributed implementation.
+
+States:
+
+```text
+closed
+open
+half_open
+```
+
+Suggested behavior:
+
+* open after five qualifying failures within a rolling window
+* remain open for approximately 60 seconds
+* permit a limited half-open probe
+* close after successful recovery
+* reopen after failed probe
+* do not count local validation failures as Kevin availability failures
+
+When the circuit is open:
+
+* workout generation continues without Kevin context
+* workout editing continues
+* external API requests continue
+* Kevin events remain queued locally
+* outcomes remain queued locally
+* the user does not receive a blocking error
+* an operational warning is logged
+
+Expose circuit status through a protected diagnostic endpoint or admin interface.
+
+---
+
+# Phase 4 — Database schema
+
+Use the repository’s existing migration conventions.
+
+Do not create production tables only through runtime bootstrap SQL.
+
+Create the smallest schema necessary for TrainChat.
+
+## `kevin_app_capabilities`
+
+Purpose: control Kevin functionality per tenant, organization, or application scope.
+
+Suggested fields:
+
+```text
+id
+scope_type
+scope_id
+capability
+approval_mode
+enabled
+updated_by
+created_at
+updated_at
+```
+
+Supported modes:
+
+```text
+disabled
+observe
+recommend
+draft
+require_approval
+auto
+```
+
+For TrainChat’s first release, seed all capabilities as:
+
+```text
+observe
+```
+
+Suggested capabilities:
+
+```text
+training_context
+preference_memory
+program_generation_context
+program_edit_context
+exercise_substitution_context
+session_feedback_learning
+program_outcome_learning
+product_signal_intake
+support_navigation
+cross_application_context
+```
+
+Even if a capability is set to `auto`, Kevin must never bypass TrainChat’s deterministic validation or safety controls.
+
+## `kevin_app_events`
+
+Purpose: durable TrainChat-to-Kevin event queue.
+
+Suggested fields:
+
+```text
+id
+application_id
+org_id
+user_id_pseudonymous
+event_type
+entity_type
+entity_id
+payload
+idempotency_key
+status
+attempts
+last_error
+next_retry_at
+trace_id
+created_at
+sent_at
+dead_lettered_at
+```
+
+Statuses:
+
+```text
+pending
+processing
+sent
+failed
+dead_lettered
+```
+
+Use stable idempotency keys.
+
+## `kevin_context_requests`
+
+Purpose: audit optional context pulled before generation or editing.
+
+Suggested fields:
+
+```text
+id
+application_id
+org_id
+user_id_pseudonymous
+workflow
+entity_type
+entity_id
+question_summary
+response_summary
+memory_count
+confidence
+duration_ms
+status
+trace_id
+depth
+created_at
+```
+
+Do not store hidden chain-of-thought or raw prompts.
+
+## `kevin_training_outcomes`
+
+Purpose: record what happened after a Kevin-informed recommendation or generated session.
+
+Suggested fields:
+
+```text
+id
+application_id
+org_id
+user_id_pseudonymous
+context_request_id
+entity_type
+entity_id
+outcome_type
+result_summary
+was_useful
+was_modified
+completion_status
+forward_status
+forward_attempts
+last_forward_error
+trace_id
+created_at
+forwarded_at
+```
+
+## `kevin_app_signals`
+
+Purpose: receive product, support, quality, and operational signals from Kevin.
+
+Suggested fields:
+
+```text
+id
+external_signal_id
+application_id
+org_id
+signal_type
+entity_type
+entity_id
+title
+summary
+evidence
+confidence
+risk_class
+status
+routed_to
+trace_id
+depth
+created_at
+routed_at
+dismissed_at
+```
+
+Do not allow Kevin signals to directly change workouts or user data during the initial release.
+
+## `kevin_memory_consents`
+
+Purpose: record whether a user or organization allows persistent Kevin memory.
+
+Suggested fields:
+
+```text
+id
+scope_type
+scope_id
+memory_type
+consent_status
+granted_at
+revoked_at
+updated_at
+```
+
+Suggested memory types:
+
+```text
+training_preferences
+exercise_preferences
+equipment_preferences
+schedule_preferences
+communication_preferences
+program_history_summary
+cross_application_context
+```
+
+Consent statuses:
+
+```text
+granted
+denied
+revoked
+not_requested
+```
+
+Cross-application context must default to:
+
+```text
+not_requested
+```
+
+Do not assume a TrainEfficiency user and TrainChat user may be linked merely because their email addresses match.
+
+---
+
+# Phase 5 — Safe context retrieval
+
+Create:
+
+```text
+server/services/kevin-context-service.ts
+```
+
+Adapt the location to repository conventions.
+
+Implement:
+
+```ts
+requestTrainChatKevinContext(input)
+```
+
+Suggested workflows:
+
+```text
+program_generation
+session_generation
+program_edit
+session_edit
+exercise_substitution
+feedback_interpretation
+onboarding_assistance
+support_navigation
+```
+
+Kevin context may include:
+
+* preferred training style
+* preferred session duration
+* equipment preferences
+* exercise likes and dislikes
+* prior accepted substitutions
+* recurring feedback patterns
+* adherence patterns
+* preferred coaching tone
+* prior program modifications
+* broad training-goal history
+* safe cross-application context when explicitly authorized
+
+Kevin context must not include:
+
+* medical diagnosis
+* raw injury history
+* raw pain notes
+* unredacted coach notes
+* emails
+* phone numbers
+* addresses
+* payment information
+* authentication data
+* hidden prompts
+* chain-of-thought
+* arbitrary external-app records
+* data from another user or organization
+
+## Context hierarchy
+
+TrainChat must apply context in this order:
+
+```text
+1. Current authenticated user request
+2. Current program and session constraints
+3. Current safety rules
+4. Current equipment and scheduling constraints
+5. Explicit user preferences stored in TrainChat
+6. Optional Kevin memories
+7. General defaults
+```
+
+Kevin memory must never override a current explicit request or a safety restriction.
+
+## Context result contract
+
+Return a bounded structured result equivalent to:
+
+```ts
+type TrainChatKevinContext = {
+  available: boolean;
+  status:
+    | "success"
+    | "empty"
+    | "disabled"
+    | "consent_required"
+    | "unavailable"
+    | "timeout"
+    | "failed"
+    | "blocked_loop";
+
+  preferences: {
+    trainingStyle?: string[];
+    sessionDurationMinutes?: number;
+    equipmentPreferences?: string[];
+    preferredExercises?: string[];
+    avoidedExercises?: string[];
+    coachingTone?: string;
+  };
+
+  patterns: string[];
+  priorAcceptedChanges: string[];
+  adherenceInsights: string[];
+  risks: string[];
+  confidence?: number;
+  memoriesCount: number;
+  contextRequestId?: string;
+  traceId: string;
+  durationMs: number;
+};
+```
+
+Validate Kevin’s response before using it.
+
+Ignore unsupported fields.
+
+Cap the number and length of returned memories.
+
+---
+
+# Phase 6 — Initial generation integration
+
+Integrate Kevin context into one controlled workflow first.
+
+Recommended initial workflow:
+
+```text
+authenticated program or session generation
+```
+
+Before generation:
+
+1. authenticate the user
+2. validate the request
+3. resolve organization and tenant
+4. confirm memory consent
+5. evaluate Kevin feature flag
+6. evaluate capability mode
+7. request Kevin context with a strict timeout
+8. merge only safe structured fields
+9. call the existing TrainChat generation engine
+10. run all current deterministic validation
+11. save transactionally using existing locking
+12. record whether Kevin context contributed
+
+Do not let Kevin generate the final workout directly.
+
+TrainChat’s existing generation service remains responsible for final output.
+
+Add provenance metadata equivalent to:
+
+```json
+{
+  "kevin_context_used": true,
+  "kevin_context_request_id": "string",
+  "kevin_memories_count": 4,
+  "kevin_context_confidence": 0.84
+}
+```
+
+Keep this metadata server-side unless a user-facing explanation is explicitly supported.
+
+Do not break existing response contracts for:
+
+```text
+/program/generate
+/program/session
+```
+
+Add fields only where backward compatibility is guaranteed.
+
+---
+
+# Phase 7 — Program-edit and exercise-substitution context
+
+After generation integration is verified, prepare optional Kevin enrichment for:
+
+```text
+/program/edit
+exercise substitution
+session regeneration
+```
+
+Kevin may supply:
+
+* prior accepted edits
+* disliked exercise patterns
+* preferred substitutions
+* equipment limitations
+* session-duration preferences
+* coaching-style preferences
+
+Kevin may not:
+
+* perform an unvalidated database edit
+* bypass transactional locks
+* select arbitrary exercise IDs
+* invent exercises not present in TrainChat’s exercise catalog
+* bypass contraindication rules
+* override explicit current instructions
+* bypass API validation
+
+Every Kevin-suggested exercise must resolve through TrainChat’s canonical exercise data.
+
+Unknown exercises must be rejected or mapped through existing safe search logic.
+
+---
+
+# Phase 8 — TrainChat event pipeline
+
+Create:
+
+```text
+server/services/kevin-event-service.ts
+```
+
+Implement:
+
+```ts
+enqueueKevinEvent()
+dispatchKevinEvent()
+flushPendingKevinEvents()
+markEventSent()
+markEventFailed()
+deadLetterEvent()
+```
+
+Event enqueueing must be:
+
+* asynchronous
+* non-blocking
+* fail-open
+* idempotent
+* org-isolated
+* user-isolated
+* sanitized
+* secret-redacted
+
+Initial event types:
+
+```text
+trainchat.user.onboarded
+trainchat.program.generated
+trainchat.program.edited
+trainchat.session.generated
+trainchat.session.regenerated
+trainchat.exercise.substituted
+trainchat.feedback.submitted
+trainchat.session.completed
+trainchat.program.completed
+trainchat.program.abandoned
+trainchat.external_api.generated
+trainchat.external_api.edited
+```
+
+Do not send the full workout by default.
+
+Prefer summaries such as:
+
+```json
+{
+  "goal_category": "strength",
+  "session_duration_minutes": 45,
+  "exercise_count": 7,
+  "movement_categories": ["squat", "push", "pull"],
+  "generation_source": "authenticated_app",
+  "kevin_context_used": true
+}
+```
+
+Do not include:
+
+* raw prompts
+* complete exercise prescriptions unless explicitly required
+* user names
+* emails
+* medical notes
+* payment data
+* secrets
+* API keys
+
+## Retry strategy
+
+Use:
+
+```text
+30 seconds
+2 minutes
+8 minutes
+30 minutes
+2 hours
+```
+
+After five failures:
+
+* mark `dead_lettered`
+* preserve the event
+* report through existing operational logging
+* surface in a protected admin view if TrainChat has one
+* do not block the original workout workflow
+
+Use concurrency-safe claiming.
+
+Do not hold a database transaction open during a Kevin network call.
+
+Support graceful worker shutdown.
+
+---
+
+# Phase 9 — Training outcomes
+
+Create:
+
+```text
+server/services/kevin-outcome-service.ts
+```
+
+Initial outcome types:
+
+```text
+generated
+accepted_without_change
+edited_before_use
+exercise_replaced
+session_started
+session_completed
+session_partially_completed
+session_skipped
+program_completed
+program_abandoned
+feedback_positive
+feedback_negative
+too_easy
+too_hard
+too_long
+too_short
+equipment_unavailable
+exercise_disliked
+exercise_preferred
+```
+
+Separate:
+
+```text
+user accepted the workout
+```
+
+from:
+
+```text
+user completed the workout successfully
+```
+
+Acceptance is not proof of effectiveness.
+
+Completion is not proof of positive adaptation.
+
+Do not infer clinical outcomes.
+
+Use only outcomes TrainChat can actually observe.
+
+Forward outcomes asynchronously.
+
+Kevin outcome forwarding failure must not affect user feedback submission or session completion.
+
+---
+
+# Phase 10 — Kevin signal intake
+
+Create an internal endpoint equivalent to:
+
+```text
+POST /api/internal/kevin/signals
+```
+
+Protect it with:
+
+```text
+KEVIN_INTERNAL_SERVICE_TOKEN
+```
+
+Do not use normal user sessions as a substitute.
+
+Use timing-safe token comparison.
+
+Require:
+
+```text
+KEVIN_INTEGRATION_ENABLED=true
+KEVIN_SIGNAL_INTAKE_ENABLED=true
+```
+
+Initial allowed signal types:
+
+```text
+preference.pattern.detected
+adherence.pattern.detected
+program.quality.concern
+repeated.edit.pattern
+exercise.dislike.pattern
+session.duration.pattern
+generation.failure.pattern
+external_api.failure.pattern
+product.support.signal
+environment.change
+architecture.change
+integration.failure
+memory.conflict
+```
+
+Initial routing:
+
+```text
+preference and adherence patterns
+→ product intelligence or user-memory review
+
+quality concerns
+→ internal review queue
+
+generation failure patterns
+→ engineering or operations visibility
+
+support signals
+→ support or navigation assistance
+
+environment and architecture changes
+→ admin visibility
+
+memory conflicts
+→ memory-review queue
+```
+
+Kevin must not directly:
+
+* modify a workout
+* change a program
+* delete data
+* email a user
+* mark a workout complete
+* alter billing
+* change permissions
+* change consent
+* connect external accounts
+
+Signals are evidence, not commands.
+
+---
+
+# Phase 11 — Recursion prevention
+
+Every Kevin-related object should support:
+
+```text
+trace_id
+origin
+depth
+parent_id
+```
+
+Rules:
+
+* initial depth is zero
+* increment on each TrainChat-to-Kevin or Kevin-to-TrainChat handoff
+* block at depth greater than 3
+* log the block
+* deduplicate identical pending signals
+* prevent an outcome from recursively generating the same signal
+* prevent a signal-generated internal review from creating an identical signal
+* propagate trace IDs across context, generation provenance, events, outcomes, and signals
+
+Allowed origins should be explicit:
+
+```text
+trainchat_user
+trainchat_generation
+trainchat_edit
+trainchat_feedback
+trainchat_external_api
+kevin_context
+kevin_signal
+human_admin
+```
+
+Do not infer origin from free text.
+
+---
+
+# Phase 12 — Prompt-injection protection
+
+Treat all user input, coach input, external API input, and Kevin output as untrusted.
+
+## User-content controls
+
+* validate all existing request schemas
+* preserve current length limits
+* normalize control characters
+* remove null bytes
+* prevent role injection into structured model-message arrays
+* delimit user content from system-owned instructions
+* prevent user content from modifying authorization or capability rules
+
+## Kevin-response controls
+
+* accept only validated structured JSON
+* ignore unknown fields
+* reject arbitrary tool names
+* reject arbitrary routes
+* reject SQL
+* reject shell commands
+* reject executable code
+* reject arbitrary exercise identifiers
+* reject cross-org identifiers
+* reject raw secrets
+* reject requests to bypass validation
+
+Kevin context is data.
+
+It is not system policy.
+
+---
+
+# Phase 13 — Cross-application identity and memory
+
+Kevin will eventually understand relationships between TrainChat and TrainEfficiency.
+
+Do not enable this automatically.
+
+Implement only the safe foundation.
+
+Cross-application memory requires:
+
+* explicit consent
+* an approved identity-link record
+* matching ownership or organizational authority
+* application-scoped access rules
+* revocation support
+* audit history
+* least-privilege retrieval
+
+Do not link accounts solely through matching emails.
+
+Create or document a future identity-link contract equivalent to:
+
+```text
+global_subject_id
+application_id
+application_user_id
+link_status
+link_method
+consent_status
+created_at
+revoked_at
+```
+
+Potential future authorized context:
+
+```text
+TrainEfficiency organization training style
+available facility equipment categories
+coach-approved athlete goals
+broad schedule constraints
+program adherence summaries
+```
+
+Forbidden by default:
+
+```text
+another organization’s athlete data
+raw coach notes
+billing data
+private emails
+guardian data
+medical details
+unapproved user records
+```
+
+---
+
+# Phase 14 — Front-end experience
+
+Do not turn Kevin into a second visible chatbot unless the current product design clearly benefits from it.
+
+Focus first on transparent intelligence.
+
+## Workout-generation transparency
+
+Where appropriate, show a small optional indicator:
+
+```text
+Personalized using your saved training preferences
+```
+
+Do not expose internal architecture terminology unnecessarily.
+
+An expandable explanation may show:
+
+* preferred session duration
+* available equipment
+* prior accepted substitutions
+* training-style preferences
+* number of applicable saved preferences
+
+Do not expose:
+
+* hidden prompts
+* raw memory documents
+* confidence internals that may confuse users
+* other-app data without explicit labeling and consent
+
+## Memory controls
+
+Add a user-facing settings section:
+
+```text
+Training Memory
+```
+
+Allow users to:
+
+* enable or disable saved training preferences
+* view categories of remembered preferences
+* clear selected preference categories
+* disable cross-application memory
+* revoke prior consent
+* understand that deleting TrainChat history and deleting Kevin memory may be separate operations
+
+Do not promise deletion from Kevin until the corresponding deletion endpoint is verified.
+
+If deletion is not yet supported, label the limitation honestly.
+
+## Admin diagnostics
+
+Where TrainChat supports admin access, add a protected Kevin diagnostics view showing:
+
+* Kevin enabled or disabled
+* connection health
+* circuit state
+* queued events
+* dead-letter events
+* context request counts
+* outcome forwarding state
+* recent signals
+* feature flags
+* endpoint readiness
+
+No secrets may be displayed.
+
+---
+
+# Phase 15 — TrainChat navigation assistance
+
+Kevin may help users reach the right TrainChat page when they ask questions such as:
+
+```text
+Where do I change my equipment?
+How do I edit this workout?
+Where do I update my goals?
+How do I view prior programs?
+How do I manage my subscription?
+```
+
+Create an allowlisted navigation registry using real TrainChat routes.
+
+Each entry should include:
+
+```ts
+{
+  intent: string;
+  route: string;
+  label: string;
+  description: string;
+  requiredAuth: boolean;
+  requiredRole?: string[];
+  requiredFeature?: string;
+}
+```
+
+Rules:
+
+* Kevin may select only an allowlisted route
+* arbitrary URLs are rejected
+* validate authentication
+* validate ownership and role
+* require user click initially
+* do not automatically redirect
+* record whether the suggestion was useful
+
+---
+
+# Phase 16 — External API considerations
+
+TrainChat’s External API must not silently inherit consumer-app memory behavior.
+
+For:
+
+```text
+/program/session
+/program/generate
+/program/edit
+/exercises
+```
+
+Determine whether each request is:
+
+```text
+first-party TrainChat
+partner application
+organization-scoped
+end-user scoped
+stateless
+memory-enabled
+```
+
+Default external API behavior:
+
+```text
+Kevin context disabled
+cross-application memory disabled
+event summaries allowed only when explicitly configured
+```
+
+Any partner that wants Kevin enrichment must:
+
+* have an explicit application setting
+* provide an approved tenant identity
+* provide a pseudonymous end-user identifier
+* accept the relevant data-processing terms
+* use a scoped capability
+* preserve rate limits
+* preserve idempotency
+* preserve current response compatibility
+
+Do not let an API client supply an arbitrary Kevin global user ID.
+
+---
+
+# Phase 17 — Tests
+
+Add tests following TrainChat’s conventions.
+
+## Master feature gating
+
+* all Kevin flags default false
+* master disabled prevents all network calls
+* TrainChat generation succeeds while Kevin is disabled
+* editing succeeds while Kevin is disabled
+* feedback succeeds while Kevin is disabled
+
+## Context retrieval
+
+* no consent returns `consent_required` or empty context
+* disabled capability returns empty context
+* timeout returns empty context
+* malformed Kevin response is rejected
+* safe structured response is accepted
+* Kevin memory does not override current explicit input
+* Kevin memory does not override safety constraints
+* sensitive fields are never sent
+* cross-user leakage is impossible
+* cross-org leakage is impossible
+
+## Generation
+
+* generation contract remains backward compatible
+* transactional save still works
+* advisory locking remains intact
+* Kevin failure does not roll back a successful workout
+* provenance is stored correctly
+* no duplicate context request is made during retries unless intentional
+
+## Editing
+
+* unknown Kevin exercise IDs are rejected
+* substitutions resolve through canonical exercise data
+* edit transactions remain atomic
+* Kevin cannot bypass validation
+
+## Events
+
+* event enqueue is idempotent
+* payload is sanitized
+* duplicate events do not create duplicate rows
+* retries follow schedule
+* fifth failure dead-letters
+* concurrent workers do not double-send
+* worker stops on shutdown
+* original workflow succeeds when enqueue fails
+
+## Outcomes
+
+* acceptance and completion remain separate
+* user edit is recorded as modified
+* skipped sessions are not marked successful
+* forwarding failure does not affect feedback submission
+* duplicate outcome handling is safe
+
+## Signals
+
+* missing token returns 401
+* incorrect token returns 401
+* normal user session alone is rejected
+* valid service token reaches validation
+* disabled intake returns controlled 503
+* unknown user or org is rejected
+* depth greater than 3 is blocked
+* duplicates are deduplicated
+* signal cannot directly change a workout
+
+## Consent
+
+* memory defaults safely
+* consent grant is audited
+* revocation stops future retrieval
+* cross-application consent is separate
+* user cannot change another user’s consent
+* organization admin cannot access personal memory without an authorized policy
+
+## External API
+
+* Kevin context remains disabled by default
+* API response compatibility remains intact
+* API client cannot impersonate another user
+* API client cannot provide an arbitrary global identity
+
+## Security
+
+* no Kevin secret in client bundle
+* no internal token in logs
+* no raw PII in event payloads
+* no raw health data in context requests
+* arbitrary tool output rejected
+* arbitrary navigation URL rejected
+* arbitrary exercise ID rejected
+* org isolation confirmed
+
+---
+
+# Phase 18 — Implementation order
+
+Implement in this order:
+
+1. inspect repository architecture
+2. document canonical generation, edit, feedback, and completion flows
+3. complete sensitivity and consent audit
+4. create environment validation
+5. create Kevin client
+6. create circuit breaker
+7. create migrations and schemas
+8. create consent service
+9. create capability service
+10. create context service
+11. integrate context into one generation workflow
+12. create event queue
+13. create outcome service
+14. create signal intake
+15. add recursion protection
+16. prepare edit and substitution context
+17. add memory settings
+18. add admin diagnostics
+19. add navigation registry
+20. audit External API behavior
+21. add tests
+22. update documentation
+23. run complete verification
+
+Do not connect every workflow in the first pass.
+
+Prove one context-enriched generation path before expanding.
+
+---
+
+# Phase 19 — Documentation
+
+Create or update:
+
+```text
+docs/kevin-integration.md
+.env.example
+replit.md
+SECURITY.md
+```
+
+Document:
+
+* architecture boundaries
+* environment variables
+* feature flags
+* consent model
+* data classifications
+* allowed context
+* prohibited context
+* event schemas
+* outcome schemas
+* signal schemas
+* service authentication
+* circuit breaker
+* retry strategy
+* dead-letter handling
+* cross-application restrictions
+* External API defaults
+* staged activation
+* rollback
+* known Kevin/Hermes endpoint dependencies
+
+## Staged activation
+
+Recommend:
+
+### Stage 1 — Health only
+
+```text
+KEVIN_INTEGRATION_ENABLED=true
+```
+
+Verify health and circuit state.
+
+### Stage 2 — Context for internal authenticated generation
+
+```text
+KEVIN_CONTEXT_RETRIEVAL_ENABLED=true
+```
+
+Limit to a small test group or admin account.
+
+Verify generation still works when Kevin is unavailable.
+
+### Stage 3 — Events
+
+```text
+KEVIN_EVENT_DISPATCH_ENABLED=true
+```
+
+Verify events move from pending to sent and do not duplicate.
+
+### Stage 4 — Outcomes
+
+```text
+KEVIN_OUTCOME_FORWARDING_ENABLED=true
+```
+
+Verify feedback and completion outcomes arrive correctly.
+
+### Stage 5 — Signals
+
+```text
+KEVIN_INTERNAL_SERVICE_TOKEN=<strong random secret>
+KEVIN_SIGNAL_INTAKE_ENABLED=true
+```
+
+Verify signal validation, deduplication, and routing.
+
+### Stage 6 — Cross-application context
+
+Do not enable until identity linking, explicit consent, revocation, and auditing are implemented and verified.
+
+---
+
+# Constraints
+
+Do not:
+
+* replace TrainChat’s generation engine
+* let Kevin directly create the final workout
+* bypass current validation
+* bypass transactions
+* bypass advisory locks
+* bypass rate limits
+* bypass authentication
+* bypass organization isolation
+* bypass canonical exercise data
+* expose secrets
+* send raw health data
+* send raw PII
+* expose hidden prompts
+* store chain-of-thought
+* enable cross-application memory by default
+* link users solely by email
+* break existing External API contracts
+* add automatic external actions
+* let Kevin modify billing
+* let Kevin change user consent
+* let Kevin invent arbitrary routes
+* let Kevin invent arbitrary exercises
+* claim unverified Kevin endpoints are working
+* deploy automatically
+
+---
+
+# Verification
+
+Run the repository’s actual commands for:
+
+```text
+TypeScript typecheck
+unit tests
+integration tests
+generation tests
+edit tests
+External API tests
+migration verification
+fresh database migration
+existing database reconciliation
+production build
+lint
+security search
+client-bundle secret search
+```
+
+Also verify:
+
+* current TrainChat CI remains green
+* current transactional generation remains atomic
+* current editing remains atomic
+* existing rate limits remain active
+* Sentry does not receive secrets
+* Kevin errors are sanitized
+* all tenant queries are scoped
+* all user-memory queries are scoped
+* no background worker is registered twice
+* graceful shutdown stops Kevin workers
+* no optional Kevin failure blocks TrainChat
+
+---
+
+# Final report
+
+Return a detailed report containing:
+
+1. repository architecture findings
+2. canonical generation and edit flows
+3. sensitive-data findings
+4. consent architecture
+5. files created
+6. files modified
+7. migrations created
+8. environment variables
+9. feature flags
+10. Kevin client contracts
+11. verified Kevin/Hermes endpoints
+12. pending Kevin/Hermes endpoints
+13. context integration completed
+14. event wire-ins completed
+15. outcome wire-ins completed
+16. signal routing behavior
+17. circuit-breaker behavior
+18. recursion protection
+19. cross-application safeguards
+20. External API behavior
+21. front-end changes
+22. tests added
+23. exact verification commands
+24. complete verification results
+25. known limitations
+26. rollback instructions
+27. confirmation that no deployment occurred
+
+Classify the result as:
+
+```text
+PRODUCTION READY
+PRODUCTION READY WITH DOCUMENTED LIMITATIONS
+NOT PRODUCTION READY
+```
+
+For the first implementation pass, success means TrainChat can safely retrieve optional Kevin context for one authenticated generation workflow without weakening generation reliability, user isolation, privacy, transactional integrity, or External API compatibility.
+
+If repository reality differs from this prompt, preserve the architectural intent, follow TrainChat’s established conventions, and document every adjustment.
