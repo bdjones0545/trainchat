@@ -41,6 +41,8 @@ STRIPE_PRICE_ELITE_YEARLY = "price_1TU6G2GOcsf8J09l1QtpEvW2"
 EMAIL_FROM = "Bryan.jones@efficiencystrengthtraining.com"
 EMAIL_SUPPORT_TO = "Bryan.jones@trainchat.ai"
 STRIPE_PRICE_TRAINCHAT_MONTHLY = "price_1Tn35DGOcsf8J09luBjtpksA"
+KEVIN_INTEGRATION_ENABLED = "true"
+KEVIN_HERMES_BASE_URL = "https://kevin-api.trainefficiency.com"
 
 [userenv.production]
 ADMIN_SECRET = "eeb65552cd109f4d4c0e2115728b58620a66c018f8a8751adb359e2585dab641"
