@@ -5,12 +5,17 @@
 // Design principles:
 //   - Enqueueing is non-blocking and fail-open (workout never blocked)
 //   - Worker dispatches pending events on an interval
-//   - Concurrency-safe claiming (attempts + nextRetryAt prevents double-send)
-//   - Retry schedule: 30s → 2m → 8m → 30m → 2h → dead-letter
+//   - Claiming is ATOMIC via SELECT … FOR UPDATE SKIP LOCKED inside a
+//     transaction, so no two instances or overlapping ticks claim the same row
+//   - Stale "processing" rows (crash between claim and send) are recovered via
+//     processing_started_at, never lost
+//   - Retry schedule: 30s → 2m → 8m → 30m → 2h → dead-letter (first retry is 30s)
+//   - Local/config failures (KEVIN_NOT_CONFIGURED / KEVIN_CIRCUIT_OPEN /
+//     KEVIN_DISABLED) release the row WITHOUT consuming the retry budget
 //   - Idempotency keys prevent duplicate rows
 //   - Payloads are sanitized: no raw PII, emails, health data, or secrets
 //   - Org and user isolation enforced
-//   - Graceful shutdown stops the worker cleanly
+//   - Graceful shutdown drains the in-flight tick before exit
 //
 // Event enqueueing fires from production workflow hooks, never from
 // duplicate or non-production code paths.
@@ -22,30 +27,22 @@ import {
   type InsertKevinAppEvent,
 } from "@workspace/db";
 import { eq, and, lte, isNull, or, inArray } from "drizzle-orm";
-import { sendKevinEvent } from "../lib/kevin-client";
-import { KevinError } from "../lib/kevin-client";
+import { sendKevinEvent, KevinError } from "../lib/kevin-client";
 import { getKevinConfig } from "../lib/kevin-config";
 import { isKevinCircuitAllowed } from "../lib/kevin-circuit-breaker";
 import { deriveKevinPseudonymousId, deriveKevinPseudonymousOrgId } from "../lib/kevin-pseudonym";
 import { sanitizeKevinPayload } from "../lib/kevin-payload-sanitizer";
+import {
+  kevinNextRetryDelay,
+  kevinShouldDeadLetter,
+  isKevinLocalNonRetryCode,
+} from "../lib/kevin-retry";
 import { logger } from "../lib/logger";
 import crypto from "crypto";
 
-// ─── Retry schedule ───────────────────────────────────────────────────────────
-
-const RETRY_DELAYS_MS = [
-  30_000,        // 30 seconds
-  120_000,       // 2 minutes
-  480_000,       // 8 minutes
-  1_800_000,     // 30 minutes
-  7_200_000,     // 2 hours
-];
-
-const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
-
-function nextRetryDelay(attempts: number): number {
-  return RETRY_DELAYS_MS[Math.min(attempts, RETRY_DELAYS_MS.length - 1)];
-}
+// Recover rows stuck in "processing" longer than this (crash between claim and
+// send/mark). Keyed on processing_started_at, never created_at.
+const STALE_PROCESSING_MINUTES = 10;
 
 // ─── Sanitized event summaries ─────────────────────────────────────────────────
 //
@@ -183,6 +180,9 @@ const WORKER_BATCH = 10;         // process up to 10 events per tick
 
 let _workerTimer: ReturnType<typeof setInterval> | null = null;
 let _workerStopping = false;
+// The in-flight flush, tracked so (a) overlapping ticks never run concurrently
+// and (b) graceful shutdown can await the current iteration before exiting.
+let _activeFlush: Promise<unknown> | null = null;
 
 /**
  * Starts the Kevin event dispatch worker.
@@ -204,17 +204,24 @@ export function startKevinEventWorker(): void {
   logger.info({ pollMs: WORKER_POLL_MS }, "[KevinEvents] Starting event dispatch worker");
 
   _workerTimer = setInterval(() => {
-    if (_workerStopping) return;
-    flushPendingKevinEvents().catch((err) => {
-      logger.error({ err }, "[KevinEvents] Worker tick failed");
-    });
+    // Never overlap: skip this tick while a previous flush is still running or
+    // while shutting down.
+    if (_workerStopping || _activeFlush) return;
+    _activeFlush = flushPendingKevinEvents()
+      .catch((err) => {
+        logger.error({ err }, "[KevinEvents] Worker tick failed");
+      })
+      .finally(() => {
+        _activeFlush = null;
+      });
   }, WORKER_POLL_MS);
 
   if (_workerTimer.unref) _workerTimer.unref();
 }
 
 /**
- * Stops the Kevin event worker. Called on graceful shutdown.
+ * Stops the Kevin event worker (synchronous). Prevents further ticks but does
+ * not wait for an in-flight flush — use drainKevinEventWorker for that.
  */
 export function stopKevinEventWorker(): void {
   _workerStopping = true;
@@ -226,11 +233,32 @@ export function stopKevinEventWorker(): void {
 }
 
 /**
+ * Graceful stop: prevent new ticks and await the in-flight flush so no claimed
+ * row is abandoned mid-dispatch. Used by the process shutdown sequence.
+ */
+export async function drainKevinEventWorker(): Promise<void> {
+  stopKevinEventWorker();
+  if (_activeFlush) {
+    try {
+      await _activeFlush;
+    } catch {
+      // errors are already logged inside the tick
+    }
+  }
+}
+
+/**
  * Processes pending Kevin events. Exported for testing and manual flush.
  */
 export async function flushPendingKevinEvents(): Promise<{ processed: number; sent: number; failed: number }> {
   const config = getKevinConfig();
   if (!config.integrationEnabled || !config.eventDispatchEnabled) {
+    return { processed: 0, sent: 0, failed: 0 };
+  }
+  // Not configured → don't claim anything (claiming then failing would burn
+  // retry budget on KEVIN_NOT_CONFIGURED). Wait for configuration instead.
+  if (!config.hermesBaseUrl || !config.hermesApiKey) {
+    logger.debug("[KevinEvents] Hermes not configured — skipping flush");
     return { processed: 0, sent: 0, failed: 0 };
   }
   if (!isKevinCircuitAllowed()) {
@@ -240,40 +268,71 @@ export async function flushPendingKevinEvents(): Promise<{ processed: number; se
 
   const now = new Date();
 
-  // ── Claim a batch of pending events (concurrency-safe) ─────────────────────
-  // We mark them "processing" before reading so concurrent workers don't
-  // double-send. Do NOT hold a DB transaction open during the Kevin network call.
+  // ── Recover stale "processing" rows (H3) ───────────────────────────────────
+  // A crash between claim and send/mark leaves rows stuck in "processing".
+  // Reclaim any whose processing_started_at is older than the timeout (or NULL,
+  // for legacy rows). NEVER uses created_at — only processing_started_at
+  // determines staleness, so legitimately in-flight rows are never reclaimed.
+  const staleThreshold = new Date(now.getTime() - STALE_PROCESSING_MINUTES * 60_000);
+  await db
+    .update(kevinAppEventsTable)
+    .set({ status: "pending", nextRetryAt: now })
+    .where(
+      and(
+        eq(kevinAppEventsTable.status, "processing"),
+        or(
+          isNull(kevinAppEventsTable.processingStartedAt),
+          lte(kevinAppEventsTable.processingStartedAt, staleThreshold),
+        ),
+      ),
+    )
+    .catch((err: unknown) => {
+      logger.warn({ err }, "[KevinEvents] Stale-processing recovery failed — continuing");
+    });
+
+  // ── Atomically claim a batch (H2) ──────────────────────────────────────────
+  // SELECT … FOR UPDATE SKIP LOCKED inside a transaction, then flip to
+  // "processing" + stamp processing_started_at. Concurrent instances and
+  // overlapping ticks skip each other's locked rows, so no row is ever claimed
+  // twice. The network call happens AFTER the transaction commits (locks are not
+  // held across it).
   let claimedIds: number[] = [];
   try {
-    const rows = await db
-      .select({ id: kevinAppEventsTable.id })
-      .from(kevinAppEventsTable)
-      .where(
-        and(
-          or(
-            eq(kevinAppEventsTable.status, "pending"),
-            eq(kevinAppEventsTable.status, "failed"),
+    claimedIds = await db.transaction(async (tx) => {
+      const rows = await tx
+        .select({ id: kevinAppEventsTable.id })
+        .from(kevinAppEventsTable)
+        .where(
+          and(
+            or(
+              eq(kevinAppEventsTable.status, "pending"),
+              eq(kevinAppEventsTable.status, "failed"),
+            ),
+            or(
+              isNull(kevinAppEventsTable.nextRetryAt),
+              lte(kevinAppEventsTable.nextRetryAt, now),
+            ),
           ),
-          or(
-            isNull(kevinAppEventsTable.nextRetryAt),
-            lte(kevinAppEventsTable.nextRetryAt, now),
-          ),
-        ),
-      )
-      .limit(WORKER_BATCH);
+        )
+        .limit(WORKER_BATCH)
+        .for("update", { skipLocked: true });
 
-    if (rows.length === 0) return { processed: 0, sent: 0, failed: 0 };
-    claimedIds = rows.map((r) => r.id);
+      if (rows.length === 0) return [];
+      const ids = rows.map((r) => r.id);
 
-    // Mark as processing
-    await db
-      .update(kevinAppEventsTable)
-      .set({ status: "processing" })
-      .where(inArray(kevinAppEventsTable.id, claimedIds));
+      await tx
+        .update(kevinAppEventsTable)
+        .set({ status: "processing", processingStartedAt: now })
+        .where(inArray(kevinAppEventsTable.id, ids));
+
+      return ids;
+    });
   } catch (err) {
     logger.error({ err }, "[KevinEvents] Failed to claim events — skipping tick");
     return { processed: 0, sent: 0, failed: 0 };
   }
+
+  if (claimedIds.length === 0) return { processed: 0, sent: 0, failed: 0 };
 
   let sent = 0;
   let failed = 0;
@@ -302,10 +361,23 @@ export async function flushPendingKevinEvents(): Promise<{ processed: number; se
       await markEventSent(event.id);
       sent++;
     } catch (err) {
+      // Local/config failure (not configured, circuit half-open probe rejection,
+      // disabled) never reached Kevin → release the claim WITHOUT consuming the
+      // retry budget. The row returns to pending for a later tick.
+      const code = err instanceof KevinError ? err.code : undefined;
+      if (isKevinLocalNonRetryCode(code)) {
+        await releaseEventToPending(event.id).catch(() => {});
+        logger.debug(
+          { id: event.id, code },
+          "[KevinEvents] Local failure — released without consuming retry budget",
+        );
+        continue;
+      }
+
       const errorMsg = err instanceof KevinError ? err.message : String(err);
       const newAttempts = event.attempts + 1;
 
-      if (newAttempts >= MAX_ATTEMPTS) {
+      if (kevinShouldDeadLetter(newAttempts)) {
         await deadLetterEvent(event.id, errorMsg);
         logger.error(
           { id: event.id, attempts: newAttempts, error: errorMsg },
@@ -314,7 +386,7 @@ export async function flushPendingKevinEvents(): Promise<{ processed: number; se
       } else {
         await markEventFailed(event.id, errorMsg, newAttempts);
         logger.warn(
-          { id: event.id, attempts: newAttempts, nextRetryMs: nextRetryDelay(newAttempts) },
+          { id: event.id, attempts: newAttempts, nextRetryMs: kevinNextRetryDelay(newAttempts) },
           "[KevinEvents] Event dispatch failed — will retry",
         );
       }
@@ -339,7 +411,7 @@ export async function markEventFailed(
   error: string,
   attempts: number,
 ): Promise<void> {
-  const delay = nextRetryDelay(attempts);
+  const delay = kevinNextRetryDelay(attempts);
   const nextRetryAt = new Date(Date.now() + delay);
 
   await db
@@ -361,6 +433,18 @@ export async function deadLetterEvent(id: number, error: string): Promise<void> 
       lastError: error.slice(0, 500),
       deadLetteredAt: new Date(),
     })
+    .where(eq(kevinAppEventsTable.id, id));
+}
+
+/**
+ * Releases a claimed event back to "pending" without consuming its retry budget.
+ * Used when dispatch failed for a LOCAL reason (not configured / circuit open /
+ * disabled) — the event never reached Kevin, so it is not a real failure.
+ */
+export async function releaseEventToPending(id: number): Promise<void> {
+  await db
+    .update(kevinAppEventsTable)
+    .set({ status: "pending", processingStartedAt: null, nextRetryAt: new Date() })
     .where(eq(kevinAppEventsTable.id, id));
 }
 
