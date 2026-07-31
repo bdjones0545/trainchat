@@ -163,6 +163,13 @@ overrides:
   vitest>picomatch: ">=4.0.4"      # CVE-2026-33671 — picomatch ReDoS in test runner (v4 branch)
   vite>picomatch: ">=4.0.4"        # CVE-2026-33671 — picomatch ReDoS in vite (v4 branch)
   vitest>vite: ">=7.3.5"           # CVE-2026-39364/39363/53571 — Vite dev-server bypasses
-  fast-uri: ">=3.1.2"              # GHSA-v39h-62p7-jpjc — path traversal in orval/ajv
+  fast-uri: ">=4.1.1"              # GHSA-v39h-62p7-jpjc + host-confusion (>=4.0.0 <=4.1.0) — orval/ajv
   protobufjs: ">=7.6.1"            # CVE-2026-48712 — DoS via posthog-js/opentelemetry chain
-  linkify-it: ">=5.0.1"            # CVE-2026-48801 — ReDoS in orval/typedoc/markdown-it
+  linkify-it: ">=5.0.2"            # CVE-2026-48801 + quadratic-ReDoS (<=5.0.1) — orval/typedoc/markdown-it
+  # ── Security overrides (added 2026-07-31) ─────────────────────────────────
+  # Unbounded ">=" (repo convention, cf. axios/ws above) so every requester is
+  # unified onto one patched version. These are build/codegen-chain utilities with
+  # stable APIs across the bump; verified by typecheck + full test suite + build.
+  brace-expansion: ">=2.1.2"       # GHSA-mh99-v99m-4gvg — DoS via exponential expansion; orval>typedoc>minimatch
+  js-yaml: ">=4.3.0"               # quadratic blow-up via YAML merge-key chains (<4.3.0)
+  postcss: ">=8.5.18"              # GHSA-r28c-9q8g-f849 + arbitrary file read (<=8.5.17) — via vite (mockup-sandbox)
