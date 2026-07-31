@@ -27,6 +27,7 @@ import { KevinError } from "../lib/kevin-client";
 import { getKevinConfig } from "../lib/kevin-config";
 import { isKevinCircuitAllowed } from "../lib/kevin-circuit-breaker";
 import { deriveKevinPseudonymousId, deriveKevinPseudonymousOrgId } from "../lib/kevin-pseudonym";
+import { sanitizeKevinPayload } from "../lib/kevin-payload-sanitizer";
 import { logger } from "../lib/logger";
 import crypto from "crypto";
 
@@ -391,26 +392,38 @@ export async function getKevinEventQueueStats(): Promise<{
 
 // ─── Payload sanitization ─────────────────────────────────────────────────────
 //
-// Ensures no PII, secrets, or sensitive health data leaks into event payloads.
-// Removes known sensitive keys if they accidentally appear.
-
-const FORBIDDEN_PAYLOAD_KEYS = new Set([
-  "email", "name", "phone", "address", "dob", "date_of_birth",
-  "password", "api_key", "token", "secret", "health_condition",
-  "injury", "pain", "diagnosis", "medication", "pregnancy",
-  "guardian", "ssn", "ip_address", "raw_prompt", "chain_of_thought",
-  "full_program", "exercise_prescriptions",
+// Recursive ALLOWLIST (H5) — only these categorical/operational keys are ever
+// forwarded to Kevin, at any nesting depth. Anything else (PII, health data,
+// secrets, raw text, full programs, unknown future keys) is dropped. New
+// legitimate event fields MUST be added here or they will be silently dropped
+// (drops are logged via onDropped for visibility). Shared foundation:
+// sanitizeKevinPayload — the outcome service uses the same walker.
+//
+// Union of the typed *Summary interfaces above plus the fields set by callers
+// (program-build-service, session-feedback).
+const KEVIN_EVENT_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+  "goal_category",
+  "session_duration_minutes",
+  "exercise_count",
+  "movement_categories",
+  "generation_source",
+  "kevin_context_used",
+  "weekly_frequency",
+  "training_style",
+  "edit_type",
+  "scope",
+  "difficulty_score",
+  "energy_score",
+  "overall_sentiment",
+  "substitution_reason",
+  "category",
+  "experience_level",
 ]);
 
 function sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(payload)) {
-    if (FORBIDDEN_PAYLOAD_KEYS.has(key.toLowerCase())) continue;
-    if (typeof value === "string" && value.length > 1000) {
-      result[key] = value.slice(0, 1000);
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
+  return sanitizeKevinPayload(payload, {
+    allow: KEVIN_EVENT_ALLOWED_KEYS,
+    onDropped: (key, reason) =>
+      logger.debug({ key, reason }, "[KevinEvents] Dropped non-allowlisted payload key"),
+  });
 }

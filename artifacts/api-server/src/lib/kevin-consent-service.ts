@@ -19,7 +19,10 @@ import {
 } from "@workspace/db";
 import { and, eq } from "drizzle-orm";
 import { logger } from "./logger";
-import { deriveKevinPseudonymousId } from "./kevin-pseudonym";
+// Consent scope keys are LOCAL-only (never exported to Kevin), so they use the
+// tolerant local-scope derivation which does not require KEVIN_PSEUDONYM_SALT —
+// this keeps user-facing consent settings working when Kevin is disabled. See H1.
+import { deriveKevinLocalUserScope } from "./kevin-pseudonym";
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 
@@ -32,7 +35,7 @@ export async function hasKevinConsent(
   memoryType: KevinMemoryType,
 ): Promise<boolean> {
   try {
-    const scopeId = deriveKevinPseudonymousId(userId);
+    const scopeId = deriveKevinLocalUserScope(userId);
     const [row] = await db
       .select({ consentStatus: kevinMemoryConsentsTable.consentStatus })
       .from(kevinMemoryConsentsTable)
@@ -59,7 +62,7 @@ export async function hasKevinConsent(
 export async function getUserKevinConsents(userId: number): Promise<
   Array<{ memoryType: KevinMemoryType; consentStatus: KevinConsentStatus; grantedAt: Date | null; revokedAt: Date | null }>
 > {
-  const scopeId = deriveKevinPseudonymousId(userId);
+  const scopeId = deriveKevinLocalUserScope(userId);
   const rows = await db
     .select({
       memoryType: kevinMemoryConsentsTable.memoryType,
@@ -105,7 +108,7 @@ export async function grantKevinConsent(
     );
   }
 
-  const scopeId = deriveKevinPseudonymousId(userId);
+  const scopeId = deriveKevinLocalUserScope(userId);
   const now = new Date();
 
   await db
@@ -143,7 +146,7 @@ export async function revokeKevinConsent(
   userId: number,
   memoryType: KevinMemoryType,
 ): Promise<void> {
-  const scopeId = deriveKevinPseudonymousId(userId);
+  const scopeId = deriveKevinLocalUserScope(userId);
   const now = new Date();
 
   await db
@@ -176,7 +179,7 @@ export async function revokeKevinConsent(
  * Revokes all Kevin memory consents for a user (e.g., on account deletion).
  */
 export async function revokeAllKevinConsents(userId: number): Promise<void> {
-  const scopeId = deriveKevinPseudonymousId(userId);
+  const scopeId = deriveKevinLocalUserScope(userId);
   const now = new Date();
 
   await db

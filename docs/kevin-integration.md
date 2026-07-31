@@ -89,6 +89,17 @@ All Kevin features default to **disabled**. No Kevin network calls are made unti
 - `KEVIN_HERMES_API_KEY`, `KEVIN_INTERNAL_SERVICE_TOKEN`, and `KEVIN_PSEUDONYM_SALT` must **never** appear in client bundles, logs, or error responses
 - Kevin URLs and key prefixes must not be returned to end users
 - The master flag (`KEVIN_INTEGRATION_ENABLED`) disables all Kevin network calls when false
+- **`KEVIN_PSEUDONYM_SALT` is required (fail-closed) whenever a data-export feature is
+  enabled** — `KEVIN_CONTEXT_RETRIEVAL_ENABLED`, `KEVIN_EVENT_DISPATCH_ENABLED`, or
+  `KEVIN_OUTCOME_FORWARDING_ENABLED`. Startup aborts (`assertKevinExportConfig`) rather than
+  deriving exported pseudonymous IDs from a predictable fallback. The master flag alone and
+  inbound signal intake do **not** require the salt (they export no pseudonyms); local consent
+  scope keys use a separate salt-tolerant derivation so consent settings keep working while off.
+- **Event and outcome payloads are sanitized by a shared recursive allowlist**
+  (`lib/kevin-payload-sanitizer.ts`) — only the categorical keys named in each service's allowlist
+  are forwarded, at every nesting depth. Unknown keys, nested PII/health fields, non-JSON values,
+  and over-deep/over-long content are dropped (and logged). New fields must be added to the
+  allowlist explicitly.
 
 ---
 
@@ -420,14 +431,25 @@ No secrets are displayed in any response.
 ## Applying the Migration
 
 ```bash
-# Development / first-time setup
+# Development / first-time setup — apply in order
 psql $DATABASE_URL -f lib/db/manual-migrations/0004_kevin_integration.sql
+psql $DATABASE_URL -f lib/db/manual-migrations/0005_kevin_outcomes_worker.sql
+psql $DATABASE_URL -f lib/db/manual-migrations/0006_kevin_capability_unique.sql
 
 # Verify tables created
 psql $DATABASE_URL -c "\dt kevin_*"
 ```
 
-The migration is idempotent — safe to re-run.
+All three migrations are idempotent — safe to re-run. `0006` deduplicates
+`kevin_app_capabilities` and upgrades its scope index to UNIQUE so
+`seedKevinCapabilities()` is genuinely idempotent (previously it inserted a fresh
+set of capability rows on every startup). Apply `0006` before enabling Kevin.
+
+> **Deploy ordering (push-based schema):** the Drizzle schema now declares the
+> capability scope index as `uniqueIndex`. Because this repo applies schema with
+> `drizzle-kit push`, run `0006` (which deduplicates existing rows) **before** the
+> next push — pushing the unique index against a table that still contains
+> duplicate capability rows will fail.
 
 ---
 
