@@ -404,6 +404,8 @@ export async function sendKevinOutcome(payload: {
   wasModified?: boolean;
   completionStatus?: string;
   traceId: string;
+  /** Stable per-outcome key so duplicate forwards are deduped by Kevin. */
+  idempotencyKey: string;
 }): Promise<void> {
   const config = getKevinConfig();
 
@@ -429,6 +431,7 @@ export async function sendKevinOutcome(payload: {
       headers: {
         ...buildHeaders(config.hermesApiKey, payload.traceId),
         "Content-Type": "application/json",
+        "Idempotency-Key": payload.idempotencyKey,
       },
       body: JSON.stringify({
         meta,

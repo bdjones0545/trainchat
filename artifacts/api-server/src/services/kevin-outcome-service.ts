@@ -11,7 +11,7 @@
 //
 // Outcome lifecycle:
 //   pending → processing → forwarded
-//                       ↘ failed (→ retry) → dead_lettered after MAX_ATTEMPTS
+//                       ↘ failed (→ retry) → dead_lettered after the retries are exhausted
 //
 // Worker design mirrors the Kevin event worker (same retry schedule, batch
 // claim, circuit-breaker, concurrency-safe state transitions).
@@ -23,30 +23,18 @@ import {
   type InsertKevinTrainingOutcome,
 } from "@workspace/db";
 import { eq, and, lte, isNull, or, inArray } from "drizzle-orm";
-import { sendKevinOutcome } from "../lib/kevin-client";
-import { KevinError } from "../lib/kevin-client";
+import { sendKevinOutcome, KevinError } from "../lib/kevin-client";
 import { getKevinConfig } from "../lib/kevin-config";
 import { isKevinCircuitAllowed } from "../lib/kevin-circuit-breaker";
 import { deriveKevinPseudonymousId, deriveKevinPseudonymousOrgId } from "../lib/kevin-pseudonym";
 import { sanitizeKevinPayload } from "../lib/kevin-payload-sanitizer";
+import {
+  kevinNextRetryDelay,
+  kevinShouldDeadLetter,
+  isKevinLocalNonRetryCode,
+} from "../lib/kevin-retry";
 import { logger } from "../lib/logger";
 import crypto from "crypto";
-
-// ─── Retry schedule ───────────────────────────────────────────────────────────
-
-const RETRY_DELAYS_MS = [
-  30_000,        // 30 seconds
-  120_000,       // 2 minutes
-  480_000,       // 8 minutes
-  1_800_000,     // 30 minutes
-  7_200_000,     // 2 hours
-];
-
-const MAX_ATTEMPTS = RETRY_DELAYS_MS.length;
-
-function nextRetryDelay(attempts: number): number {
-  return RETRY_DELAYS_MS[Math.min(attempts, RETRY_DELAYS_MS.length - 1)];
-}
 
 const WORKER_POLL_MS = 30_000;   // poll every 30s (outcomes are lower-frequency)
 const WORKER_BATCH = 10;
@@ -67,6 +55,12 @@ export interface RecordKevinOutcomeInput {
   wasModified?: boolean;
   completionStatus?: string;
   traceId?: string;
+  /**
+   * Stable idempotency key. Defaults to a per-row value derived from traceId.
+   * Pass a deterministic key (e.g. `session_completed:${sessionId}`) to make
+   * repeated records of the same logical outcome a no-op at the DB layer.
+   */
+  idempotencyKey?: string;
 }
 
 /**
@@ -92,6 +86,10 @@ export async function recordKevinOutcome(
     ? deriveKevinPseudonymousOrgId(input.orgId)
     : null;
   const traceId = input.traceId ?? crypto.randomUUID();
+  // Stable per-row idempotency key, forwarded to Kevin so a duplicate dispatch
+  // (crash between send and mark-forwarded) is deduped. UNIQUE at the DB layer.
+  const idempotencyKey =
+    input.idempotencyKey ?? `${config.applicationId}:outcome:${traceId}`;
 
   try {
     await db
@@ -108,11 +106,14 @@ export async function recordKevinOutcome(
         wasUseful: input.wasUseful,
         wasModified: input.wasModified,
         completionStatus: input.completionStatus,
+        idempotencyKey,
         forwardStatus: "pending",
         forwardAttempts: 0,
         nextRetryAt: new Date(),
         traceId,
-      } satisfies Omit<InsertKevinTrainingOutcome, "id" | "createdAt" | "forwardedAt" | "deadLetteredAt">)
+      } satisfies Omit<InsertKevinTrainingOutcome, "id" | "createdAt" | "forwardedAt" | "deadLetteredAt" | "processingStartedAt">)
+      // Duplicate logical outcome (same idempotency key) is a harmless no-op.
+      .onConflictDoNothing({ target: kevinTrainingOutcomesTable.idempotencyKey })
       .catch((err: unknown) => {
         logger.error({ err, outcomeType: input.outcomeType }, "[KevinOutcome] Failed to record outcome — skipping");
       });
@@ -125,6 +126,9 @@ export async function recordKevinOutcome(
 
 let _outcomeWorkerTimer: ReturnType<typeof setInterval> | null = null;
 let _outcomeWorkerStopping = false;
+// In-flight flush — tracked so overlapping ticks never run concurrently and
+// graceful shutdown can await the current iteration.
+let _outcomeActiveFlush: Promise<unknown> | null = null;
 
 /**
  * Starts the Kevin outcome forwarding worker.
@@ -146,17 +150,23 @@ export function startKevinOutcomeWorker(): void {
   logger.info({ pollMs: WORKER_POLL_MS }, "[KevinOutcome] Starting outcome forwarding worker");
 
   _outcomeWorkerTimer = setInterval(() => {
-    if (_outcomeWorkerStopping) return;
-    flushPendingKevinTrainingOutcomes().catch((err) => {
-      logger.error({ err }, "[KevinOutcome] Worker tick failed");
-    });
+    // Never overlap: skip while a previous flush is still running or shutting down.
+    if (_outcomeWorkerStopping || _outcomeActiveFlush) return;
+    _outcomeActiveFlush = flushPendingKevinTrainingOutcomes()
+      .catch((err) => {
+        logger.error({ err }, "[KevinOutcome] Worker tick failed");
+      })
+      .finally(() => {
+        _outcomeActiveFlush = null;
+      });
   }, WORKER_POLL_MS);
 
   if (_outcomeWorkerTimer.unref) _outcomeWorkerTimer.unref();
 }
 
 /**
- * Stops the Kevin outcome worker. Called on graceful shutdown.
+ * Stops the Kevin outcome worker (synchronous). Prevents further ticks but does
+ * not wait for an in-flight flush — use drainKevinOutcomeWorker for that.
  */
 export function stopKevinOutcomeWorker(): void {
   _outcomeWorkerStopping = true;
@@ -164,6 +174,21 @@ export function stopKevinOutcomeWorker(): void {
     clearInterval(_outcomeWorkerTimer);
     _outcomeWorkerTimer = null;
     logger.info("[KevinOutcome] Outcome forwarding worker stopped");
+  }
+}
+
+/**
+ * Graceful stop: prevent new ticks and await the in-flight flush so no claimed
+ * outcome is abandoned mid-forward. Used by the process shutdown sequence.
+ */
+export async function drainKevinOutcomeWorker(): Promise<void> {
+  stopKevinOutcomeWorker();
+  if (_outcomeActiveFlush) {
+    try {
+      await _outcomeActiveFlush;
+    } catch {
+      // errors are already logged inside the tick
+    }
   }
 }
 
@@ -179,6 +204,12 @@ export async function flushPendingKevinTrainingOutcomes(): Promise<{
   if (!config.integrationEnabled || !config.outcomeForwardingEnabled) {
     return { processed: 0, forwarded: 0, failed: 0 };
   }
+  // Not configured → don't claim (claiming then failing would burn retry budget
+  // on KEVIN_NOT_CONFIGURED).
+  if (!config.hermesBaseUrl || !config.hermesApiKey) {
+    logger.debug("[KevinOutcome] Hermes not configured — skipping flush");
+    return { processed: 0, forwarded: 0, failed: 0 };
+  }
   if (!isKevinCircuitAllowed()) {
     logger.debug("[KevinOutcome] Circuit open — skipping flush");
     return { processed: 0, forwarded: 0, failed: 0 };
@@ -186,52 +217,67 @@ export async function flushPendingKevinTrainingOutcomes(): Promise<{
 
   const now = new Date();
 
-  // ── Recover stale processing rows (stuck > STALE_PROCESSING_MINUTES) ────────
+  // ── Recover stale "processing" rows (M7) ───────────────────────────────────
+  // Keyed on processing_started_at (NOT created_at) so a legitimately in-flight
+  // outcome is never reclaimed and re-forwarded. NULL covers legacy rows.
   const staleThreshold = new Date(now.getTime() - STALE_PROCESSING_MINUTES * 60_000);
   await db
     .update(kevinTrainingOutcomesTable)
-    .set({ forwardStatus: "pending", nextRetryAt: new Date() })
+    .set({ forwardStatus: "pending", nextRetryAt: now })
     .where(
       and(
         eq(kevinTrainingOutcomesTable.forwardStatus, "processing"),
-        lte(kevinTrainingOutcomesTable.createdAt, staleThreshold),
+        or(
+          isNull(kevinTrainingOutcomesTable.processingStartedAt),
+          lte(kevinTrainingOutcomesTable.processingStartedAt, staleThreshold),
+        ),
       ),
     )
     .catch((err: unknown) => {
       logger.warn({ err }, "[KevinOutcome] Stale-processing recovery failed — continuing");
     });
 
-  // ── Claim a batch of pending/failed outcomes ──────────────────────────────
+  // ── Atomically claim a batch (H2) ──────────────────────────────────────────
+  // SELECT … FOR UPDATE SKIP LOCKED inside a transaction, then flip to
+  // "processing" + stamp processing_started_at, so no outcome is claimed twice
+  // across instances or overlapping ticks.
   let claimedIds: number[] = [];
   try {
-    const rows = await db
-      .select({ id: kevinTrainingOutcomesTable.id })
-      .from(kevinTrainingOutcomesTable)
-      .where(
-        and(
-          or(
-            eq(kevinTrainingOutcomesTable.forwardStatus, "pending"),
-            eq(kevinTrainingOutcomesTable.forwardStatus, "failed"),
+    claimedIds = await db.transaction(async (tx) => {
+      const rows = await tx
+        .select({ id: kevinTrainingOutcomesTable.id })
+        .from(kevinTrainingOutcomesTable)
+        .where(
+          and(
+            or(
+              eq(kevinTrainingOutcomesTable.forwardStatus, "pending"),
+              eq(kevinTrainingOutcomesTable.forwardStatus, "failed"),
+            ),
+            or(
+              isNull(kevinTrainingOutcomesTable.nextRetryAt),
+              lte(kevinTrainingOutcomesTable.nextRetryAt, now),
+            ),
           ),
-          or(
-            isNull(kevinTrainingOutcomesTable.nextRetryAt),
-            lte(kevinTrainingOutcomesTable.nextRetryAt, now),
-          ),
-        ),
-      )
-      .limit(WORKER_BATCH);
+        )
+        .limit(WORKER_BATCH)
+        .for("update", { skipLocked: true });
 
-    if (rows.length === 0) return { processed: 0, forwarded: 0, failed: 0 };
-    claimedIds = rows.map((r) => r.id);
+      if (rows.length === 0) return [];
+      const ids = rows.map((r) => r.id);
 
-    await db
-      .update(kevinTrainingOutcomesTable)
-      .set({ forwardStatus: "processing" })
-      .where(inArray(kevinTrainingOutcomesTable.id, claimedIds));
+      await tx
+        .update(kevinTrainingOutcomesTable)
+        .set({ forwardStatus: "processing", processingStartedAt: now })
+        .where(inArray(kevinTrainingOutcomesTable.id, ids));
+
+      return ids;
+    });
   } catch (err) {
     logger.error({ err }, "[KevinOutcome] Failed to claim outcomes — skipping tick");
     return { processed: 0, forwarded: 0, failed: 0 };
   }
+
+  if (claimedIds.length === 0) return { processed: 0, forwarded: 0, failed: 0 };
 
   // ── Load and dispatch ──────────────────────────────────────────────────────
   const outcomes = await db
@@ -258,15 +304,28 @@ export async function flushPendingKevinTrainingOutcomes(): Promise<{
         wasModified: outcome.wasModified ?? undefined,
         completionStatus: outcome.completionStatus ?? undefined,
         traceId: outcome.traceId ?? crypto.randomUUID(),
+        idempotencyKey: outcome.idempotencyKey,
       });
 
       await markOutcomeForwarded(outcome.id);
       forwarded++;
     } catch (err) {
+      // Local/config failure never reached Kevin → release WITHOUT consuming the
+      // retry budget.
+      const code = err instanceof KevinError ? err.code : undefined;
+      if (isKevinLocalNonRetryCode(code)) {
+        await releaseOutcomeToPending(outcome.id).catch(() => {});
+        logger.debug(
+          { id: outcome.id, code },
+          "[KevinOutcome] Local failure — released without consuming retry budget",
+        );
+        continue;
+      }
+
       const errorMsg = err instanceof KevinError ? err.message : String(err);
       const newAttempts = outcome.forwardAttempts + 1;
 
-      if (newAttempts >= MAX_ATTEMPTS) {
+      if (kevinShouldDeadLetter(newAttempts)) {
         await deadLetterOutcome(outcome.id, errorMsg);
         logger.error(
           { id: outcome.id, attempts: newAttempts, error: errorMsg },
@@ -275,7 +334,7 @@ export async function flushPendingKevinTrainingOutcomes(): Promise<{
       } else {
         await markOutcomeFailed(outcome.id, errorMsg, newAttempts);
         logger.warn(
-          { id: outcome.id, attempts: newAttempts, nextRetryMs: nextRetryDelay(newAttempts) },
+          { id: outcome.id, attempts: newAttempts, nextRetryMs: kevinNextRetryDelay(newAttempts) },
           "[KevinOutcome] Outcome forward failed — will retry",
         );
       }
@@ -300,7 +359,7 @@ export async function markOutcomeFailed(
   error: string,
   attempts: number,
 ): Promise<void> {
-  const delay = nextRetryDelay(attempts);
+  const delay = kevinNextRetryDelay(attempts);
   await db
     .update(kevinTrainingOutcomesTable)
     .set({
@@ -320,6 +379,18 @@ export async function deadLetterOutcome(id: number, error: string): Promise<void
       lastForwardError: error.slice(0, 500),
       deadLetteredAt: new Date(),
     })
+    .where(eq(kevinTrainingOutcomesTable.id, id));
+}
+
+/**
+ * Releases a claimed outcome back to "pending" without consuming its retry
+ * budget. Used when the forward failed for a LOCAL reason (not configured /
+ * circuit open / disabled) — it never reached Kevin, so it is not a real failure.
+ */
+export async function releaseOutcomeToPending(id: number): Promise<void> {
+  await db
+    .update(kevinTrainingOutcomesTable)
+    .set({ forwardStatus: "pending", processingStartedAt: null, nextRetryAt: new Date() })
     .where(eq(kevinTrainingOutcomesTable.id, id));
 }
 

@@ -16,8 +16,9 @@ import { runExternalMaterializationReadinessCheck } from "./lib/external-materia
 import { runSubscriptionSelfHeal } from "./lib/subscriptionSelfHeal";
 import { getKevinConfig, assertKevinExportConfig } from "./lib/kevin-config";
 import { seedKevinCapabilities } from "./lib/kevin-capability-service";
-import { startKevinEventWorker, stopKevinEventWorker } from "./services/kevin-event-service";
-import { startKevinOutcomeWorker, stopKevinOutcomeWorker } from "./services/kevin-outcome-service";
+import { startKevinEventWorker, drainKevinEventWorker } from "./services/kevin-event-service";
+import { startKevinOutcomeWorker, drainKevinOutcomeWorker } from "./services/kevin-outcome-service";
+import { pool } from "@workspace/db";
 
 const rawPort = process.env["PORT"];
 
@@ -171,17 +172,7 @@ runExternalMaterializationReadinessCheck().catch(() => {});
   }
 }
 
-// Graceful shutdown — stops Kevin workers cleanly before process exits
-function _stopKevinWorkers(signal: string): void {
-  logger.info({ signal }, "[Process] Signal received — stopping Kevin workers");
-  stopKevinEventWorker();
-  stopKevinOutcomeWorker();
-}
-
-process.on("SIGTERM", () => _stopKevinWorkers("SIGTERM"));
-process.on("SIGINT",  () => _stopKevinWorkers("SIGINT"));
-
-app.listen(port, (err) => {
+const server = app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);
@@ -189,3 +180,50 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
 });
+
+// ─── Graceful shutdown ──────────────────────────────────────────────────────
+//
+// On SIGTERM/SIGINT (normal deploys): stop accepting new connections, drain the
+// in-flight Kevin worker ticks so no claimed row is orphaned mid-dispatch, close
+// the DB pool, then exit. A hard timeout forces exit if any step hangs.
+const SHUTDOWN_TIMEOUT_MS = 15_000;
+let _shuttingDown = false;
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  if (_shuttingDown) return;
+  _shuttingDown = true;
+  logger.info({ signal }, "[Process] Graceful shutdown starting");
+
+  const forceExit = setTimeout(() => {
+    logger.error("[Process] Graceful shutdown timed out — forcing exit");
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+  if (forceExit.unref) forceExit.unref();
+
+  // 1. Stop accepting new connections. Long-lived streams (SSE chat) are not
+  //    awaited — they are cut when the process exits below, bounded by the
+  //    force-exit timer.
+  server.close(() => logger.info("[Process] HTTP server closed"));
+
+  // 2. Drain Kevin workers — stop scheduling and await any in-flight tick so a
+  //    claimed event/outcome is never abandoned in "processing".
+  try {
+    await Promise.all([drainKevinEventWorker(), drainKevinOutcomeWorker()]);
+  } catch (err) {
+    logger.warn({ err }, "[Process] Kevin worker drain error during shutdown");
+  }
+
+  // 3. Close DB resources (best-effort — the process is exiting).
+  try {
+    await pool.end();
+  } catch (err) {
+    logger.warn({ err }, "[Process] DB pool close error during shutdown");
+  }
+
+  clearTimeout(forceExit);
+  logger.info("[Process] Graceful shutdown complete");
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => void gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => void gracefulShutdown("SIGINT"));
