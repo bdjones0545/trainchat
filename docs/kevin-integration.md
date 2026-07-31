@@ -239,9 +239,40 @@ Events are enqueued to `kevin_app_events` and dispatched by the worker.
 | 2 | 2 minutes |
 | 3 | 8 minutes |
 | 4 | 30 minutes |
-| 5 | 2 hours → dead-letter |
+| 5 | 2 hours (final retry) |
+| 6 | dead-letter |
 
-Dead-lettered events are preserved and visible at `/admin/kevin/events`. They do not affect the original workout workflow.
+`newAttempts` is the 1-based count of failures; the **first** failure schedules the
+30s retry (the shared policy lives in `lib/kevin-retry.ts`). Dead-lettered events are
+preserved and visible at `/admin/kevin/events`. They do not affect the original workout
+workflow.
+
+**Local/config failures do not consume the retry budget.** `KEVIN_NOT_CONFIGURED`,
+`KEVIN_CIRCUIT_OPEN`, and `KEVIN_DISABLED` mean the dispatch never reached Kevin, so the
+row is released back to `pending` without incrementing `attempts` — a misconfiguration can
+never dead-letter real events.
+
+---
+
+## Concurrency & Durability
+
+Enabling dispatch/outcome forwarding is safe under the autoscale (multi-instance) deployment:
+
+- **Atomic claiming.** Each worker claims a batch with `SELECT … FOR UPDATE SKIP LOCKED`
+  inside a transaction, then flips the rows to `processing` and stamps
+  `processing_started_at`. Concurrent instances and overlapping ticks skip each other's
+  locked rows, so no event/outcome is ever claimed — or dispatched — twice.
+- **Stale-processing recovery.** A crash between claim and send/mark leaves rows in
+  `processing`; the next tick reclaims any whose `processing_started_at` is older than 10
+  minutes (never `created_at`), so no work is permanently orphaned.
+- **Outcome idempotency.** Every outcome carries a stable `idempotency_key` (UNIQUE),
+  transmitted to Kevin as `Idempotency-Key` exactly like events, so a duplicate forward
+  after a crash is deduped by Kevin and duplicate rows are rejected by the DB.
+- **Non-overlapping ticks.** A worker never starts a new iteration while the previous one
+  is still running.
+- **Graceful shutdown.** On SIGTERM/SIGINT the process stops accepting new connections,
+  drains the in-flight worker tick (so no claimed row is abandoned), closes the DB pool,
+  and exits — bounded by a hard timeout.
 
 ---
 
@@ -435,21 +466,23 @@ No secrets are displayed in any response.
 psql $DATABASE_URL -f lib/db/manual-migrations/0004_kevin_integration.sql
 psql $DATABASE_URL -f lib/db/manual-migrations/0005_kevin_outcomes_worker.sql
 psql $DATABASE_URL -f lib/db/manual-migrations/0006_kevin_capability_unique.sql
+psql $DATABASE_URL -f lib/db/manual-migrations/0007_kevin_durability.sql
 
 # Verify tables created
 psql $DATABASE_URL -c "\dt kevin_*"
 ```
 
-All three migrations are idempotent — safe to re-run. `0006` deduplicates
+All migrations are idempotent — safe to re-run. `0006` deduplicates
 `kevin_app_capabilities` and upgrades its scope index to UNIQUE so
-`seedKevinCapabilities()` is genuinely idempotent (previously it inserted a fresh
-set of capability rows on every startup). Apply `0006` before enabling Kevin.
+`seedKevinCapabilities()` is genuinely idempotent. `0007` adds
+`processing_started_at` (stale-recovery, events + outcomes) and the outcome
+`idempotency_key` (UNIQUE). Apply both before enabling Kevin dispatch.
 
 > **Deploy ordering (push-based schema):** the Drizzle schema now declares the
-> capability scope index as `uniqueIndex`. Because this repo applies schema with
-> `drizzle-kit push`, run `0006` (which deduplicates existing rows) **before** the
-> next push — pushing the unique index against a table that still contains
-> duplicate capability rows will fail.
+> new columns/indexes (unique capability scope index; outcome `idempotency_key`
+> NOT NULL UNIQUE). Because this repo applies schema with `drizzle-kit push`, run
+> `0006` and `0007` (which deduplicate/backfill existing rows) **before** the next
+> push — pushing the unique/NOT NULL constraints against un-migrated data will fail.
 
 ---
 
@@ -480,7 +513,11 @@ DROP TABLE IF EXISTS kevin_app_capabilities CASCADE;
 2. **Kevin context not yet wired into generation prompts** — the context service and prompt fragment builder are implemented; integration into the AI system prompt is a follow-up hook once Hermes is available.
 3. **Cross-application context blocked** — Phase 13 identity linking is not implemented.
 4. **Kevin memory deletion not guaranteed** — revoking consent stops future use but does not delete from Kevin's memory store until a confirmed deletion endpoint exists.
-5. **Outcome retry worker not yet implemented** — outcomes that fail forwarding are marked `failed` but a retry loop (separate from the event worker) is a follow-up task.
+5. **Dead-lettered events have no admin re-queue** — outcomes can be re-queued (`retryDeadLetteredOutcome`); an equivalent for dead-lettered events is a follow-up (recoverable via SQL meanwhile).
+
+> The durable outcome retry worker and autoscale-safe dispatch (atomic claiming,
+> stale-processing recovery, outcome idempotency, graceful shutdown) are
+> implemented — see **Concurrency & Durability** above.
 
 ---
 

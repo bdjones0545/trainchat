@@ -168,6 +168,13 @@ export const kevinAppEventsTable = pgTable(
 
     nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
 
+    // When the row was last claimed into "processing" — drives stale-processing
+    // recovery (migration 0007). NULL for rows never claimed. NEVER use
+    // created_at for staleness.
+    processingStartedAt: timestamp("processing_started_at", {
+      withTimezone: true,
+    }),
+
     traceId: text("trace_id"),
 
     origin: text("origin"),
@@ -185,6 +192,7 @@ export const kevinAppEventsTable = pgTable(
   (t) => [
     index("idx_kevin_events_status").on(t.status, t.nextRetryAt),
     index("idx_kevin_events_user").on(t.userIdPseudonymous),
+    index("idx_kevin_events_processing").on(t.status, t.processingStartedAt),
   ],
 );
 
@@ -342,6 +350,12 @@ export const kevinTrainingOutcomesTable = pgTable(
 
     completionStatus: text("completion_status"),
 
+    // Stable per-row idempotency key, transmitted to Kevin as Idempotency-Key so
+    // a duplicate forward (e.g. after a crash between send and mark-forwarded) is
+    // harmless. UNIQUE prevents duplicate outcome rows for the same logical
+    // outcome. Added in migration 0007.
+    idempotencyKey: text("idempotency_key").notNull(),
+
     forwardStatus: text("forward_status", {
       enum: KEVIN_FORWARD_STATUSES,
     })
@@ -353,6 +367,12 @@ export const kevinTrainingOutcomesTable = pgTable(
     lastForwardError: text("last_forward_error"),
 
     nextRetryAt: timestamp("next_retry_at", { withTimezone: true }),
+
+    // When the row was last claimed into "processing" — drives stale-processing
+    // recovery (M7). Replaces the previous (incorrect) use of created_at.
+    processingStartedAt: timestamp("processing_started_at", {
+      withTimezone: true,
+    }),
 
     traceId: text("trace_id"),
 
@@ -367,6 +387,11 @@ export const kevinTrainingOutcomesTable = pgTable(
   (t) => [
     index("idx_kevin_outcomes_user").on(t.userIdPseudonymous),
     index("idx_kevin_outcomes_fwd").on(t.forwardStatus),
+    uniqueIndex("idx_kevin_outcomes_idempotency").on(t.idempotencyKey),
+    index("idx_kevin_outcomes_processing").on(
+      t.forwardStatus,
+      t.processingStartedAt,
+    ),
   ],
 );
 
