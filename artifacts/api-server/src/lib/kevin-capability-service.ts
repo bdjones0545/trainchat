@@ -115,6 +115,10 @@ export async function getAllKevinCapabilities(): Promise<
  * All capabilities default to "observe" mode and disabled=false.
  * Kevin is not active until KEVIN_INTEGRATION_ENABLED and individual
  * sub-flags are set in environment variables.
+ *
+ * Idempotency relies on the UNIQUE(scope_type, scope_id, capability) index
+ * (migration 0006). The conflict target is stated explicitly so a duplicate
+ * (scope, capability) is a no-op instead of inserting a fresh serial-PK row.
  */
 export async function seedKevinCapabilities(): Promise<void> {
   const { KEVIN_CAPABILITIES } = await import("@workspace/db");
@@ -130,7 +134,13 @@ export async function seedKevinCapabilities(): Promise<void> {
         enabled: false,
         updatedBy: "system_seed",
       })
-      .onConflictDoNothing();
+      .onConflictDoNothing({
+        target: [
+          kevinAppCapabilitiesTable.scopeType,
+          kevinAppCapabilitiesTable.scopeId,
+          kevinAppCapabilitiesTable.capability,
+        ],
+      });
   }
 
   logger.info("[KevinCapability] Capability defaults seeded");

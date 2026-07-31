@@ -14,7 +14,7 @@ import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
 import { seedWhitepaperPublicationsIfMissing } from "./lib/whitepaper-publications-seeder";
 import { runExternalMaterializationReadinessCheck } from "./lib/external-materialization";
 import { runSubscriptionSelfHeal } from "./lib/subscriptionSelfHeal";
-import { getKevinConfig } from "./lib/kevin-config";
+import { getKevinConfig, assertKevinExportConfig } from "./lib/kevin-config";
 import { seedKevinCapabilities } from "./lib/kevin-capability-service";
 import { startKevinEventWorker, stopKevinEventWorker } from "./services/kevin-event-service";
 import { startKevinOutcomeWorker, stopKevinOutcomeWorker } from "./services/kevin-outcome-service";
@@ -155,6 +155,10 @@ runExternalMaterializationReadinessCheck().catch(() => {});
 {
   const kevinCfg = getKevinConfig();
   if (kevinCfg.integrationEnabled) {
+    // H1: fail closed at boot if a data-export feature is on without a salt.
+    // This throws intentionally — a misconfigured export must stop the deploy,
+    // not silently ship reversible pseudonyms.
+    assertKevinExportConfig(kevinCfg);
     seedKevinCapabilities().catch((err: unknown) => {
       logger.warn({ err }, "[Kevin] Capability seed failed — will retry on next startup");
     });

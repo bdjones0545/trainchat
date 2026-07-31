@@ -7,6 +7,7 @@ import {
   jsonb,
   boolean,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { usersTable } from "./users";
 
@@ -95,7 +96,9 @@ export const kevinAppCapabilitiesTable = pgTable(
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [index("idx_kevin_capabilities_scope").on(t.scopeType, t.scopeId, t.capability)],
+  // Unique so seedKevinCapabilities' onConflictDoNothing has a real conflict
+  // target and startups cannot accumulate duplicate capability rows (migration 0006).
+  (t) => [uniqueIndex("idx_kevin_capabilities_scope").on(t.scopeType, t.scopeId, t.capability)],
 );
 
 export type KevinAppCapability = typeof kevinAppCapabilitiesTable.$inferSelect;
