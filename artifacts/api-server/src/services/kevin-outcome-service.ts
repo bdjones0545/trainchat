@@ -28,6 +28,7 @@ import { KevinError } from "../lib/kevin-client";
 import { getKevinConfig } from "../lib/kevin-config";
 import { isKevinCircuitAllowed } from "../lib/kevin-circuit-breaker";
 import { deriveKevinPseudonymousId, deriveKevinPseudonymousOrgId } from "../lib/kevin-pseudonym";
+import { sanitizeKevinPayload } from "../lib/kevin-payload-sanitizer";
 import { logger } from "../lib/logger";
 import crypto from "crypto";
 
@@ -77,6 +78,14 @@ export async function recordKevinOutcome(
 ): Promise<void> {
   const config = getKevinConfig();
   if (!config.integrationEnabled) return;
+  // Outcomes are staged for EXPORT to Kevin, so they need a real salt to derive a
+  // safe pseudonym. Without one, skip cleanly rather than letting the strict
+  // derive throw (fail-open). In normal operation outcomeForwarding implies the
+  // boot gate already required the salt, so this only trips on a misconfig.
+  if (!config.pseudonymSalt) {
+    logger.debug("[KevinOutcome] No pseudonym salt configured — skipping outcome staging");
+    return;
+  }
 
   const userIdPseudonymous = deriveKevinPseudonymousId(input.userId);
   const orgIdPseudonymous = input.orgId
@@ -471,20 +480,32 @@ export function recordExerciseSubstituted(
 }
 
 // ─── Sanitization ─────────────────────────────────────────────────────────────
-
-const FORBIDDEN_OUTCOME_KEYS = new Set([
-  "email", "name", "phone", "address", "dob", "injury_detail",
-  "diagnosis", "medication", "raw_text", "prompt", "api_key", "token",
-  "health_condition", "injury", "pain", "pregnancy", "guardian",
+//
+// Recursive ALLOWLIST (H5) — shares the same walker as event payloads
+// (sanitizeKevinPayload). Only these categorical result-summary keys are
+// forwarded to Kevin, at any depth; everything else (PII, health data, secrets,
+// raw text, full programs, unknown keys) is dropped. New legitimate summary
+// fields MUST be added here (drops are logged via onDropped).
+// Exactly the categorical keys the outcome factories emit into resultSummary
+// (recordSessionFeedbackOutcome, recordContextOutcome, recordExerciseSubstituted).
+// difficulty_level/energy_response are the OUTCOME-side categorical names — not
+// the event-side numeric difficulty_score/energy_score. New fields must be added
+// here explicitly (drops are logged via onDropped).
+const KEVIN_OUTCOME_ALLOWED_KEYS: ReadonlySet<string> = new Set([
+  "kevin_context_used",
+  "user_initiated",
+  "overall_sentiment",
+  "difficulty_level",
+  "energy_response",
+  "completion_status",
 ]);
 
 function sanitizeOutcomeSummary(
   summary: Record<string, unknown>,
 ): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(summary)) {
-    if (FORBIDDEN_OUTCOME_KEYS.has(key.toLowerCase())) continue;
-    result[key] = value;
-  }
-  return result;
+  return sanitizeKevinPayload(summary, {
+    allow: KEVIN_OUTCOME_ALLOWED_KEYS,
+    onDropped: (key, reason) =>
+      logger.debug({ key, reason }, "[KevinOutcome] Dropped non-allowlisted summary key"),
+  });
 }

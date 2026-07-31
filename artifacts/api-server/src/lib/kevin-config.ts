@@ -106,7 +106,7 @@ export function getKevinConfig(): KevinConfig {
     if (!_config.hermesBaseUrl)
       issues.push("KEVIN_HERMES_BASE_URL is not set");
     if (!_config.hermesApiKey) issues.push("KEVIN_HERMES_API_KEY is not set");
-    if (!_config.pseudonymSalt) issues.push("KEVIN_PSEUDONYM_SALT is not set (pseudonymous IDs will use fallback)");
+    if (!_config.pseudonymSalt) issues.push("KEVIN_PSEUDONYM_SALT is not set — required before enabling any data-export feature (context retrieval, event dispatch, outcome forwarding); startup aborts if one is enabled without it");
     if (issues.length > 0) {
       logger.warn(
         { issues },
@@ -131,4 +131,42 @@ export function getKevinConfig(): KevinConfig {
 // Exported for test injection — do not call in production code
 export function _resetKevinConfigForTest(): void {
   _config = null;
+}
+
+/**
+ * The Kevin sub-flags that cause pseudonymous user/org identifiers to be
+ * EXPORTED to Kevin (context request, event dispatch, outcome forwarding).
+ * Signal intake is inbound and does not export pseudonyms, so it is excluded.
+ */
+export function kevinExportsPseudonyms(config: KevinConfig = getKevinConfig()): boolean {
+  return (
+    config.contextRetrievalEnabled ||
+    config.eventDispatchEnabled ||
+    config.outcomeForwardingEnabled
+  );
+}
+
+/**
+ * Startup validation (H1): fail CLOSED when a data-export feature is enabled but
+ * KEVIN_PSEUDONYM_SALT is unset. Without the salt, exported "pseudonymous" IDs
+ * would be derived from a predictable, source-visible fallback and be trivially
+ * reversible against sequential user IDs — defeating the whole point of
+ * pseudonymisation. Rather than silently ship reversible IDs, refuse to boot.
+ *
+ * Scope is deliberately narrow: it does NOT fire for KEVIN_INTEGRATION_ENABLED
+ * alone, nor for signal intake — those features do not export pseudonyms, so
+ * they keep working without the salt.
+ *
+ * @throws Error when an export feature is enabled without a configured salt.
+ */
+export function assertKevinExportConfig(config: KevinConfig = getKevinConfig()): void {
+  if (kevinExportsPseudonyms(config) && !config.pseudonymSalt) {
+    throw new Error(
+      "[KevinConfig] A Kevin data-export feature (context retrieval, event " +
+        "dispatch, or outcome forwarding) is enabled but KEVIN_PSEUDONYM_SALT " +
+        "is not set. Refusing to start: exported identifiers must not use a " +
+        "predictable fallback salt. Set KEVIN_PSEUDONYM_SALT (server-only) or " +
+        "disable the export sub-flags.",
+    );
+  }
 }
