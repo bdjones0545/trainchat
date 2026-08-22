@@ -82,7 +82,8 @@ export default function Login() {
         onSuccess: async (result) => {
           // Seed the cache immediately so Chat sees a valid user on mount
           queryClient.setQueryData(getGetMeQueryKey(), result.user);
-          // Route to chat — anonymous data merged on backend (fire-and-forget)
+          // Route to chat — anonymous data was merged and the regenerated
+          // registered session was durably saved before this response.
           setLocation("/chat");
         },
         onError: (err: unknown) => {

@@ -256,6 +256,7 @@ function AthleteIdentitySection({
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const logout = useLogout();
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [nameSaving, setNameSaving] = useState(false);
@@ -265,6 +266,23 @@ function AthleteIdentitySection({
 
   const userName = me?.name ?? "";
   const userEmail = me?.email ?? "";
+
+  function handleLogout() {
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        queryClient.clear();
+        clearAuthState();
+        window.location.replace("/login");
+      },
+      onError: () => {
+        toast({
+          title: "Sign out failed",
+          description: "Your server session is still active. Please try again.",
+          variant: "destructive",
+        });
+      },
+    });
+  }
 
   async function saveName() {
     if (!nameInput.trim() || nameSaving) return;
@@ -396,7 +414,7 @@ function AthleteIdentitySection({
                 <span className="text-sm text-muted-foreground truncate max-w-[180px]">{userEmail}</span>
               </div>
             )}
-            <SettingsRow label="Sign out" onClick={() => { clearAuthState(); window.location.replace("/login"); }} rightElement={<LogOut className="w-4 h-4 text-muted-foreground/60" />} />
+            <SettingsRow label="Sign out" onClick={handleLogout} rightElement={<LogOut className="w-4 h-4 text-muted-foreground/60" />} />
           </>
         )}
       </Card>

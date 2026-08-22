@@ -158,6 +158,7 @@ import {
   type UserMode,
 } from "@/lib/routing";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
+import { initializeChatIdentity } from "@/lib/initializeChatIdentity";
 import { DeviceResetPanel } from "@/components/debug/DeviceResetPanel";
 import ScrollToTop from "@/components/ScrollToTop";
 import { FocusModeProvider } from "@/contexts/FocusModeContext";
@@ -225,17 +226,9 @@ function ChatPage() {
   useEffect(() => {
     console.log("[TrainChat] ChatPage mounted");
     const deviceId = getOrCreateDeviceId();
-    fetch("/api/auth/bootstrap", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ deviceId }),
-    })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.user) {
-          queryClient.setQueryData(getGetMeQueryKey(), data.user);
-        }
+    initializeChatIdentity(deviceId)
+      .then((identity) => {
+        queryClient.setQueryData(getGetMeQueryKey(), identity.user);
       })
       .catch((err) => { console.error("[TrainChat] bootstrap fetch failed", err); })
       .finally(() => { console.log("[TrainChat] bootstrap complete"); setBootstrapped(true); });

@@ -1,12 +1,16 @@
 /**
- * Minimal interface over the express-session Session object needed to perform
- * session fixation prevention. Defined as a structural type so the function can
- * be unit-tested with a plain mock object without importing express-session.
+ * Minimal interfaces over an Express request and session needed to perform
+ * session fixation prevention. Structural types keep the helper unit-testable
+ * without importing Express or express-session.
  */
 export interface SessionLike {
   regenerate(callback: (err?: unknown) => void): void;
   save(callback: (err?: unknown) => void): void;
   userId?: number;
+}
+
+export interface SessionRequestLike {
+  session: SessionLike;
 }
 
 /**
@@ -17,23 +21,28 @@ export interface SessionLike {
  * fixation attacker who obtained it cannot reuse it once the user is
  * authenticated.
  *
- * express-session's regenerate() destroys the old session store record and
- * creates a fresh one with a new ID. Data on req.session is not carried
- * forward automatically — we set userId immediately in the regenerate callback
- * before save() so the new record is complete in one write.
+ * express-session's regenerate() destroys the old store record, creates a new
+ * ID, and replaces req.session. Data is not carried forward automatically, so
+ * the callback must re-read request.session before setting and saving userId.
  */
 export async function activateAuthSession(
-  session: SessionLike,
+  request: SessionRequestLike,
   userId: number,
 ): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    session.regenerate((regenerateErr) => {
+    request.session.regenerate((regenerateErr) => {
       if (regenerateErr) {
         reject(regenerateErr);
         return;
       }
-      session.userId = userId;
-      session.save((saveErr) => {
+
+      // express-session replaces req.session during regenerate(). Always read
+      // the new object from the request inside the callback; mutating the old
+      // object saves auth state under the retired pre-authentication ID while
+      // the browser receives a cookie for an empty regenerated session.
+      const regeneratedSession = request.session;
+      regeneratedSession.userId = userId;
+      regeneratedSession.save((saveErr) => {
         if (saveErr) {
           reject(saveErr);
         } else {

@@ -2,6 +2,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { pool } from "@workspace/db";
 import { logger } from "./logger";
+import { resolveSessionPolicy } from "./session-policy";
 
 if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET environment variable is required");
@@ -23,9 +24,7 @@ const store = new PgSession({
 // NODE_ENV will be "production". Either condition means we need Secure
 // cookies and SameSite=none so that cross-context cookie delivery works
 // correctly (especially on iOS Safari / WebKit ITP).
-const isHttpsContext =
-  process.env.NODE_ENV === "production" ||
-  Boolean(process.env.REPLIT_DOMAINS);
+export const sessionPolicy = resolveSessionPolicy(process.env);
 
 export const sessionMiddleware = session({
   store,
@@ -33,10 +32,10 @@ export const sessionMiddleware = session({
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: isHttpsContext,
+    secure: sessionPolicy.cookieSecure,
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    sameSite: isHttpsContext ? "none" : "lax",
+    sameSite: sessionPolicy.cookieSameSite,
     path: "/",
   },
 });
