@@ -18,6 +18,12 @@ migration failure aborts the command and must prevent application rollout.
 so referenced relations always exist first. New schema changes require a new
 generated migration; never edit an already-deployed migration.
 
+`0001_production_release_upgrade.sql` is an additive **rehearsal candidate** for
+upgrading a populated pre-release clone after baseline history is established.
+It is not permission to baseline or migrate production. Follow
+`docs/production-clone-migration-rehearsal.md`; never run 0000 against a
+populated database.
+
 ## Local development
 
 Use the production migration path by default:
