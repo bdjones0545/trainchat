@@ -166,11 +166,21 @@ export async function saveOrUpdateProgram(
 
   if (isNewProgramBuild) {
     system = await createTrainingSystemFromProgram(
-      userId, structuredData, conversationId, focusMode
+      userId,
+      structuredData,
+      conversationId,
+      focusMode,
+      extractedConstraints?.equipment,
     ) as { id: number; [key: string]: unknown };
     isUpdate = false;
   } else {
-    const result = await upsertTrainingSystemFromProgram(userId, structuredData, focusMode, conversationId);
+    const result = await upsertTrainingSystemFromProgram(
+      userId,
+      structuredData,
+      focusMode,
+      conversationId,
+      extractedConstraints?.equipment,
+    );
     system = result.system as { id: number; [key: string]: unknown };
     isUpdate = result.isUpdate;
   }

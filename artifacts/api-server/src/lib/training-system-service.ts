@@ -24,6 +24,10 @@ import {
   selectStrengthVariantFromLibrary,
   auditExerciseVariantSelection,
 } from "./strength-week-expression";
+import {
+  repairProgramEquipmentConstraints,
+  validateProgramEquipmentConstraints,
+} from "./program-equipment-safety";
 
 // Transaction handle for generation persistence (same pattern as
 // anonymousMerge.ts). All reads, LLM output handling, and exercise selection
@@ -1408,6 +1412,37 @@ function applyStrengthWeekExpression(
   });
 }
 
+/**
+ * Final restricted-equipment boundary for the exact exercise names that will
+ * be persisted after week-expression variants have been applied. This uses the
+ * same canonical resolver and repair policy as generation validation.
+ */
+export function enforcePersistedExerciseEquipmentBoundary(
+  program: ChatProgram,
+  exercises: ChatProgramExercise[],
+  rawEquipment: string | null | undefined,
+): ChatProgramExercise[] {
+  if (!rawEquipment) return exercises;
+
+  const candidate = {
+    ...program,
+    days: [{ ...program.days[0], exercises }],
+  } as import("./ai").ProgramStructure;
+  const repaired = repairProgramEquipmentConstraints(candidate, rawEquipment);
+  if (!repaired) {
+    throw new Error("Persisted equipment safety repair could not produce a canonical compatible exercise set");
+  }
+
+  const violations = validateProgramEquipmentConstraints(repaired, rawEquipment);
+  if (violations.length > 0) {
+    throw new Error(
+      `Persisted equipment safety validation failed: ${violations.map((item) => item.exerciseName).join(", ")}`,
+    );
+  }
+
+  return repaired.days[0].exercises as ChatProgramExercise[];
+}
+
 // ─── Strength Week Variation Validator ───────────────────────────────────────
 //
 // Computes a variation score across the 4 generated weeks and logs audit data.
@@ -1756,7 +1791,8 @@ export async function createTrainingSystemFromProgram(
   userId: number,
   program: ChatProgram,
   conversationId?: number | null,
-  focusMode?: string | null
+  focusMode?: string | null,
+  rawEquipment?: string | null,
 ): Promise<typeof trainingSystems.$inferSelect> {
   logger.info({ userId, programName: program.programName, focusMode }, "[TrainingSystem] createTrainingSystemFromProgram — starting");
 
@@ -1764,6 +1800,15 @@ export async function createTrainingSystemFromProgram(
   if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
     throw new Error("Program must have at least one training day");
   }
+
+  const [equipmentProfile] = rawEquipment
+    ? []
+    : await db
+        .select({ equipmentAccess: userProfilesTable.equipmentAccess })
+        .from(userProfilesTable)
+        .where(eq(userProfilesTable.userId, userId))
+        .limit(1);
+  const persistenceEquipment = rawEquipment ?? equipmentProfile?.equipmentAccess ?? null;
 
   const resolvedFocusMode = focusMode ?? "strength";
 
@@ -1818,8 +1863,8 @@ export async function createTrainingSystemFromProgram(
     overarchingGoal: program.description ?? program.programName,
     trainingStyle: program.splitType ?? phaseConfig.phaseName,
     weeklyFrequency: daysPerWeek,
-    equipmentAccess: "As configured in your program",
-    constraints: null,
+    equipmentAccess: persistenceEquipment ?? "As configured in your program",
+    constraints: persistenceEquipment ? `Equipment restriction: ${persistenceEquipment}` : null,
     status: "active",
     metadata: {
       source: "chat",
@@ -1910,11 +1955,16 @@ export async function createTrainingSystemFromProgram(
       const progressedExercises = isStrength
         ? applyStrengthWeekExpression(day.exercises, weekNumber, isDeload)
         : applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
+      const persistedExercises = enforcePersistedExerciseEquipmentBoundary(
+        program,
+        progressedExercises,
+        persistenceEquipment,
+      );
 
-      weekDayExercises.push(progressedExercises);
+      weekDayExercises.push(persistedExercises);
 
       // Classify then sort into proper training-flow order
-      const classifiedExercises = progressedExercises.map((ex) => ({
+      const classifiedExercises = persistedExercises.map((ex) => ({
         ...ex,
         category: mapClassificationToCategory(ex.classification, ex.name),
       }));
@@ -2010,11 +2060,21 @@ export async function upsertTrainingSystemFromProgram(
   userId: number,
   program: ChatProgram,
   focusMode?: string | null,
-  conversationId?: number | null
+  conversationId?: number | null,
+  rawEquipment?: string | null,
 ): Promise<{ system: typeof trainingSystems.$inferSelect; isUpdate: boolean }> {
   if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
     throw new Error("Program must have at least one training day");
   }
+
+  const [equipmentProfile] = rawEquipment
+    ? []
+    : await db
+        .select({ equipmentAccess: userProfilesTable.equipmentAccess })
+        .from(userProfilesTable)
+        .where(eq(userProfilesTable.userId, userId))
+        .limit(1);
+  const persistenceEquipment = rawEquipment ?? equipmentProfile?.equipmentAccess ?? null;
 
   const resolvedFocusMode = focusMode ?? "strength";
 
@@ -2023,7 +2083,13 @@ export async function upsertTrainingSystemFromProgram(
 
   // ── No active system for this focus → create fresh ────────────────────────
   if (!existingSystem) {
-    const system = await createTrainingSystemFromProgram(userId, program, conversationId ?? null, resolvedFocusMode);
+    const system = await createTrainingSystemFromProgram(
+      userId,
+      program,
+      conversationId ?? null,
+      resolvedFocusMode,
+      persistenceEquipment,
+    );
     return { system, isUpdate: false };
   }
 
@@ -2157,11 +2223,16 @@ export async function upsertTrainingSystemFromProgram(
       const progressedExercises = isStrengthUpsert
         ? applyStrengthWeekExpression(day.exercises, weekNumber, isDeload)
         : applyWeekProgressionToExercises(day.exercises, weekNumber, isDeload);
+      const persistedExercises = enforcePersistedExerciseEquipmentBoundary(
+        program,
+        progressedExercises,
+        persistenceEquipment,
+      );
 
-      weekDayExercisesUpsert.push(progressedExercises);
+      weekDayExercisesUpsert.push(persistedExercises);
 
       // Classify then sort into proper training-flow order
-      const classifiedExercises = progressedExercises.map((ex) => ({
+      const classifiedExercises = persistedExercises.map((ex) => ({
         ...ex,
         category: mapClassificationToCategory(ex.classification, ex.name),
       }));
