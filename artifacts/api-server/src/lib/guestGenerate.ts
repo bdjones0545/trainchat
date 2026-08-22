@@ -2,6 +2,15 @@ import { logger } from "./logger";
 import { getGuestSession, updateGuestSession } from "./guestService";
 import { OPENAI_MODELS } from "./openai-models";
 import {
+  OPENAI_PROGRAM_JSON_SCHEMA,
+  PROGRAM_OUTPUT_SCHEMA_VERSION,
+  validateProviderProgramOutput,
+} from "./program-structure-schema";
+import { resolveGenerationAttempts } from "./generation-safety";
+import { validatePainConstraints, type HardConstraints } from "./constraint-memory";
+import type { GenerationProvenance, ProgramStructure } from "./ai";
+import { validateProgramEquipmentConstraints } from "./program-equipment-safety";
+import {
   normalizeGoal,
   normalizeExperience,
   normalizeEquipment,
@@ -54,6 +63,24 @@ export interface GuestProgram {
   days: GuestProgramDay[];
   coachNote: string;
   progressionPrinciple: string;
+  generationProvenance?: GenerationProvenance;
+}
+
+export const GUEST_PROGRAM_PROMPT_VERSION = "coach-atlas-guest-program-2026-08-20";
+
+export class GuestGenerationError extends Error {
+  constructor(
+    public readonly category:
+      | "provider_failure"
+      | "timeout"
+      | "malformed_structured_output"
+      | "schema_validation_failure"
+      | "hard_constraint_violation"
+      | "exhausted_retry",
+  ) {
+    super("Guest program generation could not be completed safely.");
+    this.name = "GuestGenerationError";
+  }
 }
 
 // ─── Prompt Engineering ──────────────────────────────────────────────────────
@@ -119,33 +146,9 @@ Verify before output:
 Auto-correct any violations before output.
 
 ## OUTPUT REQUIREMENT
-You MUST return a JSON object in this exact format — no markdown, no preamble, just valid JSON:
-{
-  "programName": "string — specific and personalized (not generic)",
-  "weeklyStructure": "string — e.g. '4-day Upper/Lower Split'",
-  "coachIntro": "string — 2-3 sentences of personalized insight that shows you deeply understood their profile",
-  "rationale": "string — 3-4 sentences explaining the NSCA programming logic and why it fits their specific goal/experience/equipment/limitations",
-  "days": [
-    {
-      "dayNumber": 1,
-      "name": "string — e.g. 'Day 1 — Lower Body (Strength Focus)'",
-      "focus": "string — e.g. 'Quad-dominant strength with posterior chain accessory'",
-      "exercises": [
-        {
-          "name": "string",
-          "classification": "string — e.g. 'Primary', 'Secondary Compound', 'Accessory', 'Plyometric/Explosive'",
-          "sets": number,
-          "reps": "string — NSCA zone appropriate e.g. '3-5' for primary strength, '8-12' for accessory",
-          "rest": "string — NSCA zone appropriate e.g. '3 min' for primary, '60 sec' for accessory",
-          "notes": "string — performance intent cue e.g. 'Explosive concentric — max intent on every rep'"
-        }
-      ],
-      "dayNotes": "string — brief session intent or warm-up/cool-down note"
-    }
-  ],
-  "coachNote": "string — forward-looking note about progression and what to watch for in week 1",
-  "progressionPrinciple": "string — 1-2 sentences on the core progression model"
-}
+Return only the canonical TrainChat program JSON contract. The provider schema
+requires programName, description, progressionStrategy, splitType, days, and
+complete executable exercise prescriptions. Do not add guest-specific fields.
 
 Include all training days. Exercises must be specific and appropriate for the stated equipment. Never include equipment the user doesn't have. Exercises must appear in NSCA order within each day.`;
 }
@@ -248,38 +251,88 @@ async function buildExerciseContextForAI(answers: GuestOnboardingAnswers): Promi
 
 // ─── OpenAI Call ────────────────────────────────────────────────────────────
 
-async function callOpenAI(systemPrompt: string, userPrompt: string, maxTokens = 3500): Promise<string> {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("NO_API_KEY");
+interface GuestProviderResult {
+  candidate: unknown;
+  provenance: GenerationProvenance;
+}
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODELS.PROGRAM_GENERATION,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      max_tokens: maxTokens,
-      temperature: 0.65,
-      response_format: { type: "json_object" },
-    }),
-  });
+async function callOpenAIProgram(systemPrompt: string, userPrompt: string, maxTokens = 3500): Promise<GuestProviderResult> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new GuestGenerationError("provider_failure");
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  let response: Response;
+  try {
+    response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: OPENAI_MODELS.PROGRAM_GENERATION,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        max_tokens: maxTokens,
+        temperature: 0,
+        response_format: { type: "json_schema", json_schema: OPENAI_PROGRAM_JSON_SCHEMA },
+      }),
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new GuestGenerationError("timeout");
+    }
+    throw new GuestGenerationError("provider_failure");
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`OpenAI API error ${response.status}: ${errText}`);
+    throw new GuestGenerationError("provider_failure");
   }
 
   const data = (await response.json()) as {
+    id?: string;
     choices: { message: { content: string } }[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
 
-  return data.choices[0]?.message?.content ?? "{}";
+  const raw = data.choices[0]?.message?.content;
+  if (!raw) throw new GuestGenerationError("malformed_structured_output");
+  let candidate: unknown;
+  try {
+    candidate = JSON.parse(raw);
+  } catch {
+    throw new GuestGenerationError("malformed_structured_output");
+  }
+  const usage = data.usage &&
+    [data.usage.prompt_tokens, data.usage.completion_tokens, data.usage.total_tokens].every(Number.isFinite)
+    ? {
+        promptTokens: data.usage.prompt_tokens!,
+        completionTokens: data.usage.completion_tokens!,
+        totalTokens: data.usage.total_tokens!,
+      }
+    : null;
+  return {
+    candidate,
+    provenance: {
+      provider: "openai",
+      modelId: OPENAI_MODELS.PROGRAM_GENERATION,
+      promptVersion: GUEST_PROGRAM_PROMPT_VERSION,
+      schemaVersion: PROGRAM_OUTPUT_SCHEMA_VERSION,
+      providerRequestId: data.id ?? null,
+      generatedAt: new Date().toISOString(),
+      validationVerdict: "passed",
+      constraintValidationVerdict: "pending",
+      attemptCount: 1,
+      fallbackUsed: false,
+      tokenUsage: usage,
+    },
+  };
 }
 
 // ─── Intelligent Fallback ────────────────────────────────────────────────────
@@ -403,13 +456,114 @@ async function buildFallbackProgram(answers: GuestOnboardingAnswers): Promise<Gu
   };
 }
 
+function canonicalToGuestProgram(
+  program: ProgramStructure,
+  answers: GuestOnboardingAnswers,
+  provenance: GenerationProvenance,
+): GuestProgram {
+  return {
+    programName: program.programName,
+    weeklyStructure: program.splitType ?? `${answers.frequency}-day program`,
+    coachIntro: program.description,
+    rationale: program.description,
+    days: program.days.map((day) => ({
+      dayNumber: day.dayNumber,
+      name: day.name,
+      focus: day.focus ?? day.name,
+      exercises: day.exercises.map((exercise) => ({
+        name: exercise.name,
+        classification: exercise.classification,
+        sets: exercise.sets,
+        reps: exercise.reps,
+        rest: exercise.rest,
+        notes: exercise.notes ?? exercise.intent,
+      })),
+      dayNotes: day.notes,
+    })),
+    coachNote: program.whyItWorks ?? program.description,
+    progressionPrinciple: program.progressionStrategy ?? "Progress only after completing every prescribed repetition safely.",
+    generationProvenance: provenance,
+  };
+}
+
+function guestFallbackToCanonical(program: GuestProgram): ProgramStructure {
+  return {
+    programName: program.programName,
+    description: program.rationale,
+    progressionStrategy: program.progressionPrinciple,
+    splitType: program.weeklyStructure,
+    days: program.days.map((day) => ({
+      dayNumber: day.dayNumber,
+      name: day.name,
+      focus: day.focus,
+      exercises: day.exercises.map((exercise) => ({
+        name: exercise.name,
+        classification: exercise.classification ?? "Accessory",
+        sets: exercise.sets,
+        reps: exercise.reps,
+        rest: exercise.rest,
+        intent: exercise.notes ?? "Execute with controlled, pain-free technique.",
+        notes: exercise.notes ?? "Execute with controlled, pain-free technique.",
+      })),
+      notes: day.dayNotes ?? "Follow the prescribed exercise order and stop if pain occurs.",
+    })),
+  };
+}
+
+export function validateGuestProgramConstraints(
+  program: ProgramStructure,
+  answers: GuestOnboardingAnswers,
+): { constraintIssues: string[]; hardConstraintIssues: string[]; criticalPainIssues: string[] } {
+  const constraintIssues: string[] = [];
+  if (program.days.length !== answers.frequency) {
+    constraintIssues.push(`frequency expected ${answers.frequency}, received ${program.days.length}`);
+  }
+
+  const hardConstraintIssues = validateProgramEquipmentConstraints(
+    program,
+    answers.equipment.join(", "),
+  ).map((violation) => violation.detail);
+
+  const injuryFlags = detectInjuryFlags(answers.injuries).map(String);
+  const hardConstraints: HardConstraints = {
+    bannedItems: [],
+    dislikedItems: [],
+    painRegions: injuryFlags,
+    monitorRegions: [],
+    sport: answers.sport || null,
+  };
+  const criticalPainIssues = validatePainConstraints(program, hardConstraints)
+    .map((warning) => `${warning.exerciseName}: ${warning.painRegion} ${warning.severity}`);
+
+  return { constraintIssues, hardConstraintIssues, criticalPainIssues };
+}
+
+function assessGuestCandidate(candidate: unknown, answers: GuestOnboardingAnswers) {
+  const schema = validateProviderProgramOutput(candidate);
+  if (!schema.valid) {
+    return {
+      value: candidate,
+      schemaIssues: schema.issues,
+      constraintIssues: [],
+      hardConstraintIssues: [],
+      criticalPainIssues: [],
+    };
+  }
+  const program = candidate as ProgramStructure;
+  return {
+    value: program,
+    schemaIssues: [],
+    ...validateGuestProgramConstraints(program, answers),
+  };
+}
+
 // ─── Main Services ────────────────────────────────────────────────────────────
 
 export async function generateGuestProgram(
   deviceId: string,
   answers: GuestOnboardingAnswers
 ): Promise<GuestProgram> {
-  let program: GuestProgram;
+  let program: GuestProgram | undefined;
 
   // Pre-build exercise context from the 620-exercise DB.
   // This is passed to both the AI (to constrain its selection) and used in the fallback.
@@ -421,27 +575,91 @@ export async function generateGuestProgram(
   }
 
   try {
-    const raw = await callOpenAI(buildGuestSystemPrompt(), buildGuestUserPrompt(answers, exerciseContext));
-    program = JSON.parse(raw) as GuestProgram;
-
-    if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
-      throw new Error("Invalid program structure from AI");
+    const attempts: ReturnType<typeof assessGuestCandidate>[] = [];
+    const providerResults: GuestProviderResult[] = [];
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let result: GuestProviderResult;
+      try {
+        result = await callOpenAIProgram(
+          buildGuestSystemPrompt(),
+          buildGuestUserPrompt(answers, exerciseContext) +
+            (attempt === 1 ? "\nThis is the final retry. Correct every schema, equipment, frequency, and injury violation." : ""),
+        );
+      } catch (attemptErr) {
+        if (attemptErr instanceof GuestGenerationError && attemptErr.category === "malformed_structured_output") {
+          attempts.push({
+            value: null,
+            schemaIssues: ["malformed provider response"],
+            constraintIssues: [],
+            hardConstraintIssues: [],
+            criticalPainIssues: [],
+          });
+          if (attempt === 1) throw new GuestGenerationError("exhausted_retry");
+          continue;
+        }
+        throw attemptErr;
+      }
+      providerResults.push(result);
+      attempts.push(assessGuestCandidate(result.candidate, answers));
+      const resolution = resolveGenerationAttempts(attempts);
+      if (resolution.accepted) {
+        const usageAvailable = providerResults.every((item) => item.provenance.tokenUsage !== null);
+        const provenance: GenerationProvenance = {
+          ...result.provenance,
+          attemptCount: providerResults.length,
+          validationVerdict: "passed",
+          constraintValidationVerdict: "passed",
+          tokenUsage: usageAvailable ? providerResults.reduce((total, item) => ({
+            promptTokens: total.promptTokens + item.provenance.tokenUsage!.promptTokens,
+            completionTokens: total.completionTokens + item.provenance.tokenUsage!.completionTokens,
+            totalTokens: total.totalTokens + item.provenance.tokenUsage!.totalTokens,
+          }), { promptTokens: 0, completionTokens: 0, totalTokens: 0 }) : null,
+        };
+        program = canonicalToGuestProgram(resolution.value as ProgramStructure, answers, provenance);
+        logger.info({ attemptCount: provenance.attemptCount }, "Guest program generated via strict OpenAI schema");
+        break;
+      }
     }
-
-    logger.info({ deviceId }, "Guest program generated via OpenAI");
+    if (!program) throw new GuestGenerationError("exhausted_retry");
   } catch (err: any) {
+    if (err instanceof GuestGenerationError && err.category !== "provider_failure" && err.category !== "timeout") {
+      logger.warn({ category: err.category }, "Guest provider output exhausted safety retries");
+      throw err;
+    }
     if (err.message !== "NO_API_KEY") {
-      logger.warn({ err: err.message, deviceId }, "OpenAI generation failed — using fallback");
+      logger.warn({ category: err?.category ?? "provider_failure" }, "Guest provider unavailable — validating deterministic fallback");
     } else {
-      logger.info({ deviceId }, "No OpenAI key — using coach-select fallback");
+      logger.info("No OpenAI key — validating coach-select fallback");
     }
-    try {
-      program = await buildFallbackProgram(answers);
-    } catch (fallbackErr: any) {
-      logger.error({ err: fallbackErr.message, stack: fallbackErr.stack, answers }, "Fallback program generation failed");
-      throw fallbackErr;
+    const fallback = await buildFallbackProgram(answers);
+    const canonicalFallback = guestFallbackToCanonical(fallback);
+    const fallbackAssessment = assessGuestCandidate(canonicalFallback, answers);
+    const fallbackResolution = resolveGenerationAttempts([fallbackAssessment]);
+    if (!fallbackResolution.accepted) {
+      logger.error({
+        schemaIssues: fallbackAssessment.schemaIssues,
+        constraintIssues: fallbackAssessment.constraintIssues,
+        hardConstraintIssues: fallbackAssessment.hardConstraintIssues,
+        criticalPainIssues: fallbackAssessment.criticalPainIssues,
+      }, "Deterministic guest fallback rejected by shared safety boundary");
+      throw new GuestGenerationError("hard_constraint_violation");
     }
+    program = canonicalToGuestProgram(canonicalFallback, answers, {
+      provider: "local_fallback",
+      modelId: "coach-select-deterministic",
+      promptVersion: GUEST_PROGRAM_PROMPT_VERSION,
+      schemaVersion: PROGRAM_OUTPUT_SCHEMA_VERSION,
+      providerRequestId: null,
+      generatedAt: new Date().toISOString(),
+      validationVerdict: "passed",
+      constraintValidationVerdict: "passed",
+      attemptCount: 1,
+      fallbackUsed: true,
+      tokenUsage: null,
+    });
   }
+
+  if (!program) throw new GuestGenerationError("exhausted_retry");
 
   // Persist to guest session
   const session = await getGuestSession(deviceId);
@@ -453,6 +671,7 @@ export async function generateGuestProgram(
     metadata: {
       ...existingMeta,
       firstProgramOutput: program,
+      firstProgramProvenance: program.generationProvenance,
     },
   });
 
@@ -497,13 +716,6 @@ Days: ${firstProgram.days.map(d => d.name).join(", ")}` : "Program context not a
   let content: string;
 
   try {
-    const raw = await callOpenAI(systemPrompt, userMessage, 800);
-    const parsed = JSON.parse(raw);
-    // If OpenAI returns JSON unexpectedly, extract content
-    content = typeof parsed === "string" ? parsed : (parsed.content ?? raw);
-  } catch {
-    try {
-      // Try non-JSON call
       const apiKey = process.env.OPENAI_API_KEY;
       if (!apiKey) throw new Error("NO_API_KEY");
 
@@ -523,9 +735,8 @@ Days: ${firstProgram.days.map(d => d.name).join(", ")}` : "Program context not a
 
       const data = (await response.json()) as { choices: { message: { content: string } }[] };
       content = data.choices[0]?.message?.content ?? "Good question. Let me think through this...";
-    } catch {
-      content = generateFallbackFollowup(userMessage, answers, firstProgram);
-    }
+  } catch {
+    content = generateFallbackFollowup(userMessage, answers, firstProgram);
   }
 
   // Update teaser usage

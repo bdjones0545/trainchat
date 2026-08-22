@@ -8,6 +8,7 @@ import {
 import {
   generateGuestProgram,
   generateGuestFollowup,
+  GuestGenerationError,
 } from "../lib/guestGenerate";
 import { mergeGuestToUser, TEASER_GENERATE_LIMIT, TEASER_TOTAL_LIMIT } from "../lib/guestMerge";
 import { processGuestChat, GUEST_CHAT_LIMIT, type GuestChatMessage } from "../lib/guestChat";
@@ -226,8 +227,17 @@ router.post("/guest/generate", async (req, res): Promise<void> => {
 
     const program = await generateGuestProgram(deviceId, answers);
     res.json({ program });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  } catch (err: unknown) {
+    if (err instanceof GuestGenerationError) {
+      const status = err.category === "provider_failure" || err.category === "timeout" ? 503 : 422;
+      res.status(status).json({
+        error: "Guest program generation could not be completed safely.",
+        code: "GUEST_GENERATION_FAILED",
+        category: err.category,
+      });
+      return;
+    }
+    res.status(500).json({ error: "Guest program generation failed." });
   }
 });
 

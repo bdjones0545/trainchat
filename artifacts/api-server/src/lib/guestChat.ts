@@ -361,7 +361,7 @@ export async function processGuestChat(
     if (!response.trim()) throw new Error("Empty response");
   } catch (err: any) {
     if (err.message !== "NO_API_KEY") {
-      logger.warn({ err: err.message, deviceId }, "Guest chat OpenAI failed — using fallback");
+      logger.warn({ err: err.message }, "Guest chat OpenAI failed — using fallback");
     }
     response = buildFallbackResponse(userMessage, turnNumber);
   }
@@ -393,12 +393,12 @@ export async function processGuestChat(
       if (extracted) {
         guestProgram = extracted;
         logger.info(
-          { deviceId, turnNumber, programName: extracted.programName, days: extracted.days.length },
+          { turnNumber, programName: extracted.programName, days: extracted.days.length },
           "[GuestChat] Structured program extracted from response"
         );
       }
     } catch (err: any) {
-      logger.warn({ err: err.message, deviceId }, "[GuestChat] Program extraction failed — ignoring");
+      logger.warn({ err: err.message }, "[GuestChat] Program extraction failed — ignoring");
     }
   } else if (existingProgram) {
     // Return the existing stored program on subsequent turns so the panel stays visible
@@ -418,7 +418,7 @@ export async function processGuestChat(
   });
 
   logger.info(
-    { deviceId, messageCount: newCount, turnNumber, limitReached, hasProgramJSON: !!guestProgram },
+    { messageCount: newCount, turnNumber, limitReached, hasProgramJSON: !!guestProgram },
     "Guest chat message processed"
   );
 

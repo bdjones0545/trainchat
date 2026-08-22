@@ -47,7 +47,7 @@ export async function initGuestSession(deviceId: string) {
 
   if (existing) {
     if (existing.status === "blocked") {
-      logger.warn({ deviceId: sanitizedId }, "Blocked guest session attempted access");
+      logger.warn("Blocked guest session attempted access");
       throw new Error("Guest session blocked");
     }
 
@@ -57,7 +57,7 @@ export async function initGuestSession(deviceId: string) {
       .where(eq(guestSessionsTable.deviceId, sanitizedId))
       .returning();
 
-    logger.debug({ deviceId: sanitizedId, id: existing.id }, "Guest session resumed");
+    logger.debug({ id: existing.id }, "Guest session resumed");
     return normalizeGuestSession(updated);
   }
 
@@ -69,7 +69,7 @@ export async function initGuestSession(deviceId: string) {
     .values({ deviceId: sanitizedId, abVariant })
     .returning();
 
-  logger.info({ deviceId: sanitizedId, id: created.id, abVariant }, "Guest session created");
+  logger.info({ id: created.id, abVariant }, "Guest session created");
   return normalizeGuestSession(created);
 }
 

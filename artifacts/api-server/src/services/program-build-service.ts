@@ -200,6 +200,7 @@ export async function saveOrUpdateProgram(
         programDays: structuredData.days.length,
         programGoal: extractedConstraints?.primaryGoal ?? null,
         programSport: extractedConstraints?.sportFocus ?? null,
+        generationProvenance: (structuredData as Record<string, unknown>)._generationProvenance ?? null,
       };
       if ((structuredData as any).whyChanged) updateMeta.whyChanged = (structuredData as any).whyChanged;
 
@@ -249,6 +250,7 @@ export async function saveOrUpdateProgram(
           programDays: structuredData.days.length,
           programGoal: extractedConstraints?.primaryGoal ?? null,
           programSport: extractedConstraints?.sportFocus ?? null,
+          generationProvenance: (structuredData as Record<string, unknown>)._generationProvenance ?? null,
           ...(params.kevinContext ? buildKevinGenerationProvenance(params.kevinContext) : {}),
         },
       });

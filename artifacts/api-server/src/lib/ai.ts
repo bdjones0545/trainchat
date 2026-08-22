@@ -21,7 +21,13 @@ import { db, userProfilesTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { OPENAI_MODELS } from "./openai-models";
-import { validateProgramStructure } from "./program-structure-schema";
+import {
+  OPENAI_PROGRAM_JSON_SCHEMA,
+  PROGRAM_OUTPUT_SCHEMA_VERSION,
+  PROGRAM_PROMPT_VERSION,
+  validateProgramStructure,
+  validateProviderProgramOutput,
+} from "./program-structure-schema";
 import {
   buildIntelligenceContext,
   buildDBExerciseContext,
@@ -38,6 +44,11 @@ import {
   type ExerciseFilter,
 } from "./training-intelligence";
 import { type IntentResult, buildIntentPromptHint, type ExtractedConstraints, buildConstraintContract } from "./intent";
+import {
+  hasRestrictedEquipmentConstraint,
+  repairProgramEquipmentConstraints,
+  validateProgramEquipmentConstraints,
+} from "./program-equipment-safety";
 import { decideProgramAdjustment, applySpecialistMutations, buildSpecialistChangeSummary, buildSpecialistResponse } from "./program-specialist";
 import { type ActionDecision, type ActionType, buildPreservationContext } from "./decision";
 import {
@@ -143,6 +154,25 @@ export interface AIResponse {
   content: string;
   structuredData?: ProgramStructure | null;
   changeSummary?: string[];
+  generationProvenance?: GenerationProvenance;
+}
+
+export interface GenerationProvenance {
+  provider: "openai" | "local_fallback";
+  modelId: string;
+  promptVersion: string;
+  schemaVersion: string;
+  providerRequestId: string | null;
+  generatedAt: string;
+  validationVerdict: "passed" | "failed";
+  constraintValidationVerdict: "pending" | "passed" | "failed";
+  attemptCount: number;
+  fallbackUsed: boolean;
+  tokenUsage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  } | null;
 }
 
 export interface AIOverrideAudit {
@@ -2533,6 +2563,17 @@ export function validateProgramAgainstConstraints(
     }
   }
 
+  // Equipment is a hard allowlist, not a prompt preference. This check applies
+  // equally to provider output and deterministic fallback output because both
+  // cross the same route-level safety selector before persistence.
+  for (const violation of validateProgramEquipmentConstraints(program, constraints.equipment)) {
+    violations.push({
+      field: "equipment",
+      expected: constraints.equipment ?? "configured equipment",
+      actual: `${violation.exerciseName}: ${violation.detectedEquipment.join(", ") || "unknown"}`,
+    });
+  }
+
   // Check goal — look for contradictory goal labels
   if (constraints.primaryGoal) {
     const programText = `${program.programName} ${program.description} ${program.splitType ?? ""}`.toLowerCase();
@@ -3427,7 +3468,12 @@ DENSITY RULE — NON-NEGOTIABLE:
       focusMode: focusMode ?? null,
     });
     // Apply variation mandate enforcement to the fallback program (same guardrail as the OpenAI path).
-    if (isBuildIntent && fallbackResult.structuredData && lockedExerciseSelections) {
+    if (
+      isBuildIntent &&
+      fallbackResult.structuredData &&
+      lockedExerciseSelections &&
+      !hasRestrictedEquipmentConstraint(extractedConstraints?.equipment)
+    ) {
       const enforced = enforceVariationMandateOnProgram(fallbackResult.structuredData as unknown as Parameters<typeof enforceVariationMandateOnProgram>[0], lockedExerciseSelections);
       if (enforced && (enforced as unknown) !== (fallbackResult.structuredData as unknown)) {
         if (process.env.NODE_ENV !== "production") {
@@ -3435,16 +3481,45 @@ DENSITY RULE — NON-NEGOTIABLE:
           const post = (enforced as unknown as typeof fallbackResult.structuredData).days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
           console.log("[BuildAudit:PostEnforcement]", JSON.stringify({ enforcementApplied: true, path: "fallback", day1Before: pre, day1After: post }));
         }
-        return { ...fallbackResult, structuredData: enforced as unknown as typeof fallbackResult.structuredData };
+        fallbackResult.structuredData = enforced as unknown as typeof fallbackResult.structuredData;
       } else if (process.env.NODE_ENV !== "production") {
         const day1 = fallbackResult.structuredData.days?.[0]?.exercises?.map((e: { name: string }) => e.name) ?? [];
         console.log("[BuildAudit:PostEnforcement]", JSON.stringify({ enforcementApplied: false, path: "fallback", reason: "no_prohibited_defaults_found", day1 }));
       }
     }
-    return fallbackResult;
+    if (isBuildIntent && fallbackResult.structuredData && extractedConstraints?.equipment) {
+      const equipmentRepaired = repairProgramEquipmentConstraints(
+        fallbackResult.structuredData,
+        extractedConstraints.equipment,
+      );
+      // Preserve the original candidate when deterministic repair cannot find
+      // a canonical replacement. The shared validator below will reject that
+      // artifact as a hard-constraint failure; nulling it here would disguise
+      // the unsafe build as a successful text-only turn and charge quota.
+      if (equipmentRepaired) fallbackResult.structuredData = equipmentRepaired;
+    }
+    return {
+      ...fallbackResult,
+      generationProvenance: {
+        provider: "local_fallback",
+        modelId: "deterministic-local-fallback",
+        promptVersion: PROGRAM_PROMPT_VERSION,
+        schemaVersion: PROGRAM_OUTPUT_SCHEMA_VERSION,
+        providerRequestId: null,
+        generatedAt: new Date().toISOString(),
+        validationVerdict: fallbackResult.structuredData ? "passed" : "failed",
+        constraintValidationVerdict: "pending",
+        attemptCount: 1,
+        fallbackUsed: true,
+        tokenUsage: null,
+      },
+    };
   }
 
   // ── Helper: single AI call ────────────────────────────────────────────────
+  let providerAttemptCount = 0;
+  let providerRequestId: string | null = null;
+  let providerUsage: GenerationProvenance["tokenUsage"] = null;
   const callOpenAI = async (
     msgs: { role: "system" | "user" | "assistant"; content: string }[],
     maxTok: number,
@@ -3458,10 +3533,22 @@ DENSITY RULE — NON-NEGOTIABLE:
     const _ctrl = new AbortController();
     const _timeoutId = setTimeout(() => _ctrl.abort(), 25_000);
     try {
+      providerAttemptCount++;
       const resp = await fetch(`${openAIBaseUrl}/chat/completions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: OPENAI_MODELS.CORE, messages: msgs, max_tokens: maxTok, temperature: 0.6 }),
+        body: JSON.stringify({
+          model: OPENAI_MODELS.CORE,
+          messages: msgs,
+          max_tokens: maxTok,
+          temperature: isBuildIntent ? 0 : 0.6,
+          ...(isBuildIntent ? {
+            response_format: {
+              type: "json_schema",
+              json_schema: OPENAI_PROGRAM_JSON_SCHEMA,
+            },
+          } : {}),
+        }),
         signal: _ctrl.signal,
       });
       clearTimeout(_timeoutId);
@@ -3477,10 +3564,29 @@ DENSITY RULE — NON-NEGOTIABLE:
         }
         throw new Error(`OpenAI API error ${resp.status}: ${errText}`);
       }
-      const data = (await resp.json()) as { choices: { message: { content: string } }[] };
+      const data = (await resp.json()) as {
+        id?: string;
+        choices: { message: { content: string } }[];
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      };
+      providerRequestId = data.id ?? providerRequestId;
+      if (data.usage && [data.usage.prompt_tokens, data.usage.completion_tokens, data.usage.total_tokens].every(Number.isFinite)) {
+        providerUsage = {
+          promptTokens: (providerUsage?.promptTokens ?? 0) + data.usage.prompt_tokens!,
+          completionTokens: (providerUsage?.completionTokens ?? 0) + data.usage.completion_tokens!,
+          totalTokens: (providerUsage?.totalTokens ?? 0) + data.usage.total_tokens!,
+        };
+      }
       const rawContent = data.choices[0]?.message?.content ?? "I'm unable to respond right now.";
       const openAIMs = Date.now() - t0;
       const result = extractStructuredData(rawContent);
+      if (isBuildIntent && result.structuredData) {
+        const providerValidation = validateProviderProgramOutput(result.structuredData);
+        if (!providerValidation.valid) {
+          logger.warn({ issues: providerValidation.issues }, "[StructuredOutput] Provider program rejected by canonical contract");
+          return { cleanContent: rawContent, structuredData: null, openAIMs };
+        }
+      }
       return { ...result, openAIMs };
     } catch (fetchErr) {
       clearTimeout(_timeoutId);
@@ -5181,7 +5287,23 @@ Output the corrected program JSON and a brief calm confirmation.`;
       "[BuildLatencyAudit] generateAIResponse completed"
     );
 
-    return { content: cleanContent, structuredData };
+    return {
+      content: cleanContent,
+      structuredData,
+      generationProvenance: {
+        provider: "openai",
+        modelId: OPENAI_MODELS.CORE,
+        promptVersion: PROGRAM_PROMPT_VERSION,
+        schemaVersion: PROGRAM_OUTPUT_SCHEMA_VERSION,
+        providerRequestId,
+        generatedAt: new Date().toISOString(),
+        validationVerdict: structuredData ? "passed" : "failed",
+        constraintValidationVerdict: "pending",
+        attemptCount: providerAttemptCount,
+        fallbackUsed: false,
+        tokenUsage: providerUsage,
+      },
+    };
   } catch (error) {
     const errMessage = error instanceof Error ? error.message : String(error);
     logger.error(

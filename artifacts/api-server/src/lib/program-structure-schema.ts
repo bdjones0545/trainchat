@@ -27,6 +27,97 @@
 
 import { z } from "zod/v4";
 
+export const PROGRAM_OUTPUT_SCHEMA_VERSION = "trainchat.program.v1";
+export const PROGRAM_PROMPT_VERSION = "coach-atlas-program-2026-08-20";
+
+/**
+ * Provider-facing contract. Unlike the decorated persistence shape below, this
+ * is strict and requires an executable prescription for every generated
+ * exercise. Internal metadata is attached only after this boundary passes.
+ */
+export const ProviderProgramOutputSchema = z.strictObject({
+  programName: z.string().min(1),
+  description: z.string().min(1),
+  progressionStrategy: z.string().min(1),
+  splitType: z.string().min(1),
+  days: z.array(z.strictObject({
+    dayNumber: z.number().int().positive(),
+    name: z.string().min(1),
+    focus: z.string().min(1),
+    exercises: z.array(z.strictObject({
+      name: z.string().min(1),
+      classification: z.string().min(1),
+      sets: z.number().int().positive(),
+      reps: z.string().min(1),
+      rest: z.string().min(1),
+      intent: z.string().min(1),
+      notes: z.string().min(1),
+    })),
+    notes: z.string().min(1),
+  })).min(1),
+});
+
+export const OPENAI_PROGRAM_JSON_SCHEMA = {
+  name: "trainchat_program",
+  strict: true,
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["programName", "description", "progressionStrategy", "splitType", "days"],
+    properties: {
+      programName: { type: "string", minLength: 1 },
+      description: { type: "string", minLength: 1 },
+      progressionStrategy: { type: "string", minLength: 1 },
+      splitType: { type: "string", minLength: 1 },
+      days: {
+        type: "array",
+        minItems: 1,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["dayNumber", "name", "focus", "exercises", "notes"],
+          properties: {
+            dayNumber: { type: "integer", minimum: 1 },
+            name: { type: "string", minLength: 1 },
+            focus: { type: "string", minLength: 1 },
+            exercises: {
+              type: "array",
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["name", "classification", "sets", "reps", "rest", "intent", "notes"],
+                properties: {
+                  name: { type: "string", minLength: 1 },
+                  classification: { type: "string", minLength: 1 },
+                  sets: { type: "integer", minimum: 1 },
+                  reps: { type: "string", minLength: 1 },
+                  rest: { type: "string", minLength: 1 },
+                  intent: { type: "string", minLength: 1 },
+                  notes: { type: "string", minLength: 1 },
+                },
+              },
+            },
+            notes: { type: "string", minLength: 1 },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
+export function validateProviderProgramOutput(candidate: unknown): ProgramStructureValidation {
+  const result = ProviderProgramOutputSchema.safeParse(candidate);
+  if (result.success && result.data.days.some((day) => day.exercises.length > 0)) {
+    return { valid: true };
+  }
+  if (result.success) return { valid: false, issues: ["days: program has no executable exercises"] };
+  return {
+    valid: false,
+    issues: result.error.issues.slice(0, 10)
+      .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`),
+  };
+}
+
 export const ExerciseSchema = z.looseObject({
   name: z.string().min(1),
   classification: z.string().optional(),
