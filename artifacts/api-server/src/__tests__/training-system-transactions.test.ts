@@ -81,6 +81,7 @@ vi.mock("../lib/coach-select", () => ({
 }));
 
 vi.mock("../lib/training-intelligence", () => ({
+  EXERCISE_LIBRARY: [],
   detectInjuryFlags: vi.fn(() => []),
   normalizeExperience: vi.fn(() => "intermediate"),
 }));

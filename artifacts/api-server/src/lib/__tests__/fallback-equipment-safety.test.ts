@@ -3,9 +3,11 @@ import type { ProgramStructure } from "../ai";
 import { validateProgramAgainstConstraints } from "../ai";
 import { resolveGenerationAttempts } from "../generation-safety";
 import {
+  auditCanonicalExerciseEquipment,
   repairProgramEquipmentConstraints,
   validateProgramEquipmentConstraints,
 } from "../program-equipment-safety";
+import { enforcePersistedExerciseEquipmentBoundary } from "../training-system-service";
 import type { ExtractedConstraints } from "../intent";
 import { validatePainConstraints } from "../constraint-memory";
 import { classifyConversationOutcome } from "../../services/conversation-execution-service";
@@ -90,6 +92,84 @@ describe("deterministic fallback equipment boundary", () => {
   it("fails closed for unknown non-prep exercises under a restricted mode", () => {
     expect(validateProgramEquipmentConstraints(program(["Imaginary Quantum Rack Pull"]), "only dumbbells"))
       .toEqual([expect.objectContaining({ exerciseName: "Imaginary Quantum Rack Pull" })]);
+  });
+
+  it("does not let an unknown exercise bypass restricted validation by claiming Prep", () => {
+    const candidate = program(["Imaginary Prep Apparatus"]);
+    candidate.days[0].exercises[0].classification = "Prep";
+    expect(validateProgramEquipmentConstraints(candidate, "only dumbbells"))
+      .toEqual([expect.objectContaining({ exerciseName: "Imaginary Prep Apparatus" })]);
+  });
+
+  it("canonically resolves every component of an equipment-free composite prep row", () => {
+    const audit = auditCanonicalExerciseEquipment(
+      "Leg Swing + Inchworm + Hip Circle",
+      "only dumbbells",
+    );
+    expect(audit).toMatchObject({
+      resolution: "composite",
+      compatible: true,
+      canonicalNames: ["Leg Swing", "Inchworm", "Hip Circle"],
+      canonicalEquipment: ["bodyweight"],
+    });
+    expect(validateProgramEquipmentConstraints(
+      program(["Leg Swing + Inchworm + Hip Circle"]),
+      "only dumbbells",
+    )).toEqual([]);
+  });
+
+  it.each([
+    ["Pendlay Row", "barbell"],
+    ["Dynamic Effort Squat", "barbell"],
+    ["Ab Wheel", "ab_wheel"],
+    ["Ab Wheel Rollout", "ab_wheel"],
+  ])("classifies %s with its required canonical equipment", (name, equipment) => {
+    const audit = auditCanonicalExerciseEquipment(name, "only dumbbells");
+    expect(audit.compatible).toBe(false);
+    expect(audit.canonicalEquipment).toContain(equipment);
+    expect(validateProgramEquipmentConstraints(program([name]), "only dumbbells"))
+      .toHaveLength(1);
+  });
+
+  it("uses the generation boundary again after persistence-time variation", () => {
+    const source = program([
+      "Leg Swing + Inchworm + Hip Circle",
+      "Dynamic Effort Squat",
+      "Pendlay Row",
+      "Ab Wheel",
+    ]);
+    const persisted = enforcePersistedExerciseEquipmentBoundary(
+      source,
+      source.days[0].exercises,
+      "only dumbbells",
+    );
+    const persistedProgram = { ...source, days: [{ ...source.days[0], exercises: persisted }] };
+
+    expect(validateProgramEquipmentConstraints(persistedProgram, "only dumbbells"))
+      .toEqual([]);
+    expect(persisted.map((exercise) => exercise.name)).toContain(
+      "Leg Swing + Inchworm + Hip Circle",
+    );
+    expect(persisted.map((exercise) => exercise.name)).not.toEqual(
+      expect.arrayContaining(["Dynamic Effort Squat", "Pendlay Row", "Ab Wheel"]),
+    );
+    for (const exercise of persisted) {
+      expect(auditCanonicalExerciseEquipment(exercise.name, "only dumbbells").compatible)
+        .toBe(true);
+    }
+  });
+
+  it("keeps canonical audit and validator decisions aligned across restricted modes", () => {
+    for (const [mode, names] of [
+      ["bodyweight", ["Push-Up", "Dead Bug", "Inchworm"]],
+      ["home gym", ["Goblet Squat", "Band Pull-Apart", "Inchworm"]],
+      ["only dumbbells", ["Goblet Squat", "Dumbbell Row", "Hip Circle"]],
+    ] as const) {
+      expect(validateProgramEquipmentConstraints(program([...names]), mode)).toEqual([]);
+      for (const name of names) {
+        expect(auditCanonicalExerciseEquipment(name, mode).compatible).toBe(true);
+      }
+    }
   });
 
   it("routes equipment issues through the canonical extracted-constraint validator", () => {
