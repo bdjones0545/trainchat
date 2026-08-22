@@ -99,6 +99,15 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
     ...(data.sessionDuration !== undefined ? { sessionDuration: data.sessionDuration } : {}),
     ...(data.sportFocus !== undefined ? { sportFocus: data.sportFocus } : {}),
     ...(data.exercisesToAvoid !== undefined ? { exercisesToAvoid: data.exercisesToAvoid } : {}),
+    ...(data.yearsTraining !== undefined ? { yearsTraining: data.yearsTraining } : {}),
+    ...(data.scheduleConsistency !== undefined ? { scheduleConsistency: data.scheduleConsistency } : {}),
+    ...(data.recoveryConsistency !== undefined ? { recoveryConsistency: data.recoveryConsistency } : {}),
+    ...(data.coachingStylePreference !== undefined ? { coachingStylePreference: data.coachingStylePreference } : {}),
+    ...(data.autoregulationComfort !== undefined ? { autoregulationComfort: data.autoregulationComfort } : {}),
+    ...(data.motivationStyle !== undefined ? { motivationStyle: data.motivationStyle } : {}),
+    ...(data.confidenceUnderFatigue !== undefined ? { confidenceUnderFatigue: data.confidenceUnderFatigue } : {}),
+    ...(data.trainingAggression !== undefined ? { trainingAggression: data.trainingAggression } : {}),
+    ...(data.exerciseConfidence !== undefined ? { exerciseConfidence: data.exerciseConfidence } : {}),
   });
   if (!profileFields.success) {
     res.status(400).json({
@@ -139,7 +148,7 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
     };
 
     if (profileFields.data.experienceLevel) updatePayload.experienceLevel = profileFields.data.experienceLevel;
-    if (data.yearsTraining != null) updatePayload.yearsTraining = data.yearsTraining;
+    if (profileFields.data.yearsTraining != null) updatePayload.yearsTraining = profileFields.data.yearsTraining;
     if (profileFields.data.primaryGoal) updatePayload.trainingGoal = profileFields.data.primaryGoal;
     if (profileFields.data.injuries !== undefined) updatePayload.injuries = profileFields.data.injuries;
     if (profileFields.data.equipmentAccess) updatePayload.equipmentAccess = profileFields.data.equipmentAccess;
@@ -149,14 +158,14 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
     if (profileFields.data.exercisesToAvoid !== undefined) updatePayload.exercisesToAvoid = profileFields.data.exercisesToAvoid;
 
     // Behavioral fields (T005)
-    if (data.scheduleConsistency) updatePayload.scheduleConsistency = data.scheduleConsistency;
-    if (data.recoveryConsistency) updatePayload.recoveryConsistency = data.recoveryConsistency;
-    if (data.coachingStylePreference) updatePayload.coachingStylePreference = data.coachingStylePreference;
-    if (data.autoregulationComfort) updatePayload.autoregulationComfort = data.autoregulationComfort;
-    if (data.motivationStyle) updatePayload.motivationStyle = data.motivationStyle;
-    if (data.confidenceUnderFatigue) updatePayload.confidenceUnderFatigue = data.confidenceUnderFatigue;
-    if (data.trainingAggression) updatePayload.trainingAggression = data.trainingAggression;
-    if (data.exerciseConfidence) updatePayload.exerciseConfidence = data.exerciseConfidence;
+    if (profileFields.data.scheduleConsistency) updatePayload.scheduleConsistency = profileFields.data.scheduleConsistency;
+    if (profileFields.data.recoveryConsistency) updatePayload.recoveryConsistency = profileFields.data.recoveryConsistency;
+    if (profileFields.data.coachingStylePreference) updatePayload.coachingStylePreference = profileFields.data.coachingStylePreference;
+    if (profileFields.data.autoregulationComfort) updatePayload.autoregulationComfort = profileFields.data.autoregulationComfort;
+    if (profileFields.data.motivationStyle) updatePayload.motivationStyle = profileFields.data.motivationStyle;
+    if (profileFields.data.confidenceUnderFatigue) updatePayload.confidenceUnderFatigue = profileFields.data.confidenceUnderFatigue;
+    if (profileFields.data.trainingAggression) updatePayload.trainingAggression = profileFields.data.trainingAggression;
+    if (profileFields.data.exerciseConfidence) updatePayload.exerciseConfidence = profileFields.data.exerciseConfidence;
 
     // ── Upsert profile ───────────────────────────────────────────────────────
     const existing = await db
@@ -203,19 +212,19 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
         injuries: profileFields.data.injuries ?? null,
         sportFocus: profileFields.data.sportFocus ?? null,
         exercisesToAvoid: profileFields.data.exercisesToAvoid ?? null,
-        yearsTraining: data.yearsTraining ?? null,
+        yearsTraining: profileFields.data.yearsTraining ?? null,
         calibrationScore: precision.score,
         coachingPrecisionScore: precision.score,
         athleteDNA: dna as any,
         coachingPrecisionHistory: [newHistoryEntry] as any,
-        scheduleConsistency: data.scheduleConsistency ?? null,
-        recoveryConsistency: data.recoveryConsistency ?? null,
-        coachingStylePreference: data.coachingStylePreference ?? null,
-        autoregulationComfort: data.autoregulationComfort ?? null,
-        motivationStyle: data.motivationStyle ?? null,
-        confidenceUnderFatigue: data.confidenceUnderFatigue ?? null,
-        trainingAggression: data.trainingAggression ?? null,
-        exerciseConfidence: data.exerciseConfidence ?? null,
+        scheduleConsistency: profileFields.data.scheduleConsistency ?? null,
+        recoveryConsistency: profileFields.data.recoveryConsistency ?? null,
+        coachingStylePreference: profileFields.data.coachingStylePreference ?? null,
+        autoregulationComfort: profileFields.data.autoregulationComfort ?? null,
+        motivationStyle: profileFields.data.motivationStyle ?? null,
+        confidenceUnderFatigue: profileFields.data.confidenceUnderFatigue ?? null,
+        trainingAggression: profileFields.data.trainingAggression ?? null,
+        exerciseConfidence: profileFields.data.exerciseConfidence ?? null,
       });
     }
 

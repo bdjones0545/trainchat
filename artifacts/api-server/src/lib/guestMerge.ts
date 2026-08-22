@@ -32,12 +32,12 @@ const STYLE_TO_DURATION: Record<string, number> = {
 
 const GUEST_GOAL_ALIASES: Record<string, string> = {
   "general fitness": "general_fitness",
-  "build muscle": "hypertrophy",
-  "muscle gain": "hypertrophy",
+  "build muscle": "muscle_gain",
+  "muscle gain": "muscle_gain",
   strength: "strength",
   "fat loss": "fat_loss",
   endurance: "endurance",
-  "athletic performance": "athletic_performance",
+  "athletic performance": "sport_performance",
 };
 
 /**

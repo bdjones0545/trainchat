@@ -8,6 +8,7 @@ export const DAYS_PER_WEEK = [2, 3, 4, 5, 6] as const;
 export const SESSION_DURATIONS = [30, 45, 60, 75, 90] as const;
 
 const boundedOptionalText = z.string().trim().max(1000).nullable().optional();
+const boundedCalibrationText = z.string().trim().min(1).max(1000).optional();
 
 export const profileSettingsSchema = z.object({
   trainingGoal: z.enum(TRAINING_GOALS),
@@ -35,6 +36,15 @@ export const calibrationProfileFieldsSchema = z.object({
   sessionDuration: z.number().int().refine((v) => (SESSION_DURATIONS as readonly number[]).includes(v), "must be one of 30, 45, 60, 75, 90").optional(),
   sportFocus: boundedOptionalText,
   exercisesToAvoid: boundedOptionalText,
+  yearsTraining: z.number().int().min(0).max(100).optional(),
+  scheduleConsistency: boundedCalibrationText,
+  recoveryConsistency: boundedCalibrationText,
+  coachingStylePreference: boundedCalibrationText,
+  autoregulationComfort: boundedCalibrationText,
+  motivationStyle: boundedCalibrationText,
+  confidenceUnderFatigue: boundedCalibrationText,
+  trainingAggression: boundedCalibrationText,
+  exerciseConfidence: boundedCalibrationText,
 }).strict();
 
 export const coachSettingsSchema = z.object({

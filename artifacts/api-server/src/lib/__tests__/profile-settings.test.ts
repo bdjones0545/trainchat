@@ -56,6 +56,8 @@ describe("canonical profile validation", () => {
     ["experienceLevel", "wizard"],
     ["sessionDuration", 42],
     ["injuries", "x".repeat(1001)],
+    ["yearsTraining", -1],
+    ["scheduleConsistency", "x".repeat(1001)],
   ])("rejects an invalid calibration %s before persistence", (field, value) => {
     expect(calibrationProfileFieldsSchema.safeParse({ [field]: value }).success).toBe(false);
   });

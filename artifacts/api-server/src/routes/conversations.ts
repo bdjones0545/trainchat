@@ -2998,6 +2998,7 @@ async function executeCanonicalConversation(
         focusMode: nonStreamFocusMode,
         intentType: intentResult.type,
         editSubtype: intentResult.editSubtype ?? null,
+        resolvesProfileReview: execPlan.action === "REBUILD_PROGRAM",
         requestText: parsed.data.content,
         extractedConstraints: extractedConstraints ?? null,
       });
@@ -5324,6 +5325,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         focusMode: streamFocusMode,
         intentType: intentResult.type,
         editSubtype: intentResult.editSubtype ?? null,
+        resolvesProfileReview: execPlan.action === "REBUILD_PROGRAM",
         requestText: parsed.data.content,
         extractedConstraints: extractedConstraints ?? null,
         kevinContext: _sseKevinContext,

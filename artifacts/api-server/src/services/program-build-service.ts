@@ -53,6 +53,8 @@ export interface SaveProgramParams {
   intentType: string;
   /** editSubtype from the intent result — used for change log intent on update paths. */
   editSubtype?: string | null;
+  /** A planner-confirmed full rebuild that can resolve profile review state. */
+  resolvesProfileReview?: boolean;
   requestText: string;
   extractedConstraints?: SaveProgramConstraints | null;
   /**
@@ -139,6 +141,7 @@ export async function saveOrUpdateProgram(
     focusMode,
     intentType,
     editSubtype,
+    resolvesProfileReview = false,
     requestText,
     extractedConstraints,
   } = params;
@@ -180,6 +183,7 @@ export async function saveOrUpdateProgram(
       focusMode,
       conversationId,
       extractedConstraints?.equipment,
+      { resolvesProfileReview },
     );
     system = result.system as { id: number; [key: string]: unknown };
     isUpdate = result.isUpdate;

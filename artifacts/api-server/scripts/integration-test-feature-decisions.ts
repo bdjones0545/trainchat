@@ -49,12 +49,19 @@ async function main() {
   app.use(profileRouter);
 
   try {
+    const resolvedDefault = await resolveAgentSettingsContext(user.id, coachSettings);
+    check(
+      resolvedDefault.behavior.coachingStyle === "supportive"
+        && resolvedDefault.behavior.autoAdjustRecommendations === true,
+      "an account without saved settings uses server defaults instead of client cache",
+    );
+
     let response = await request(app).put("/profile/coach-settings").send(coachSettings);
     check(response.status === 200, "coaching settings persist through the authenticated API");
     response = await request(app).get("/profile/coach-settings");
     check(JSON.stringify(response.body) === JSON.stringify(coachSettings), "a fresh client restores server-authoritative coaching settings");
-    const resolved = await resolveAgentSettingsContext(user.id, { ...coachSettings, coachingStyle: "supportive" });
-    check(resolved.behavior.coachingStyle === "analytical", "AI routing consumes server-authoritative coaching settings over stale client cache");
+    const resolvedSaved = await resolveAgentSettingsContext(user.id, { ...coachSettings, coachingStyle: "supportive" });
+    check(resolvedSaved.behavior.coachingStyle === "analytical", "AI routing consumes server-authoritative coaching settings over stale client cache");
 
     response = await request(app).post("/profile").send({ ...baseProfile, exercisePreferences: "front squat", exercisesToAvoid: "back squat" });
     check(response.status === 200, "canonical profile values are accepted");

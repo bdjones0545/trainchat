@@ -335,6 +335,47 @@ describe("transactional program generation (DR-0006)", () => {
     expect(events).toContain("tx-commit");
   });
 
+  it("preserves a profile-review warning for an ordinary program edit", async () => {
+    resetState({
+      activeSystems: [{ id: 7, status: "active", metadata: { focusMode: "speed" }, needsReview: true }],
+      txPhases: [{ id: 71 }],
+    });
+
+    await upsertTrainingSystemFromProgram(1, program, "speed", null);
+
+    const systemUpdate = ops.find(
+      (operation) => operation.kind === "update" && operation.table === "trainingSystems"
+        && operation.values?.name === program.programName,
+    );
+    expect(systemUpdate?.values?.needsReview).toBeUndefined();
+  });
+
+  it("clears review metadata only for an explicit compatible reconciliation", async () => {
+    resetState({
+      activeSystems: [{ id: 7, status: "active", metadata: { focusMode: "speed" }, needsReview: true }],
+      txPhases: [{ id: 71 }],
+    });
+
+    await upsertTrainingSystemFromProgram(
+      1,
+      program,
+      "speed",
+      null,
+      null,
+      { resolvesProfileReview: true },
+    );
+
+    const systemUpdate = ops.find(
+      (operation) => operation.kind === "update" && operation.table === "trainingSystems"
+        && operation.values?.name === program.programName,
+    );
+    expect(systemUpdate?.values).toMatchObject({
+      needsReview: false,
+      reviewReasons: null,
+      markedNeedsReviewAt: null,
+    });
+  });
+
   // ── TC-05 ──────────────────────────────────────────────────────────────────
   it("TC-05: upsert failure after the phase delete rolls back — the program is never destroyed", async () => {
     resetState({

@@ -2062,6 +2062,7 @@ export async function upsertTrainingSystemFromProgram(
   focusMode?: string | null,
   conversationId?: number | null,
   rawEquipment?: string | null,
+  options?: { resolvesProfileReview?: boolean },
 ): Promise<{ system: typeof trainingSystems.$inferSelect; isUpdate: boolean }> {
   if (!program.days || !Array.isArray(program.days) || program.days.length === 0) {
     throw new Error("Program must have at least one training day");
@@ -2145,12 +2146,14 @@ export async function upsertTrainingSystemFromProgram(
           intensityProfile: program.blockMetadata.intensityProfile,
         } : {}),
       } as any,
-      // A fully validated rebuild is the only successful resolution for a
-      // profile-review state. Because this write shares the hierarchy rebuild
-      // transaction, a failed or rolled-back regeneration retains the warning.
-      needsReview: false,
-      reviewReasons: null,
-      markedNeedsReviewAt: null,
+      // Only an explicit, compatible rebuild/reconciliation may clear a review
+      // state. Ordinary edits must retain it so new constraints cannot be
+      // dismissed by an unrelated change.
+      ...(options?.resolvesProfileReview ? {
+        needsReview: false,
+        reviewReasons: null,
+        markedNeedsReviewAt: null,
+      } : {}),
     })
     .where(eq(trainingSystems.id, existingSystem.id));
 

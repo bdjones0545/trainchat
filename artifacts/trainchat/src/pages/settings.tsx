@@ -106,7 +106,9 @@ function lsBool(key: string, defaultTrue = false): boolean {
 function lsSet(key: string, value: string | boolean) {
   try { localStorage.setItem(key, String(value)); } catch {}
   if (key.startsWith("coach_")) {
-    void persistCoachSettings();
+    window.dispatchEvent(new CustomEvent("trainchat:coach-settings-changed", {
+      detail: readCoachSettingsCache(),
+    }));
   }
 }
 
@@ -125,28 +127,6 @@ function readCoachSettingsCache() {
     adaptFromMissedSessions: localStorage.getItem("coach_missed_adapt") !== "false",
   };
 }
-
-async function persistCoachSettings() {
-  const snapshot = readCoachSettingsCache();
-  coachSettingsSaveQueue = coachSettingsSaveQueue
-    .catch(() => undefined)
-    .then(async () => {
-  const response = await fetch("/api/profile/coach-settings", {
-    method: "PUT",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(snapshot),
-  });
-  if (!response.ok) throw new Error("Failed to persist coaching settings");
-    });
-  return coachSettingsSaveQueue;
-}
-
-/**
- * Explicit selections are committed in order. Hydration bypasses lsSet(), so a
- * stale cache copied from the server can never trigger a write back to it.
- */
-let coachSettingsSaveQueue: Promise<void> = Promise.resolve();
 
 function cacheCoachSettings(settings: Record<string, unknown>) {
   const mapping: Record<string, string> = {
@@ -1527,6 +1507,46 @@ export default function SettingsPage() {
 
   const { data: me, isLoading: isMeLoading } = useGetMe();
   const isAnonymousUser = !!(me as any)?.isAnonymous;
+  const authenticatedAccountId = !isAnonymousUser && typeof (me as any)?.id === "number"
+    ? (me as any).id as number
+    : null;
+  const coachSettingsSaveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  useEffect(() => {
+    if (authenticatedAccountId == null) return;
+    let accountIsCurrent = true;
+    const persist = (event: Event) => {
+      const snapshot = (event as CustomEvent<Record<string, unknown>>).detail;
+      const queuedSave = coachSettingsSaveQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          // A save queued before logout or an account switch must never use the
+          // later session cookie to update a different account.
+          if (!accountIsCurrent) return;
+          const response = await fetch("/api/profile/coach-settings", {
+            method: "PUT",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(snapshot),
+          });
+          if (!response.ok) throw new Error("Failed to persist coaching settings");
+        });
+      coachSettingsSaveQueueRef.current = queuedSave;
+      void queuedSave.catch(() => {
+        if (accountIsCurrent) {
+          toast({
+            title: "Coaching settings could not be saved",
+            description: "Your account keeps its last saved settings. Please try again.",
+            variant: "destructive",
+          });
+        }
+      });
+    };
+    window.addEventListener("trainchat:coach-settings-changed", persist);
+    return () => {
+      accountIsCurrent = false;
+      window.removeEventListener("trainchat:coach-settings-changed", persist);
+    };
+  }, [authenticatedAccountId, toast]);
   const shouldLoadAccountCoachSettings = !isMeLoading && !!me && !isAnonymousUser;
   const {
     data: coachSettings,

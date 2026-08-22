@@ -78,7 +78,7 @@ runtime verification in Replit in addition to passing unit tests.
 
 | Script | Location | Cases | Requires |
 |---|---|---|---|
-| `integration-test-dr0025.ts` | `artifacts/api-server/scripts/` | 61 assertions | Explicit disposable DB (`TEST_DATABASE_URL`) |
+| `integration-test-dr0025.ts` | `artifacts/api-server/scripts/` | 62 assertions | Explicit disposable DB (`TEST_DATABASE_URL`) |
 
 ### Runtime verification scripts (live server required)
 
@@ -179,7 +179,7 @@ pnpm --filter @workspace/api-server test && pnpm --filter @workspace/trainchat t
 TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
 ```
 
-Expected: 61 assertions pass, exit code 0. Creates and cleans up test users automatically.
+Expected: 62 assertions pass, exit code 0. Creates and cleans up test users automatically.
 
 ### TypeScript typecheck
 
@@ -402,7 +402,7 @@ pnpm --filter @workspace/api-server exec vitest run src/__tests__/anonymousMerge
 
 ```bash
 TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
-# Expected: 61 assertions pass, 0 failed
+# Expected: 62 assertions pass, 0 failed
 ```
 
 This test covers 5 scenarios against the live database:
@@ -651,7 +651,7 @@ to `main` should not proceed while CI is red. CI covers:
 
 ### Required for DB-touching changes
 
-- [ ] `TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts` — 61 assertions pass
+- [ ] `TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts` — 62 assertions pass
 
 ### Required for auth changes
 

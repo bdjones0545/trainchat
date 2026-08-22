@@ -142,8 +142,8 @@ export interface AgentSettingsContext {
  * Resolves the full AgentSettingsContext for a user on every request.
  *
  * @param userId - The authenticated user's ID
- * @param clientSettings - Behavior settings sent from the client (from localStorage).
- *                         Partial — defaults are applied for missing fields.
+ * @param clientSettings - Retained for anonymous-call compatibility at the
+ *                         boundary. Authenticated account behavior never trusts it.
  */
 export async function resolveAgentSettingsContext(
   userId: number,
@@ -171,11 +171,11 @@ export async function resolveAgentSettingsContext(
   const profileLoaded = profileRow !== null;
 
   // ── 2. Merge behavior settings ──────────────────────────────────────────────
-  // Persisted account settings are authoritative. Client values only seed
-  // behavior for accounts that have never saved server settings.
+  // Server defaults and persisted account settings are authoritative. An
+  // authenticated request must not allow a stale or crafted browser payload to
+  // control coaching behavior or mutation permission.
   const behaviorSettings: CoachBehaviorSettings = {
     ...DEFAULT_COACH_SETTINGS,
-    ...(clientSettings ?? {}),
     ...(persistedBehavior ?? {}),
   };
 
@@ -202,7 +202,7 @@ export async function resolveAgentSettingsContext(
     training,
     source: {
       profileLoaded,
-      settingsFromClient: persistedBehavior == null && clientSettings != null,
+      settingsFromClient: false,
       profileId: profileRow?.id ?? null,
     },
   };
