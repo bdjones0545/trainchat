@@ -22,6 +22,7 @@ import {
 } from "@workspace/db";
 import { eq, desc } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { requireAdmin } from "../middlewares/admin";
 import { getKevinConfig } from "../lib/kevin-config";
 import { getKevinCircuitStatus } from "../lib/kevin-circuit-breaker";
 import { getAllKevinCapabilities } from "../lib/kevin-capability-service";
@@ -35,31 +36,6 @@ import { checkKevinHealth, KevinError } from "../lib/kevin-client";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean);
-
-async function requireAdmin(req: any, res: any, next: any): Promise<void> {
-  if (!req.session?.userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  if (ADMIN_EMAILS.length === 0) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  const [user] = await db
-    .select({ email: usersTable.email })
-    .from(usersTable)
-    .where(eq(usersTable.id, req.session.userId));
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-}
 
 // ─── GET /admin/kevin/status ──────────────────────────────────────────────────
 

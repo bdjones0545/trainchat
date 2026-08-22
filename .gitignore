@@ -38,6 +38,13 @@ yarn-error.log
 testem.log
 /typings
 
+# Local database backups and exports (versioned migrations remain tracked)
+/backups/*.sql
+/backups/*.sql.gz
+/backups/*.dump
+/backups/*.backup
+/backups/*.pgdump
+
 # System Files
 .DS_Store
 Thumbs.db

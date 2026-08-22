@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, usersTable, conversationsTable, messagesTable, savedProgramsTable, sessionLogsTable, coachingKnowledgeTable, researchDocumentsTable, researchChunksTable, researchDiscoveryRunsTable, researchPaperCandidatesTable } from "@workspace/db";
 import { eq, count, sql, gte, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { requireAdmin } from "../middlewares/admin";
 import { getFunnelMetrics, getRecentEvents } from "../lib/analyticsService";
 import {
   getLearningReport,
@@ -39,30 +40,6 @@ import {
 } from "../research/research-discovery-service";
 
 const router: IRouter = Router();
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "").split(",").map((e) => e.trim()).filter(Boolean);
-
-async function requireAdmin(req: any, res: any, next: any) {
-  if (!req.session?.userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  // An empty ADMIN_EMAILS list denies everyone. This prevents the misconfigured-
-  // environment footgun where an unset env var silently grants all users admin access.
-  if (ADMIN_EMAILS.length === 0) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  const [user] = await db
-    .select({ email: usersTable.email })
-    .from(usersTable)
-    .where(eq(usersTable.id, req.session.userId));
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-}
 
 /**
  * GET /api/admin/analytics
@@ -440,21 +417,10 @@ router.get("/admin/learning/events", requireAuth, requireAdmin, async (req, res)
 /**
  * POST /api/admin/seed-exercises
  * Seed or re-seed the exercise library.
- * Protected by X-Admin-Key header matching ADMIN_SECRET env var.
+ * Protected by authenticated account + explicit server-side admin allowlist.
  * Query params: force=true to re-seed even if library already has data.
  */
-router.post("/admin/seed-exercises", async (req, res): Promise<void> => {
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret) {
-    res.status(503).json({ error: "Admin secret not configured" });
-    return;
-  }
-  const providedKey = req.headers["x-admin-key"];
-  if (providedKey !== adminSecret) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
+router.post("/admin/seed-exercises", requireAuth, requireAdmin, async (req, res): Promise<void> => {
   const force = req.query.force === "true";
 
   try {
@@ -474,21 +440,10 @@ router.post("/admin/seed-exercises", async (req, res): Promise<void> => {
 /**
  * POST /api/admin/users/set-plan
  * Directly set a user's plan for testing/admin purposes.
- * Protected by X-Admin-Key header matching ADMIN_SECRET env var.
+ * Protected by authenticated account + explicit server-side admin allowlist.
  * Body: { email: string, plan: "free"|"starter"|"pro"|"elite", planStatus?: string }
  */
-router.post("/admin/users/set-plan", async (req, res): Promise<void> => {
-  const adminSecret = process.env.ADMIN_SECRET;
-  if (!adminSecret) {
-    res.status(503).json({ error: "Admin secret not configured" });
-    return;
-  }
-  const providedKey = req.headers["x-admin-key"];
-  if (providedKey !== adminSecret) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-
+router.post("/admin/users/set-plan", requireAuth, requireAdmin, async (req, res): Promise<void> => {
   const { email, plan, planStatus } = req.body ?? {};
   if (!email || !plan) {
     res.status(400).json({ error: "email and plan are required" });

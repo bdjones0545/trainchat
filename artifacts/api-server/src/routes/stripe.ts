@@ -3,8 +3,9 @@ import { requireAuth } from "../middlewares/auth";
 import { stripeService } from "../lib/stripeService";
 import { stripeStorage } from "../lib/stripeStorage";
 import { getUserPlanInfo, getPlanFeatures } from "../lib/planGating";
-import { detectPlanInterval } from "../lib/billingUtils";
 import { logger } from "../lib/logger";
+import { authorizeTrainChatCheckout, isApprovedTrainChatPrice, CheckoutAuthorizationError } from "../lib/checkout-security";
+import { getUncachableStripeClient } from "../lib/stripeClient";
 
 const router: IRouter = Router();
 
@@ -80,6 +81,13 @@ router.post("/subscription/checkout", requireAuth, async (req: any, res): Promis
       return;
     }
 
+    const stripe = await getUncachableStripeClient();
+    const price = await stripe.prices.retrieve(priceId);
+    if (!isApprovedTrainChatPrice(price)) {
+      res.status(400).json({ error: "Price is not an approved TrainChat subscription" });
+      return;
+    }
+
     // Create Stripe customer if not yet on file
     let customerId = user.stripeCustomerId;
     if (!customerId) {
@@ -131,80 +139,36 @@ router.post("/subscription/confirm", requireAuth, async (req: any, res): Promise
       return;
     }
 
-    const checkoutSession = await stripeService.getCheckoutSession(sessionId);
-    if (!checkoutSession.subscription) {
-      res.status(400).json({ error: "No subscription on checkout session" });
+    const user = await stripeStorage.getUser(userId);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
       return;
     }
+    const checkoutSession = await stripeService.getCheckoutSession(sessionId);
+    const { subscription: sub, price, customerId } = authorizeTrainChatCheckout(checkoutSession, user);
+    const periodEnd = sub.current_period_end
+      ? new Date(sub.current_period_end * 1000)
+      : new Date();
 
-    const sub =
-      typeof checkoutSession.subscription === "string"
-        ? null
-        : (checkoutSession.subscription as any);
-
-    const subscriptionId =
-      typeof checkoutSession.subscription === "string"
-        ? checkoutSession.subscription
-        : checkoutSession.subscription.id;
-
-    // If we got the expanded subscription object, sync immediately
-    if (sub && sub.id) {
-      const item = sub.items?.data?.[0];
-      const priceId: string = item?.price?.id ?? "";
-      const customerId: string =
-        typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? "";
-
-      if (priceId && customerId) {
-        // detectPlanInterval throws on unknown price IDs (misconfigured STRIPE_PRICE_* env vars).
-        // Fall back to a safe default (pro/monthly) + log so ops can investigate, but never
-        // block the user from getting their paid access confirmed.
-        let plan: "pro" = "pro";
-        let billingInterval: "monthly" | "yearly" = "monthly";
-        try {
-          const detected = detectPlanInterval(priceId);
-          plan = "pro"; // all paid price IDs resolve to pro
-          billingInterval = detected.billingInterval;
-        } catch (detectErr: any) {
-          logger.error(
-            { err: detectErr.message, priceId, userId },
-            "[StripeRouter] /subscription/confirm — detectPlanInterval failed for price. " +
-            "Falling back to pro/monthly. Check STRIPE_PRICE_* env vars."
-          );
-        }
-
-        const periodEnd = sub.current_period_end
-          ? new Date(sub.current_period_end * 1000)
-          : new Date();
-
-        await stripeStorage.syncUserSubscription(userId, {
-          stripeSubscriptionId: sub.id,
-          stripeCustomerId: customerId,
-          stripePriceId: priceId,
-          plan,
-          planStatus: sub.status === "active" ? "active" : sub.status,
-          billingInterval,
-          currentPeriodEnd: periodEnd,
-          cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
-          trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
-        });
-
-        const features = getPlanFeatures(plan);
-        res.json({ plan, features, subscriptionId });
-        return;
-      }
-    }
-
-    // Fallback: derive plan from StripeSync tables
-    const plan = await stripeStorage.getSubscriptionPlan(subscriptionId);
-    await stripeStorage.updateUserStripeInfo(userId, {
-      stripeSubscriptionId: subscriptionId,
-      plan,
-      planStatus: "active",
+    await stripeStorage.syncUserSubscription(userId, {
+      stripeSubscriptionId: sub.id!,
+      stripeCustomerId: customerId,
+      stripePriceId: price.id!,
+      plan: "pro",
+      planStatus: sub.status!,
+      billingInterval: "monthly",
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+      trialEnd: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
     });
 
-    const features = getPlanFeatures(plan);
-    res.json({ plan, features, subscriptionId });
+    res.json({ plan: "pro", features: getPlanFeatures("pro"), subscriptionId: sub.id });
   } catch (err: any) {
+    if (err instanceof CheckoutAuthorizationError) {
+      logger.warn({ userId: req.session.userId }, "[StripeRouter] Checkout confirmation rejected");
+      res.status(403).json({ error: "Checkout session is not authorized for this account" });
+      return;
+    }
     logger.error({ err }, "[StripeRouter] /subscription/confirm error");
     res.status(500).json({ error: err.message });
   }

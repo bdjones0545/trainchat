@@ -229,6 +229,8 @@ function makeMockSession(initial: Partial<MockSession> = {}): MockSession {
 }
 
 import authRouter from "../routes/auth";
+import { logger } from "../lib/logger";
+import { getUncachableStripeClient } from "../lib/stripeClient";
 
 function makeApp(session: MockSession) {
   const app = express();
@@ -267,6 +269,9 @@ beforeEach(() => {
   mockSendPasswordResetEmail.mockResolvedValue(undefined);
   mockBcryptHash.mockResolvedValue("$2b$12$mockedhash");
   mockBcryptCompare.mockResolvedValue(true);
+  mockDb.insert.mockReturnValue(mockDb._insertChain([]));
+  mockDb.update.mockImplementation(() => mockDb._updateChain([]));
+  mockDb.delete.mockReturnValue(mockDb._deleteChain());
 });
 
 // ── Shared fixtures ──────────────────────────────────────────────────────────
@@ -389,6 +394,34 @@ describe("POST /auth/bootstrap", () => {
     expect(mockActivateAuthSession).not.toHaveBeenCalled();
     expect(session.save).toHaveBeenCalled();
   });
+
+  it("SEC-AUTH-01: a retired device ID cannot resume a registered account", async () => {
+    const session = makeMockSession();
+    setupSelects([]); // registered rows are excluded by the anonymous-only query
+    const replacementAnon = { ...ANON_USER, id: 77, deviceId: "device-retired" };
+    mockDb.insert.mockReturnValue(mockDb._insertChain([replacementAnon]));
+
+    const res = await makeApp(session)
+      .post("/api/auth/bootstrap")
+      .send({ deviceId: "device-retired" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.user.id).toBe(77);
+    expect(res.body.user.isAnonymous).toBe(true);
+    expect(session.userId).toBe(77);
+    const condition = mockDb.select.mock.results[0].value.where.mock.calls[0][0];
+    expect(condition.__and).toContainEqual({ __eq: true });
+  });
+
+  it("SEC-AUTH-02: authentication logs never contain the device credential", async () => {
+    setupSelects([ANON_USER]);
+    await makeApp(makeMockSession())
+      .post("/api/auth/bootstrap")
+      .send({ deviceId: "credential-must-not-be-logged" });
+
+    expect(JSON.stringify((logger.info as Mock).mock.calls)).not.toContain("credential-must-not-be-logged");
+    expect(JSON.stringify((logger.error as Mock).mock.calls)).not.toContain("credential-must-not-be-logged");
+  });
 });
 
 // ── TC-06 through TC-12: POST /auth/register ──────────────────────────────────
@@ -426,6 +459,7 @@ describe("POST /auth/register", () => {
     expect(mockDb.insert).not.toHaveBeenCalled();
     const [setValues] = upd.set.mock.calls[0];
     expect(setValues.isAnonymous).toBe(false);
+    expect(setValues.deviceId).toBeNull();
   });
 
   it("TC-09: creates a fresh account when deviceId matches a non-anonymous user", async () => {
@@ -462,7 +496,10 @@ describe("POST /auth/register", () => {
       .post("/api/auth/register")
       .send({ email: "new@example.com", password: "password123", name: "New" });
 
-    expect(mockActivateAuthSession).toHaveBeenCalledWith(session, REG_USER.id);
+    expect(mockActivateAuthSession).toHaveBeenCalledWith(
+      expect.objectContaining({ session }),
+      REG_USER.id,
+    );
   });
 
   it("TC-11: fires welcome email as fire-and-forget (response is 201 even if email fails)", async () => {
@@ -545,7 +582,10 @@ describe("POST /auth/login", () => {
       .post("/api/auth/login")
       .send({ email: "alice@example.com", password: "correctpass" });
 
-    expect(mockActivateAuthSession).toHaveBeenCalledWith(session, REG_USER.id);
+    expect(mockActivateAuthSession).toHaveBeenCalledWith(
+      expect.objectContaining({ session }),
+      REG_USER.id,
+    );
   });
 
   it("TC-18: triggers mergeAnonymousToRegistered when deviceId matches a different anon user", async () => {
@@ -560,6 +600,23 @@ describe("POST /auth/login", () => {
 
     expect(res.status).toBe(200);
     expect(mockMergeAnonymousToRegistered).toHaveBeenCalledWith(99, REG_USER.id);
+    expect(mockMergeAnonymousToRegistered.mock.invocationCallOrder[0])
+      .toBeLessThan(mockActivateAuthSession.mock.invocationCallOrder[0]);
+  });
+
+  it("SEC-MERGE-01: does not authenticate when the anonymous-account merge fails", async () => {
+    const session = makeMockSession();
+    const otherAnon = { ...ANON_USER, id: 99 };
+    setupSelects([REG_USER], [otherAnon]);
+    mockMergeAnonymousToRegistered.mockRejectedValueOnce(new Error("merge failed"));
+
+    const res = await makeApp(session)
+      .post("/api/auth/login")
+      .send({ email: "alice@example.com", password: "pass", deviceId: "device-abc" });
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe("ANONYMOUS_MERGE_FAILED");
+    expect(mockActivateAuthSession).not.toHaveBeenCalled();
   });
 
   it("TC-19: does NOT merge when deviceId user is the same as the logged-in user", async () => {
@@ -674,6 +731,30 @@ describe("DELETE /account", () => {
     expect(res.body.success).toBe(true);
     expect(mockDb.delete).toHaveBeenCalled();
     expect(session.destroy).toHaveBeenCalled();
+  });
+
+  it("SEC-DELETE-01: preserves account when Stripe cancellation fails", async () => {
+    const session = makeMockSession({ userId: REG_USER.id });
+    setupSelects([{ ...REG_USER, plan: "pro", stripeSubscriptionId: "sub_active" }]);
+    vi.mocked(getUncachableStripeClient).mockResolvedValueOnce({
+      subscriptions: {
+        retrieve: vi.fn().mockRejectedValue(new Error("Stripe unavailable")),
+      },
+    } as any);
+
+    const res = await makeApp(session).delete("/api/account");
+
+    expect(res.status).toBe(503);
+    expect(res.body.code).toBe("SUBSCRIPTION_CANCELLATION_FAILED");
+    expect(mockDb.delete).not.toHaveBeenCalled();
+    expect(session.destroy).not.toHaveBeenCalled();
+    const updateSets = mockDb.update.mock.results
+      .map((result) => result.value?.set?.mock.calls[0]?.[0])
+      .filter(Boolean);
+    expect(updateSets).toContainEqual(expect.objectContaining({
+      accountDeletionStatus: "billing_failed",
+      accountDeletionError: "stripe_cancellation_failed",
+    }));
   });
 });
 

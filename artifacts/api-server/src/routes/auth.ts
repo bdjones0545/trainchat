@@ -126,11 +126,12 @@ router.post("/auth/bootstrap", async (req, res): Promise<void> => {
   const { deviceId } = parsed.data;
 
   try {
-    // Find existing anonymous user for this device
+    // A device identifier is an anonymous credential only. Registered accounts
+    // are deliberately excluded even if legacy data still contains a deviceId.
     let [user] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.deviceId, deviceId));
+      .where(and(eq(usersTable.deviceId, deviceId), eq(usersTable.isAnonymous, true)));
 
     if (!user) {
       // Create a new anonymous user — real row, real session, real product
@@ -146,9 +147,9 @@ router.post("/auth/bootstrap", async (req, res): Promise<void> => {
         })
         .returning();
 
-      logger.info({ userId: user.id, deviceId }, "auth/bootstrap: anonymous user created");
+      logger.info({ userId: user.id }, "auth/bootstrap: anonymous user created");
     } else {
-      logger.info({ userId: user.id, deviceId }, "auth/bootstrap: anonymous user resumed");
+      logger.info({ userId: user.id }, "auth/bootstrap: anonymous user resumed");
     }
 
     req.session.userId = user.id;
@@ -158,7 +159,7 @@ router.post("/auth/bootstrap", async (req, res): Promise<void> => {
 
     res.json({ user: toPublicUser(user) });
   } catch (err: any) {
-    logger.error({ err, deviceId }, "auth/bootstrap: failed");
+    logger.error({ err }, "auth/bootstrap: failed");
     res.status(500).json({ error: "Bootstrap failed" });
   }
 });
@@ -203,7 +204,7 @@ router.post("/auth/register", authRateLimiter, async (req, res): Promise<void> =
       const [anonUser] = await db
         .select()
         .from(usersTable)
-        .where(eq(usersTable.deviceId, deviceId));
+          .where(and(eq(usersTable.deviceId, deviceId), eq(usersTable.isAnonymous, true)));
 
       if (anonUser?.isAnonymous) {
         // Upgrade in-place: attach credentials to the same user row.
@@ -215,13 +216,15 @@ router.post("/auth/register", authRateLimiter, async (req, res): Promise<void> =
             passwordHash,
             name,
             isAnonymous: false,
+            // Retire the anonymous bearer credential at the identity boundary.
+            deviceId: null,
             onboardingComplete: true,
           })
           .where(eq(usersTable.id, anonUser.id))
           .returning();
 
         logger.info(
-          { userId: user.id, deviceId },
+          { userId: user.id },
           "auth/register: anonymous user upgraded to registered account",
         );
       }
@@ -245,7 +248,7 @@ router.post("/auth/register", authRateLimiter, async (req, res): Promise<void> =
     // Regenerate session ID before writing auth state (session fixation prevention).
     // activateAuthSession destroys the pre-auth session and issues a new ID, then
     // sets userId and saves in a single write to the new session store record.
-    await activateAuthSession(req.session, user.id);
+    await activateAuthSession(req, user.id);
 
     // Send welcome email — fire-and-forget, never blocks the response
     if (user.email) {
@@ -300,9 +303,6 @@ router.post("/auth/login", authRateLimiter, async (req, res): Promise<void> => {
     return;
   }
 
-  // Regenerate session ID before writing auth state (session fixation prevention).
-  await activateAuthSession(req.session, user.id);
-
   const onboardingComplete = await resolveOnboardingComplete(user.id, user.onboardingComplete);
 
   // Merge any anonymous user data from this device into the logged-in account
@@ -310,15 +310,26 @@ router.post("/auth/login", authRateLimiter, async (req, res): Promise<void> => {
     const [anonUser] = await db
       .select()
       .from(usersTable)
-      .where(eq(usersTable.deviceId, deviceId));
+      .where(and(eq(usersTable.deviceId, deviceId), eq(usersTable.isAnonymous, true)));
 
     if (anonUser?.isAnonymous && anonUser.id !== user.id) {
-      mergeAnonymousToRegistered(anonUser.id, user.id).catch((err) =>
+      try {
+        await mergeAnonymousToRegistered(anonUser.id, user.id);
+      } catch (err) {
         logger.error({ err, anonUserId: anonUser.id, targetUserId: user.id },
-          "auth/login: anonymous merge failed — non-fatal"),
-      );
+          "auth/login: anonymous merge failed — login not finalized");
+        res.status(503).json({
+          error: "Your account data could not be merged safely. Please try signing in again.",
+          code: "ANONYMOUS_MERGE_FAILED",
+        });
+        return;
+      }
     }
   }
+
+  // Establish registered auth only after the anonymous-data transaction has
+  // committed. The client can never observe a partially merged account.
+  await activateAuthSession(req, user.id);
 
   logger.info(
     { userId: user.id, onboardingComplete },
@@ -411,6 +422,15 @@ router.delete("/account", requireAuth, async (req, res): Promise<void> => {
       return;
     }
 
+    await db
+      .update(usersTable)
+      .set({
+        accountDeletionStatus: "pending",
+        accountDeletionRequestedAt: new Date(),
+        accountDeletionError: null,
+      })
+      .where(eq(usersTable.id, userId));
+
     // ── 2. Cancel Stripe subscription if active ───────────────────────────────
     let subscriptionCanceled = false;
     if (user.stripeSubscriptionId && user.plan !== "free") {
@@ -433,9 +453,23 @@ router.delete("/account", requireAuth, async (req, res): Promise<void> => {
           );
         }
       } catch (stripeErr: any) {
-        // If the subscription is already canceled in Stripe, that's fine — continue
+        // Preserve the account and its billing linkage unless Stripe proves the
+        // subscription is already absent. This keeps recovery possible and
+        // prevents an orphaned subscription from continuing to charge.
         if (stripeErr?.code !== "resource_missing") {
-          logger.error({ stripeErr, userId }, "[SettingsAudit:Delete] Stripe cancellation failed — proceeding with account deletion anyway");
+          logger.error({ stripeErr, userId }, "[SettingsAudit:Delete] Stripe cancellation failed — account preserved");
+          await db
+            .update(usersTable)
+            .set({
+              accountDeletionStatus: "billing_failed",
+              accountDeletionError: "stripe_cancellation_failed",
+            })
+            .where(eq(usersTable.id, userId));
+          res.status(503).json({
+            error: "We could not cancel your subscription, so your account was not deleted. Please try again or contact support.",
+            code: "SUBSCRIPTION_CANCELLATION_FAILED",
+          });
+          return;
         }
       }
     }
@@ -635,7 +669,7 @@ router.post("/auth/reset-password", async (req, res): Promise<void> => {
       .where(eq(passwordResetTokensTable.tokenHash, tokenHash));
 
     if (!record) {
-      logger.warn({ tokenHash }, "[PasswordResetTokenValidated] token not found");
+      logger.warn("[PasswordResetTokenValidated] token not found");
       res.status(400).json({ error: "This reset link is invalid. Please request a new one." });
       return;
     }

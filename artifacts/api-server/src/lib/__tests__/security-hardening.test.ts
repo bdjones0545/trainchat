@@ -423,43 +423,50 @@ describe("L-01 — CORS origin allowlist", () => {
 
 // ─── L-12: Session fixation prevention ───────────────────────────────────────
 //
-// activateAuthSession() is the pure helper under test. It wraps
-// session.regenerate() + session.userId assignment + session.save() so that
-// the session ID is rotated before authenticated state is committed.
+// activateAuthSession() wraps request.session.regenerate(), then re-reads the
+// replacement request.session before assigning userId and saving. This models
+// express-session's real regeneration semantics and prevents auth state from
+// being written to the retired pre-authentication session object.
 //
 // We test via a mock SessionLike that records the order in which operations
 // occur, which lets us assert the critical invariant: regenerate fires first,
 // userId is set inside the regenerate callback, and save fires last.
 
 describe("L-12 — session fixation prevention (activateAuthSession)", () => {
-  function makeOrderedSession() {
+  function makeOrderedRequest() {
     const callOrder: string[] = [];
-    let _userId: number | undefined;
-
-    const session = {
-      get userId() { return _userId; },
+    let regeneratedUserId: number | undefined;
+    const regeneratedSession = {
+      get userId() { return regeneratedUserId; },
       set userId(val: number | undefined) {
         callOrder.push(`set:userId=${val}`);
-        _userId = val;
+        regeneratedUserId = val;
       },
-      regenerate: vi.fn((cb: (err?: unknown) => void) => {
-        callOrder.push("regenerate");
-        cb();
-      }),
+      regenerate: vi.fn(),
       save: vi.fn((cb: (err?: unknown) => void) => {
         callOrder.push("save");
         cb();
       }),
     };
+    const originalSession = {
+      userId: undefined as number | undefined,
+      save: vi.fn(),
+      regenerate: vi.fn((cb: (err?: unknown) => void) => {
+        callOrder.push("regenerate");
+        request.session = regeneratedSession;
+        cb();
+      }),
+    };
+    const request = { session: originalSession };
 
-    return { session, callOrder };
+    return { request, originalSession, regeneratedSession, callOrder };
   }
 
   it("calls regenerate before setting userId", async () => {
     const { activateAuthSession } = await import("../session-activation");
-    const { session, callOrder } = makeOrderedSession();
+    const { request, callOrder } = makeOrderedRequest();
 
-    await activateAuthSession(session, 99);
+    await activateAuthSession(request, 99);
 
     const regenerateIdx = callOrder.indexOf("regenerate");
     const userIdIdx = callOrder.findIndex((s) => s.startsWith("set:userId"));
@@ -469,9 +476,9 @@ describe("L-12 — session fixation prevention (activateAuthSession)", () => {
 
   it("sets userId before calling save", async () => {
     const { activateAuthSession } = await import("../session-activation");
-    const { session, callOrder } = makeOrderedSession();
+    const { request, callOrder } = makeOrderedRequest();
 
-    await activateAuthSession(session, 99);
+    await activateAuthSession(request, 99);
 
     const userIdIdx = callOrder.findIndex((s) => s.startsWith("set:userId"));
     const saveIdx = callOrder.indexOf("save");
@@ -481,20 +488,22 @@ describe("L-12 — session fixation prevention (activateAuthSession)", () => {
 
   it("sets the correct userId on the session", async () => {
     const { activateAuthSession } = await import("../session-activation");
-    const { session } = makeOrderedSession();
+    const { request, regeneratedSession } = makeOrderedRequest();
 
-    await activateAuthSession(session, 42);
+    await activateAuthSession(request, 42);
 
-    expect(session.userId).toBe(42);
+    expect(regeneratedSession.userId).toBe(42);
   });
 
   it("full call order is: regenerate → set:userId → save", async () => {
     const { activateAuthSession } = await import("../session-activation");
-    const { session, callOrder } = makeOrderedSession();
+    const { request, originalSession, callOrder } = makeOrderedRequest();
 
-    await activateAuthSession(session, 7);
+    await activateAuthSession(request, 7);
 
     expect(callOrder).toEqual(["regenerate", "set:userId=7", "save"]);
+    expect(originalSession.userId).toBeUndefined();
+    expect(originalSession.save).not.toHaveBeenCalled();
   });
 
   it("rejects if regenerate passes an error", async () => {
@@ -505,7 +514,7 @@ describe("L-12 — session fixation prevention (activateAuthSession)", () => {
       save: vi.fn(),
     };
 
-    await expect(activateAuthSession(session, 1)).rejects.toThrow("store error");
+    await expect(activateAuthSession({ session }, 1)).rejects.toThrow("store error");
     expect(session.save).not.toHaveBeenCalled();
     expect(session.userId).toBeUndefined();
   });
@@ -518,7 +527,7 @@ describe("L-12 — session fixation prevention (activateAuthSession)", () => {
       save: vi.fn((cb: (err?: unknown) => void) => cb(new Error("save failed"))),
     };
 
-    await expect(activateAuthSession(session, 5)).rejects.toThrow("save failed");
+    await expect(activateAuthSession({ session }, 5)).rejects.toThrow("save failed");
   });
 
   it("does not set userId when regenerate errors (pre-auth state is clean)", async () => {
@@ -529,7 +538,7 @@ describe("L-12 — session fixation prevention (activateAuthSession)", () => {
       save: vi.fn(),
     };
 
-    await expect(activateAuthSession(session, 99)).rejects.toThrow();
+    await expect(activateAuthSession({ session }, 99)).rejects.toThrow();
     expect(session.userId).toBeUndefined();
   });
 });

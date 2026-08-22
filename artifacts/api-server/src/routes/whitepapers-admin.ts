@@ -8,6 +8,7 @@ import {
 } from "@workspace/db";
 import { eq, desc, asc, and, or, isNull, lte } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
+import { requireAdmin } from "../middlewares/admin";
 import { runDailyWhitepaperJob } from "../lib/whitepaper-cron";
 import { generateWhitepaper } from "../lib/whitepaper-generator";
 import type { WhitepaperTopicStatus, WhitepaperPubStatus } from "@workspace/db";
@@ -83,29 +84,6 @@ const DEFAULT_TOPICS = [
 ];
 
 // ─── Admin Guard ───────────────────────────────────────────────────────────────
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim())
-  .filter(Boolean);
-
-async function requireAdmin(req: any, res: any, next: any) {
-  if (!req.session?.userId) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  if (ADMIN_EMAILS.length > 0) {
-    const [user] = await db
-      .select({ email: usersTable.email })
-      .from(usersTable)
-      .where(eq(usersTable.id, req.session.userId));
-    if (!user || !ADMIN_EMAILS.includes(user.email ?? "")) {
-      res.status(403).json({ error: "Forbidden" });
-      return;
-    }
-  }
-  next();
-}
 
 // ─── Settings ──────────────────────────────────────────────────────────────────
 

@@ -145,7 +145,7 @@ router.get("/debug/anonymous-state", requireDebugEnabled, requireAuth, async (re
 
     const stateMap = {
       userId: user.id,
-      deviceId: user.deviceId,
+      hasDeviceCredential: Boolean(user.deviceId),
       isAnonymous: user.isAnonymous,
       createdAt: user.createdAt,
       onboardingComplete: user.onboardingComplete,
@@ -169,7 +169,7 @@ router.get("/debug/anonymous-state", requireDebugEnabled, requireAuth, async (re
       staleDetection: staleCheck,
     };
 
-    logger.info({ userId, deviceId: user.deviceId }, "debug/anonymous-state: state map requested");
+    logger.info({ userId }, "debug/anonymous-state: state map requested");
 
     res.json(stateMap);
   } catch (err: any) {

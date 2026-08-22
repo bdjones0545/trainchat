@@ -151,7 +151,7 @@ export async function buildSyncPayload(sub: any): Promise<SubscriptionSyncPayloa
   //   2. STRIPE_PRICE_* env-var map (fast local fallback)
   //   3. Fetch the price from Stripe API to discover its lookup_key (handles
   //      prices created before the setup script added lookup_keys)
-  //   4. Fall back to "pro" as a last resort — never drop a paying subscriber
+  //   4. Fail closed. An unknown price must never create paid entitlement.
 
   let plan: import("@workspace/db").PlanTier;
   try {
@@ -168,15 +168,13 @@ export async function buildSyncPayload(sub: any): Promise<SubscriptionSyncPayloa
         "[WebhookHandlers] Plan resolved via Stripe price fetch (price predates lookup_key setup)"
       );
     } catch (fetchErr) {
-      // Absolute last resort — grant pro access rather than silently dropping
-      // a real subscriber. Log loudly so the admin knows to run stripe:setup-products.
       logger.error(
         { priceId, lookupKey, err: fetchErr },
         "[WebhookHandlers] UNKNOWN PRICE — could not resolve via lookup_key or Stripe API. " +
-        "Defaulting to plan=pro so the paying subscriber retains access. " +
+        "Rejecting entitlement update. " +
         "Run stripe:setup-products to add lookup_keys to all existing prices."
       );
-      plan = "pro";
+      return null;
     }
   }
 
@@ -229,23 +227,24 @@ async function handleCheckoutSessionCompleted(
     return;
   }
 
-  // Resolve user — metadata userId first, then customer ID lookup, then email
-  let user = null;
-  if (userIdFromMeta) {
-    user = await stripeStorage.getUser(userIdFromMeta);
+  // Checkout entitlement requires the canonical server-created metadata.
+  // Customer ID or email possession alone is not an account binding.
+  if (!userIdFromMeta || session.metadata?.product !== "trainchat") {
+    logger.warn({ customerId }, "[WebhookHandlers] checkout.session.completed — invalid account binding");
+    return;
   }
-  if (!user && customerId) {
-    user = await stripeStorage.getUserByStripeCustomerId(customerId);
-  }
-  if (!user && session.customer_details?.email) {
-    user = await stripeStorage.getUserByEmail(session.customer_details.email);
-  }
+  const user = await stripeStorage.getUser(userIdFromMeta);
 
   if (!user) {
     logger.warn(
       { customerId, email: session.customer_details?.email },
       "[WebhookHandlers] checkout.session.completed — user not found, cannot sync"
     );
+    return;
+  }
+
+  if (user.stripeCustomerId && user.stripeCustomerId !== customerId) {
+    logger.warn({ userId: user.id }, "[WebhookHandlers] checkout.session.completed — customer mismatch");
     return;
   }
 

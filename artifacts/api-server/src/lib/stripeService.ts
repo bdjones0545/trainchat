@@ -42,9 +42,9 @@ export class StripeService {
       allow_promotion_codes: true,
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: { userId: String(userId) },
+      metadata: { userId: String(userId), product: "trainchat" },
       subscription_data: {
-        metadata: { userId: String(userId) },
+        metadata: { userId: String(userId), product: "trainchat" },
       },
     });
     logger.info(

@@ -372,7 +372,7 @@ describe("buildSyncPayload()", () => {
     expect(payload).toBeNull();
   });
 
-  it("falls back to plan=pro for unknown lookup_key when Stripe fetch also fails", async () => {
+  it("fails closed for unknown lookup_key when Stripe fetch also fails", async () => {
     // getUncachableStripeClient returns a client whose prices.retrieve rejects
     const { getUncachableStripeClient } = await import("../stripeClient");
     (getUncachableStripeClient as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -384,9 +384,7 @@ describe("buildSyncPayload()", () => {
         items: { data: [{ price: { id: "price_unknown_xyz", lookup_key: "gym_weekly" } }] },
       })
     );
-    // Should not throw; should default to pro so the subscriber keeps access
-    expect(payload).not.toBeNull();
-    expect(payload!.plan).toBe("pro");
+    expect(payload).toBeNull();
   });
 
   it("resolves plan via Stripe price fetch when lookup_key is absent on subscription object", async () => {
@@ -671,7 +669,7 @@ describe("WebhookHandlers.processWebhook()", () => {
 // These tests lock down the invariants that the fix must uphold:
 //   RT-01  checkout.session.completed with metadata.userId → user upgraded to pro/active
 //   RT-02  customer.subscription.updated → keeps active subscription in sync
-//   RT-03  Unknown price ID (lookup_key miss + no env var) → logged, falls back to pro
+//   RT-03  Unknown price ID (lookup_key miss + no env var) → rejected, no entitlement
 //   RT-04  Webhook failure does not falsely grant premium to wrong user
 //   RT-05  StripeSync failure (stripe.accounts missing) → entitlement still written
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -701,7 +699,7 @@ describe("Regression: billing entitlement delivery", () => {
           id: "cs_test_rt01",
           customer: "cus_UqdJC5GQ8Nzvjh",
           subscription: "sub_rt01_active",
-          metadata: { userId: String(userId) },
+          metadata: { userId: String(userId), product: "trainchat" },
           customer_details: { email: "lisa.jones@trainchat.ai" },
         },
       },
@@ -774,9 +772,9 @@ describe("Regression: billing entitlement delivery", () => {
     );
   });
 
-  // ── RT-03: Unknown price ID → clear log, falls back to pro ──────────────────
+  // ── RT-03: Unknown price ID fails closed ────────────────────────────────────
 
-  it("RT-03: unknown lookup_key for subscription → falls back to pro/monthly without throwing", async () => {
+  it("RT-03: unknown lookup_key for subscription does not grant entitlement", async () => {
     const existingUser = { id: 77, stripeCustomerId: "cus_rt03", plan: "free" };
     (stripeStorage.getUserByStripeCustomerId as ReturnType<typeof vi.fn>).mockResolvedValue(existingUser);
 
@@ -799,11 +797,7 @@ describe("Regression: billing entitlement delivery", () => {
       WebhookHandlers.processWebhook(makeBuffer(unknownPriceEvent), "sig_rt03")
     ).resolves.toBeUndefined();
 
-    // User still receives access (defaulted to pro) — paid user must not be locked out
-    expect(stripeStorage.syncUserSubscription).toHaveBeenCalledWith(
-      existingUser.id,
-      expect.objectContaining({ plan: "pro" })
-    );
+    expect(stripeStorage.syncUserSubscription).not.toHaveBeenCalled();
   });
 
   // ── RT-04: Webhook failure does not falsely grant premium to wrong user ──────

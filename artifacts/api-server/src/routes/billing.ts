@@ -10,6 +10,7 @@ import { requireAuth } from "../middlewares/auth";
 import { getUncachableStripeClient } from "../lib/stripeClient";
 import { stripeStorage } from "../lib/stripeStorage";
 import { logger } from "../lib/logger";
+import { authorizeTrainChatCheckout, CheckoutAuthorizationError } from "../lib/checkout-security";
 
 const router: IRouter = Router();
 
@@ -148,12 +149,18 @@ router.post("/billing/create-checkout-session", requireAuth, async (req: any, re
 router.get("/billing/checkout-session/:sessionId", requireAuth, async (req: any, res): Promise<void> => {
   try {
     const { sessionId } = req.params;
+    const userId = req.session.userId!;
+    const user = await stripeStorage.getUser(userId);
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
     const stripe = await getUncachableStripeClient();
     const session = await stripe.checkout.sessions.retrieve(sessionId, {
       expand: ["subscription"],
     });
 
-    const sub = session.subscription as any;
+    const { subscription: sub } = authorizeTrainChatCheckout(session, user);
 
     res.json({
       status: session.payment_status,
@@ -164,6 +171,11 @@ router.get("/billing/checkout-session/:sessionId", requireAuth, async (req: any,
       subscriptionStatus: typeof sub === "object" ? sub?.status : undefined,
     });
   } catch (err: any) {
+    if (err instanceof CheckoutAuthorizationError) {
+      logger.warn({ userId: req.session.userId }, "[BillingRouter] Checkout details rejected");
+      res.status(403).json({ error: "Checkout session is not authorized for this account" });
+      return;
+    }
     logger.error({ err }, "[BillingRouter] /billing/checkout-session error");
     res.status(500).json({ error: err.message });
   }

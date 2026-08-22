@@ -38,6 +38,14 @@ export const usersTable = pgTable("users", {
 
   messageCount: integer("message_count").notNull().default(0),
 
+  // Durable account-deletion checkpoint. Failed billing cancellation keeps the
+  // account recoverable and visible to reconciliation/support workflows.
+  accountDeletionStatus: text("account_deletion_status", {
+    enum: ["pending", "billing_failed"],
+  }),
+  accountDeletionRequestedAt: timestamp("account_deletion_requested_at", { withTimezone: true }),
+  accountDeletionError: text("account_deletion_error"),
+
   tenantId: text("tenant_id"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
