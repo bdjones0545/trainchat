@@ -4868,6 +4868,15 @@ export default function SystemPage() {
         </div>
       </div>
 
+      {(activeSystem as any)?.needsReview && (
+        <div className="flex-shrink-0 border-b border-amber-400/30 bg-amber-400/10 px-4 py-2.5" role="status">
+          <div className="mx-auto max-w-2xl">
+            <p className="text-xs font-semibold text-amber-300">Program needs review</p>
+            <p className="text-[11px] text-amber-100/70">Your specifications changed. Regenerate this program before treating it as current.</p>
+          </div>
+        </div>
+      )}
+
       {/* ─── Mobile tab bar (mobile only, horizontal scroll) ─── */}
       {hasSystem && (
         <div className="md:hidden flex-shrink-0 border-b border-border bg-background/95 backdrop-blur-sm overflow-x-auto" style={{ scrollbarWidth: "none", msOverflowStyle: "none" } as React.CSSProperties}>

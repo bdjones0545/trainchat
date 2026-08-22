@@ -28,6 +28,7 @@
 import { db, userProfilesTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { logger } from "./logger";
+import { coachSettingsSchema, DEFAULT_COACH_SETTINGS } from "./profile-settings";
 
 // ─── Behavior Settings (from client — stored in localStorage) ─────────────────
 //
@@ -135,20 +136,6 @@ export interface AgentSettingsContext {
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_BEHAVIOR: CoachBehaviorSettings = {
-  conciseResponses: false,
-  proactiveInsights: true,
-  autoAdjustRecommendations: true,
-  memoryPersonalization: true,
-  coachingStyle: "supportive",
-  explanationDepth: "balanced",
-  trainingAggression: "balanced",
-  requireApprovalStructural: false,
-  requireApprovalDeload: false,
-  adaptFromReadiness: true,
-  adaptFromMissedSessions: true,
-};
-
 // ─── Resolver ─────────────────────────────────────────────────────────────────
 
 /**
@@ -165,15 +152,18 @@ export async function resolveAgentSettingsContext(
   // ── 1. Load training profile + athlete name from DB ─────────────────────────
   let profileRow: typeof userProfilesTable.$inferSelect | null = null;
   let athleteName: string | null = null;
+  let persistedBehavior: CoachBehaviorSettings | null = null;
   try {
     const [row] = await db
-      .select({ profile: userProfilesTable, name: usersTable.name })
-      .from(userProfilesTable)
-      .leftJoin(usersTable, eq(userProfilesTable.userId, usersTable.id))
-      .where(eq(userProfilesTable.userId, userId))
+      .select({ profile: userProfilesTable, name: usersTable.name, coachingSettings: usersTable.coachingSettings })
+      .from(usersTable)
+      .leftJoin(userProfilesTable, eq(userProfilesTable.userId, usersTable.id))
+      .where(eq(usersTable.id, userId))
       .limit(1);
     profileRow = row?.profile ?? null;
     athleteName = row?.name ?? null;
+    const parsedSettings = coachSettingsSchema.safeParse(row?.coachingSettings);
+    persistedBehavior = parsedSettings.success ? parsedSettings.data : null;
   } catch (err) {
     logger.warn({ err, userId }, "[AgentSettings] Failed to load profile — using defaults");
   }
@@ -181,18 +171,12 @@ export async function resolveAgentSettingsContext(
   const profileLoaded = profileRow !== null;
 
   // ── 2. Merge behavior settings ──────────────────────────────────────────────
+  // Persisted account settings are authoritative. Client values only seed
+  // behavior for accounts that have never saved server settings.
   const behaviorSettings: CoachBehaviorSettings = {
-    conciseResponses: clientSettings?.conciseResponses ?? DEFAULT_BEHAVIOR.conciseResponses,
-    proactiveInsights: clientSettings?.proactiveInsights ?? DEFAULT_BEHAVIOR.proactiveInsights,
-    autoAdjustRecommendations: clientSettings?.autoAdjustRecommendations ?? DEFAULT_BEHAVIOR.autoAdjustRecommendations,
-    memoryPersonalization: clientSettings?.memoryPersonalization ?? DEFAULT_BEHAVIOR.memoryPersonalization,
-    coachingStyle: clientSettings?.coachingStyle ?? DEFAULT_BEHAVIOR.coachingStyle,
-    explanationDepth: clientSettings?.explanationDepth ?? DEFAULT_BEHAVIOR.explanationDepth,
-    trainingAggression: clientSettings?.trainingAggression ?? DEFAULT_BEHAVIOR.trainingAggression,
-    requireApprovalStructural: clientSettings?.requireApprovalStructural ?? DEFAULT_BEHAVIOR.requireApprovalStructural,
-    requireApprovalDeload: clientSettings?.requireApprovalDeload ?? DEFAULT_BEHAVIOR.requireApprovalDeload,
-    adaptFromReadiness: clientSettings?.adaptFromReadiness ?? DEFAULT_BEHAVIOR.adaptFromReadiness,
-    adaptFromMissedSessions: clientSettings?.adaptFromMissedSessions ?? DEFAULT_BEHAVIOR.adaptFromMissedSessions,
+    ...DEFAULT_COACH_SETTINGS,
+    ...(clientSettings ?? {}),
+    ...(persistedBehavior ?? {}),
   };
 
   // ── 3. Derive execution permission ──────────────────────────────────────────
@@ -218,7 +202,7 @@ export async function resolveAgentSettingsContext(
     training,
     source: {
       profileLoaded,
-      settingsFromClient: clientSettings != null,
+      settingsFromClient: persistedBehavior == null && clientSettings != null,
       profileId: profileRow?.id ?? null,
     },
   };

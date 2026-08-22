@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useNoIndex } from "@/hooks/useNoIndex";
 import { useForm } from "react-hook-form";
@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useLogin } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { getGetMeQueryKey } from "@workspace/api-client-react";
-import { getOrCreateDeviceId, DEVICE_ID_KEY } from "@/lib/deviceId";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 
 const loginSchema = z.object({
@@ -17,34 +17,6 @@ const loginSchema = z.object({
 
 type LoginForm = z.infer<typeof loginSchema>;
 
-/**
- * Attempt to merge any existing guest session into the just-authenticated account.
- * Silent — never throws; merge failure is non-fatal.
- */
-async function tryConvertGuestSession(deviceId: string): Promise<boolean> {
-  try {
-    const res = await fetch("/api/guest/convert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ deviceId }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-async function trackGuestEvent(deviceId: string, event: string) {
-  try {
-    await fetch("/api/guest/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId, event }),
-    });
-  } catch { /* silent */ }
-}
-
 export default function Login() {
   useNoIndex();
   const [, setLocation] = useLocation();
@@ -52,15 +24,7 @@ export default function Login() {
   const params = new URLSearchParams(search);
   const fromTeaser = params.get("from") === "teaser";
 
-  // Track return user signin when arriving from paywall flow
-  useEffect(() => {
-    if (!fromTeaser) return;
-    const deviceId = (() => { try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; } })();
-    if (deviceId) trackGuestEvent(deviceId, "user_returned_post_conversion");
-  }, [fromTeaser]);
-
   const [error, setError] = useState<string | null>(null);
-  const [converting, setConverting] = useState(false);
   const queryClient = useQueryClient();
   const login = useLogin();
 
@@ -94,7 +58,7 @@ export default function Login() {
     );
   }
 
-  const isLoading = login.isPending || converting;
+  const isLoading = login.isPending;
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
@@ -191,9 +155,7 @@ export default function Login() {
             disabled={isLoading}
             className="w-full py-3 mt-2 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 active:scale-[0.99]"
           >
-            {converting
-              ? "Restoring your progress..."
-              : login.isPending
+            {login.isPending
                 ? "Signing in..."
                 : fromTeaser
                   ? "Continue My Journey"

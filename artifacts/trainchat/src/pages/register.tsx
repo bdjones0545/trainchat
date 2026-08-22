@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useNoIndex } from "@/hooks/useNoIndex";
 import { useForm } from "react-hook-form";
@@ -7,7 +7,7 @@ import { z } from "zod";
 import { useRegister, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
-import { getOrCreateDeviceId, DEVICE_ID_KEY } from "@/lib/deviceId";
+import { getOrCreateDeviceId } from "@/lib/deviceId";
 import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
 import { capi } from "@/lib/capi";
 
@@ -19,37 +19,6 @@ const registerSchema = z.object({
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
-/**
- * Call /api/guest/convert to merge guest session into new account.
- * Silent — never throws to the caller; conversion failure is non-fatal.
- */
-async function convertGuestSession(deviceId: string): Promise<boolean> {
-  try {
-    const res = await fetch("/api/guest/convert", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ deviceId }),
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** Track a funnel event for the guest session (fire-and-forget). */
-async function trackGuestEvent(deviceId: string, event: string) {
-  try {
-    await fetch("/api/guest/track", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ deviceId, event }),
-    });
-  } catch {
-    // silent
-  }
-}
-
 export default function Register() {
   useNoIndex();
   const [, setLocation] = useLocation();
@@ -57,15 +26,7 @@ export default function Register() {
   const params = new URLSearchParams(search);
   const fromTeaser = params.get("from") === "teaser";
 
-  // Track signup_started when arriving from paywall flow
-  useEffect(() => {
-    if (!fromTeaser) return;
-    const deviceId = (() => { try { return localStorage.getItem(DEVICE_ID_KEY); } catch { return null; } })();
-    if (deviceId) trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_STARTED);
-  }, [fromTeaser]);
-
   const [error, setError] = useState<string | null>(null);
-  const [converting, setConverting] = useState(false);
   const queryClient = useQueryClient();
   const register = useRegister();
 
@@ -88,11 +49,6 @@ export default function Register() {
           // Seed the cache immediately so Chat sees a valid user on mount
           queryClient.setQueryData(getGetMeQueryKey(), result.user);
 
-          // Track signup completed (fire-and-forget, non-fatal)
-          if (deviceId) {
-            trackGuestEvent(deviceId, GUEST_CONFIG.EVENTS.SIGNUP_COMPLETED).catch(() => {});
-          }
-
           // Meta CAPI: CompleteRegistration
           capi.completeRegistration(
             { email: data.email },
@@ -111,7 +67,7 @@ export default function Register() {
     );
   }
 
-  const isLoading = register.isPending || converting;
+  const isLoading = register.isPending;
   const headline = fromTeaser ? GUEST_CONFIG.SIGNUP_HEADLINE : "Create your account";
   const subheadline = fromTeaser
     ? GUEST_CONFIG.SIGNUP_SUBHEADLINE
@@ -216,9 +172,7 @@ export default function Register() {
             disabled={isLoading}
             className="w-full py-3 mt-2 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-150 active:scale-[0.99]"
           >
-            {converting
-              ? "Saving your progress..."
-              : register.isPending
+            {register.isPending
                 ? "Creating account..."
                 : fromTeaser
                   ? "Continue My Journey"

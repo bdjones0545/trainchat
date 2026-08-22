@@ -8,6 +8,20 @@
       "when": 1787291067035,
       "tag": "0000_current_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787376000000,
+      "tag": "0001_production_release_upgrade",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787426911196,
+      "tag": "0002_feature_audit_product_decisions",
+      "breakpoints": true
     }
   ]
 }

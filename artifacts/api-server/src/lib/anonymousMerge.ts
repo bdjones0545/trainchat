@@ -36,7 +36,7 @@ import {
   savedProgramsTable,
   passwordResetTokensTable,
 } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { logger } from "./logger";
 
 export type MergeResult = {
@@ -286,7 +286,16 @@ export async function mergeAnonymousToRegistered(
       neuralProfileMerged = true;
     }
 
-    // ── Step 4: Delete the anonymous user row ────────────────────────────────
+    // ── Step 4: Preserve account-level coaching controls ────────────────────
+    // Target settings win when already configured; otherwise carry the
+    // anonymous account's server-persisted controls into the registered user.
+    if (anonUser.coachingSettings != null) {
+      await tx.update(usersTable)
+        .set({ coachingSettings: sql`coalesce(${usersTable.coachingSettings}, ${JSON.stringify(anonUser.coachingSettings)}::jsonb)` })
+        .where(eq(usersTable.id, targetUserId));
+    }
+
+    // ── Step 5: Delete the anonymous user row ────────────────────────────────
     // All child rows have been reassigned or explicitly deleted above.
     // The cascade fires on an empty set — no data is lost.
     await tx.delete(usersTable).where(eq(usersTable.id, anonymousUserId));

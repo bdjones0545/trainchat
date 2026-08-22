@@ -105,6 +105,49 @@ function lsBool(key: string, defaultTrue = false): boolean {
 }
 function lsSet(key: string, value: string | boolean) {
   try { localStorage.setItem(key, String(value)); } catch {}
+  if (key.startsWith("coach_")) {
+    persistCoachSettings().catch(() => {});
+  }
+}
+
+function readCoachSettingsCache() {
+  return {
+    conciseResponses: localStorage.getItem("coach_concise") === "true",
+    proactiveInsights: localStorage.getItem("coach_proactive") !== "false",
+    autoAdjustRecommendations: localStorage.getItem("coach_autoadjust") !== "false",
+    memoryPersonalization: localStorage.getItem("coach_memory") !== "false",
+    coachingStyle: localStorage.getItem("coach_style") ?? "supportive",
+    explanationDepth: localStorage.getItem("coach_depth") ?? "balanced",
+    trainingAggression: localStorage.getItem("coach_aggression") ?? "balanced",
+    requireApprovalStructural: localStorage.getItem("coach_approval_structural") === "true",
+    requireApprovalDeload: localStorage.getItem("coach_approval_deload") === "true",
+    adaptFromReadiness: localStorage.getItem("coach_readiness_adapt") !== "false",
+    adaptFromMissedSessions: localStorage.getItem("coach_missed_adapt") !== "false",
+  };
+}
+
+async function persistCoachSettings() {
+  const response = await fetch("/api/profile/coach-settings", {
+    method: "PUT",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(readCoachSettingsCache()),
+  });
+  if (!response.ok) throw new Error("Failed to persist coaching settings");
+}
+
+function cacheCoachSettings(settings: Record<string, unknown>) {
+  const mapping: Record<string, string> = {
+    conciseResponses: "coach_concise", proactiveInsights: "coach_proactive",
+    autoAdjustRecommendations: "coach_autoadjust", memoryPersonalization: "coach_memory",
+    coachingStyle: "coach_style", explanationDepth: "coach_depth",
+    trainingAggression: "coach_aggression", requireApprovalStructural: "coach_approval_structural",
+    requireApprovalDeload: "coach_approval_deload", adaptFromReadiness: "coach_readiness_adapt",
+    adaptFromMissedSessions: "coach_missed_adapt",
+  };
+  for (const [field, key] of Object.entries(mapping)) {
+    if (settings[field] !== undefined) localStorage.setItem(key, String(settings[field]));
+  }
 }
 
 // ─── Design system components ─────────────────────────────────────────────────
@@ -1438,6 +1481,17 @@ export default function SettingsPage() {
 
   const { data: me } = useGetMe();
   const isAnonymousUser = !!(me as any)?.isAnonymous;
+  const { data: coachSettings } = useQuery({
+    queryKey: ["coach-settings"],
+    queryFn: async () => {
+      const response = await fetch("/api/profile/coach-settings", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to load coaching settings");
+      const settings = await response.json();
+      cacheCoachSettings(settings);
+      return settings as Record<string, unknown>;
+    },
+    staleTime: 0,
+  });
 
   const { data: sub, isLoading: subLoading } = useQuery({
     queryKey: ["subscription"],
@@ -1510,10 +1564,10 @@ export default function SettingsPage() {
           <AtlasIntelligenceSection profile={profile} memories={memories} />
 
           {/* 3. Coaching Behavior */}
-          <CoachingBehaviorSection />
+          <CoachingBehaviorSection key={`behavior-${JSON.stringify(coachSettings ?? {})}`} />
 
           {/* 4. Adaptation + Recovery */}
-          <AdaptationSection />
+          <AdaptationSection key={`adaptation-${JSON.stringify(coachSettings ?? {})}`} />
 
           {/* 5. Memory + Privacy */}
           <MemoryPrivacySection memories={memories} onMemoriesChanged={onMemoriesChanged} />

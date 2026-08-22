@@ -127,6 +127,13 @@ async function scenarioA_freshTarget() {
   // ── Setup ──────────────────────────────────────────────────────────────────
   const anonId = await createAnonUser("A-anon");
   const targetId = await createRegisteredUser("A-target");
+  const anonymousCoachSettings = {
+    conciseResponses: true, proactiveInsights: false, autoAdjustRecommendations: false,
+    memoryPersonalization: true, coachingStyle: "direct", explanationDepth: "minimal",
+    trainingAggression: "conservative", requireApprovalStructural: true,
+    requireApprovalDeload: true, adaptFromReadiness: false, adaptFromMissedSessions: false,
+  };
+  await db.update(usersTable).set({ coachingSettings: anonymousCoachSettings }).where(eq(usersTable.id, anonId));
 
   // Create a conversation first (needed for FK in some child tables)
   const [conv] = await db
@@ -291,6 +298,9 @@ async function scenarioA_freshTarget() {
   assert(targetNeural?.xp === 150, `neural_profiles: XP value preserved (expected 150, got ${targetNeural?.xp})`);
   assert(JSON.stringify(targetNeural?.unlockedMilestones) === JSON.stringify(["first_session", "week_1"]),
     `neural_profiles: milestones preserved`);
+  const [targetIdentity] = await db.select().from(usersTable).where(eq(usersTable.id, targetId));
+  assert(Object.entries(anonymousCoachSettings).every(([key, value]) => (targetIdentity?.coachingSettings as any)?.[key] === value),
+    "account coaching settings survive anonymous → registered merge");
 }
 
 // ── Scenario B: Target already has profile and neural_profile ─────────────────

@@ -34,6 +34,10 @@ export const trainingSystems = pgTable("training_systems", {
     .notNull()
     .default("active"),
 
+  needsReview: boolean("needs_review").notNull().default(false),
+  reviewReasons: jsonb("review_reasons"),
+  markedNeedsReviewAt: timestamp("marked_needs_review_at", { withTimezone: true }),
+
   currentPhaseId: integer("current_phase_id"),
 
   metadata: jsonb("metadata"),

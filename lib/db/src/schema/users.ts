@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -37,6 +37,10 @@ export const usersTable = pgTable("users", {
   trialEnd: timestamp("trial_end", { withTimezone: true }),
 
   messageCount: integer("message_count").notNull().default(0),
+
+  // Account-authoritative Atlas behavior controls. Anonymous users own these
+  // on the same canonical identity row that is upgraded during registration.
+  coachingSettings: jsonb("coaching_settings"),
 
   // Durable account-deletion checkpoint. Failed billing cancellation keeps the
   // account recoverable and visible to reconciliation/support workflows.

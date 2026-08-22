@@ -1,9 +1,14 @@
 import { Router, type IRouter } from "express";
-import { db, userProfilesTable, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
-import { CreateProfileBody } from "@workspace/api-zod";
+import { db, userProfilesTable, usersTable, trainingSystems } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { logger } from "../lib/logger";
+import {
+  DEFAULT_COACH_SETTINGS,
+  changedProgramConstraints,
+  coachSettingsSchema,
+  profileSettingsSchema,
+} from "../lib/profile-settings";
 
 const router: IRouter = Router();
 
@@ -45,7 +50,7 @@ router.post("/profile", requireAuth, async (req, res): Promise<void> => {
 
   logger.info({ userId, body: req.body }, "Onboarding profile save attempt");
 
-  const parsed = CreateProfileBody.safeParse(req.body);
+  const parsed = profileSettingsSchema.safeParse(req.body);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     logger.warn({ userId, issues, body: req.body }, "Onboarding validation failed");
@@ -69,25 +74,47 @@ router.post("/profile", requireAuth, async (req, res): Promise<void> => {
   };
 
   try {
-    const existing = await db.select().from(userProfilesTable).where(eq(userProfilesTable.userId, userId));
-
-    let profile;
-    if (existing.length > 0) {
-      const [updated] = await db.update(userProfilesTable)
-        .set({ ...safeData, userId })
+    const profile = await db.transaction(async (tx) => {
+      const existing = await tx.select().from(userProfilesTable).where(eq(userProfilesTable.userId, userId));
+      let savedProfile;
+      if (existing.length > 0) {
+      // Optional preference fields are also written by calibration. A profile
+      // save from Settings does not include them, so only overwrite them when
+      // the caller explicitly supplied the field. This preserves calibrated
+      // preferences/exclusions while still allowing an explicit null to clear.
+      const updateData = {
+        ...safeData,
+        ...(parsed.data.exercisePreferences !== undefined
+          ? { exercisePreferences: parsed.data.exercisePreferences }
+          : { exercisePreferences: existing[0].exercisePreferences }),
+        ...(parsed.data.exercisesToAvoid !== undefined
+          ? { exercisesToAvoid: parsed.data.exercisesToAvoid }
+          : { exercisesToAvoid: existing[0].exercisesToAvoid }),
+      };
+      const [updated] = await tx.update(userProfilesTable)
+        .set({ ...updateData, userId })
         .where(eq(userProfilesTable.userId, userId))
         .returning();
-      profile = updated;
-    } else {
-      const [created] = await db.insert(userProfilesTable)
+        savedProfile = updated;
+
+        const reviewReasons = changedProgramConstraints(existing[0], updated);
+        if (reviewReasons.length > 0) {
+          await tx.update(trainingSystems)
+            .set({ needsReview: true, reviewReasons, markedNeedsReviewAt: new Date() })
+            .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+        }
+      } else {
+      const [created] = await tx.insert(userProfilesTable)
         .values({ ...safeData, userId })
         .returning();
-      profile = created;
-    }
+        savedProfile = created;
+      }
 
-    await db.update(usersTable)
-      .set({ onboardingComplete: true })
-      .where(eq(usersTable.id, userId));
+      await tx.update(usersTable)
+        .set({ onboardingComplete: true })
+        .where(eq(usersTable.id, userId));
+      return savedProfile;
+    });
 
     logger.info({ userId, profileId: profile.id }, "Onboarding profile saved successfully");
 
@@ -112,6 +139,35 @@ router.post("/profile", requireAuth, async (req, res): Promise<void> => {
     const message = err instanceof Error ? err.message : "Unknown database error";
     res.status(500).json({ error: `Failed to save profile: ${message}` });
   }
+});
+
+router.get("/profile/coach-settings", requireAuth, async (req, res): Promise<void> => {
+  const [user] = await db.select({ coachingSettings: usersTable.coachingSettings })
+    .from(usersTable)
+    .where(eq(usersTable.id, req.session.userId!));
+  if (!user) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+  const parsed = coachSettingsSchema.safeParse(user.coachingSettings);
+  res.json(parsed.success ? parsed.data : DEFAULT_COACH_SETTINGS);
+});
+
+router.put("/profile/coach-settings", requireAuth, async (req, res): Promise<void> => {
+  const parsed = coachSettingsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid coaching settings", issues: parsed.error.issues });
+    return;
+  }
+  const [user] = await db.update(usersTable)
+    .set({ coachingSettings: parsed.data })
+    .where(eq(usersTable.id, req.session.userId!))
+    .returning({ coachingSettings: usersTable.coachingSettings });
+  if (!user) {
+    res.status(404).json({ error: "Account not found" });
+    return;
+  }
+  res.json(user.coachingSettings);
 });
 
 export default router;

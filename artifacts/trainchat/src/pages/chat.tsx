@@ -3221,6 +3221,14 @@ export default function Chat() {
   const liveProgramPanel = (
     <div className="flex flex-col h-full overflow-hidden">
       <ReadinessSummary />
+      {(activeSystem as any)?.needsReview && (
+        <div className="mx-3 mt-3 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2" role="status">
+          <p className="text-xs font-semibold text-amber-300">Program needs review</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/70">
+            Your training settings changed. Refine or regenerate this program before treating it as current.
+          </p>
+        </div>
+      )}
       <div className="flex-1 min-h-0 overflow-hidden">
         <LiveProgramPanel
           program={displayProgram}
