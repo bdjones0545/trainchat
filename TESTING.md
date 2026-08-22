@@ -78,7 +78,7 @@ runtime verification in Replit in addition to passing unit tests.
 
 | Script | Location | Cases | Requires |
 |---|---|---|---|
-| `integration-test-dr0025.ts` | `artifacts/api-server/scripts/` | 61 assertions | Live Replit DB (`DATABASE_URL`) |
+| `integration-test-dr0025.ts` | `artifacts/api-server/scripts/` | 61 assertions | Explicit disposable DB (`TEST_DATABASE_URL`) |
 
 ### Runtime verification scripts (live server required)
 
@@ -126,7 +126,7 @@ repository without external services. Check the `.github/workflows/ci.yml` badge
 | Check | Why excluded | How to run manually |
 |---|---|---|
 | OpenAI scenario replay | Live API key + running server | `pnpm exec tsx scenario-replay.ts` in Replit |
-| DR-0025 integration test | Live PostgreSQL | `pnpm exec tsx scripts/integration-test-dr0025.ts` in Replit |
+| DR-0025 integration test | Explicit disposable PostgreSQL DB | `TEST_DATABASE_URL=... pnpm exec tsx scripts/integration-test-dr0025.ts` |
 | Stripe e2e | Live Stripe key | `pnpm exec tsx src/e2e-webhook-test.ts` |
 | SendGrid delivery | Live SendGrid key | Submit support form, check inbox |
 | Session / cookie behavior | Replit HTTPS proxy required | Open Replit preview, log in, refresh |
@@ -172,11 +172,11 @@ Expected: 55 cases pass. Runtime: ~15 seconds.
 pnpm --filter @workspace/api-server test && pnpm --filter @workspace/trainchat test
 ```
 
-### Integration tests (requires Replit DB)
+### Integration tests (requires an isolated disposable DB)
 
 ```bash
-# In Replit shell — requires DATABASE_URL to be set
-pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
+# Uses TEST_DATABASE_URL only; never falls back to DATABASE_URL.
+TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
 ```
 
 Expected: 61 assertions pass, exit code 0. Creates and cleans up test users automatically.
@@ -398,10 +398,10 @@ pnpm --filter @workspace/api-server exec vitest run src/__tests__/anonymousMerge
 # Expected: 18 cases pass
 ```
 
-### Integration test (live DB — run in Replit)
+### Integration test (isolated disposable DB)
 
 ```bash
-pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
+TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
 # Expected: 61 assertions pass, 0 failed
 ```
 
@@ -651,7 +651,7 @@ to `main` should not proceed while CI is red. CI covers:
 
 ### Required for DB-touching changes
 
-- [ ] `pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts` — 61 assertions pass
+- [ ] `TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts` — 61 assertions pass
 
 ### Required for auth changes
 

@@ -11,6 +11,7 @@ import { convertGuestSession, getGuestSession } from "./guestService";
 import { createTrainingSystemFromProgram, type ChatProgram } from "./training-system-service";
 import type { GuestChatProgram } from "./guestChat";
 import { logger } from "./logger";
+import { profileSettingsSchema } from "./profile-settings";
 
 // ─── Teaser Limits ─────────────────────────────────────────────────────────────
 // Mirrors GUEST_CONFIG.TEASER_TOTAL_LIMIT on the frontend.
@@ -28,6 +29,41 @@ const STYLE_TO_DURATION: Record<string, number> = {
   "HIIT & Circuit Style": 45,
   "Slow & Controlled": 60,
 };
+
+const GUEST_GOAL_ALIASES: Record<string, string> = {
+  "general fitness": "general_fitness",
+  "build muscle": "hypertrophy",
+  "muscle gain": "hypertrophy",
+  strength: "strength",
+  "fat loss": "fat_loss",
+  endurance: "endurance",
+  "athletic performance": "athletic_performance",
+};
+
+/**
+ * Guest onboarding predates the canonical profile vocabulary. Normalize the
+ * supported legacy labels, then use the exact registered-profile contract
+ * rather than inserting arbitrary guest-session values.
+ */
+function parseGuestProfileAnswers(answers: Record<string, unknown>) {
+  const rawGoal = String(answers.goal ?? "").trim().toLowerCase();
+  const trainingGoal = GUEST_GOAL_ALIASES[rawGoal] ?? rawGoal.replace(/\s+/g, "_");
+  const rawExperience = String(answers.experience ?? "").trim().toLowerCase();
+  const equipmentAccess = Array.isArray(answers.equipment)
+    ? answers.equipment.map(String).join(", ")
+    : "";
+
+  return profileSettingsSchema.safeParse({
+    trainingGoal,
+    experienceLevel: rawExperience,
+    trainingStyle: "general_strength",
+    daysPerWeek: Number(answers.frequency),
+    sessionDuration: STYLE_TO_DURATION[String(answers.style)] ?? 60,
+    equipmentAccess: equipmentAccess || "full gym",
+    injuries: answers.injuries ? String(answers.injuries) : null,
+    sportFocus: answers.sport ? String(answers.sport) : null,
+  });
+}
 
 function formatProgramAsText(program: any): string {
   if (!program) return "";
@@ -173,28 +209,19 @@ export async function mergeGuestToUser(
     .limit(1);
 
   if (!existingProfile && answers) {
-    const equipmentList = Array.isArray(answers.equipment)
-      ? answers.equipment
-      : [];
-    const equipmentAccess = equipmentList.join(", ") || "Full Gym";
-    const sessionDuration = STYLE_TO_DURATION[answers.style as string] ?? 60;
-
-    await db.insert(userProfilesTable).values({
-      userId,
-      trainingGoal: String(answers.goal ?? "General Fitness"),
-      experienceLevel: String(answers.experience ?? "Intermediate"),
-      trainingStyle: String(answers.style ?? "General"),
-      daysPerWeek: Number(answers.frequency) || 3,
-      sessionDuration,
-      equipmentAccess,
-      injuries: answers.injuries ? String(answers.injuries) : null,
-      sportFocus: answers.sport ? String(answers.sport) : null,
-    });
-
-    logger.info(
-      { deviceId, userId },
-      "mergeGuestToUser: user profile created from onboarding answers",
-    );
+    const profile = parseGuestProfileAnswers(answers);
+    if (!profile.success) {
+      logger.warn(
+        { deviceId, userId, issueCount: profile.error.issues.length },
+        "mergeGuestToUser: skipped invalid guest profile answers",
+      );
+    } else {
+      await db.insert(userProfilesTable).values({ userId, ...profile.data });
+      logger.info(
+        { deviceId, userId },
+        "mergeGuestToUser: user profile created from onboarding answers",
+      );
+    }
   }
 
   // ── 2. Create starter conversation ───────────────────────────────────────

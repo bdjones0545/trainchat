@@ -9,7 +9,7 @@ import {
   RefreshCw, CheckCircle2, ChevronDown, ChevronUp, Heart, Clock, Siren,
   Bell, BellOff, Sparkles, Settings2, Lock, Unlock, Sliders, RotateCcw,
 } from "lucide-react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import PricingModal from "@/components/PricingModal";
 import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
 import { useGetMe, useLogout } from "@workspace/api-client-react";
@@ -106,7 +106,7 @@ function lsBool(key: string, defaultTrue = false): boolean {
 function lsSet(key: string, value: string | boolean) {
   try { localStorage.setItem(key, String(value)); } catch {}
   if (key.startsWith("coach_")) {
-    persistCoachSettings().catch(() => {});
+    void persistCoachSettings();
   }
 }
 
@@ -127,14 +127,26 @@ function readCoachSettingsCache() {
 }
 
 async function persistCoachSettings() {
+  const snapshot = readCoachSettingsCache();
+  coachSettingsSaveQueue = coachSettingsSaveQueue
+    .catch(() => undefined)
+    .then(async () => {
   const response = await fetch("/api/profile/coach-settings", {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(readCoachSettingsCache()),
+        body: JSON.stringify(snapshot),
   });
   if (!response.ok) throw new Error("Failed to persist coaching settings");
+    });
+  return coachSettingsSaveQueue;
 }
+
+/**
+ * Explicit selections are committed in order. Hydration bypasses lsSet(), so a
+ * stale cache copied from the server can never trigger a write back to it.
+ */
+let coachSettingsSaveQueue: Promise<void> = Promise.resolve();
 
 function cacheCoachSettings(settings: Record<string, unknown>) {
   const mapping: Record<string, string> = {
@@ -171,6 +183,17 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
     <div className={`rounded-2xl border border-border bg-card/50 overflow-hidden divide-y divide-border/60 ${className}`}>
       {children}
     </div>
+  );
+}
+
+function SettingsLoadingSection({ title }: { title: string }) {
+  return (
+    <section aria-label={`Loading ${title}`}>
+      <div className="h-5 w-44 rounded bg-muted/50 animate-pulse mb-3" />
+      <Card>
+        <div className="h-20 animate-pulse bg-muted/20" />
+      </Card>
+    </section>
   );
 }
 
@@ -369,6 +392,7 @@ function AthleteIdentitySection({
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-profile"] });
+      queryClient.invalidateQueries({ queryKey: ["active-system"] });
       setIsEditing(false);
       toast({ title: "Preferences saved" });
     },
@@ -1088,6 +1112,7 @@ function MemoryPrivacySection({ memories, onMemoriesChanged }: {
 // ─── Section: Notifications ───────────────────────────────────────────────────
 
 function NotificationsSection() {
+  const { toast } = useToast();
   const [preSesh, setPreSesh] = useState(() => localStorage.getItem("notif_presession") === "true");
   const [missed, setMissed] = useState(() => localStorage.getItem("notif_missed") === "true");
   const [weekly, setWeekly] = useState(() => localStorage.getItem("notif_weekly") === "true");
@@ -1095,22 +1120,39 @@ function NotificationsSection() {
   const [recovery, setRecovery] = useState(() => localStorage.getItem("notif_recovery") === "true");
   const [plateau, setPlateau] = useState(() => localStorage.getItem("notif_plateau") === "true");
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
 
-  // P3: Persist notification preferences server-side (fire-and-forget after localStorage save)
-  async function persistToServer(updated: Record<string, boolean>) {
-    try {
-      setSaving(true);
-      await fetch("/api/intelligence-status/notifications", {
+  // Explicit saves are serialized so an older request can never arrive after a
+  // newer intent and overwrite the latest notification preference snapshot.
+  function persistToServer(updated: Record<string, boolean>) {
+    setSaving(true);
+    const request = saveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch("/api/intelligence-status/notifications", {
         method: "PATCH",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updated),
       });
-    } catch {
-      // Non-fatal — localStorage is the source of truth for delivery gating
-    } finally {
-      setSaving(false);
-    }
+        if (!response.ok) throw new Error("Failed to save notification preferences");
+      });
+    saveQueueRef.current = request;
+    void request
+      .then(() => setSaveFailed(false))
+      .catch(() => {
+        setSaveFailed(true);
+        toast({
+          title: "Save failed",
+          description: "Your notification preferences could not be saved. Please try again.",
+          variant: "destructive",
+        });
+      })
+      .finally(() => {
+        if (saveQueueRef.current === request) setSaving(false);
+      });
+    return request;
   }
 
   function t(key: string, val: boolean, setter: (v: boolean) => void, field: string) {
@@ -1125,7 +1167,7 @@ function NotificationsSection() {
       plateauDetection: localStorage.getItem("notif_plateau") === "true",
       [field]: val,
     };
-    persistToServer(current);
+    void persistToServer(current);
   }
 
   return (
@@ -1140,7 +1182,11 @@ function NotificationsSection() {
         <SwitchRow label="Plateau detection" description="Atlas flags when progress has stalled and proposes a change" checked={plateau} onCheckedChange={v => t("notif_plateau", v, setPlateau, "plateauDetection")} />
       </Card>
       <div className="flex items-center gap-1.5 px-1 mt-2">
-        <p className="text-[10px] text-muted-foreground/40">Preferences saved server-side. Delivery coming soon.</p>
+        {saveFailed ? (
+          <p className="text-[10px] text-red-400/80">Changes could not be saved. Please try again.</p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground/40">Delivery preferences are saved to your account.</p>
+        )}
         {saving && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/30" />}
       </div>
     </section>
@@ -1479,9 +1525,13 @@ export default function SettingsPage() {
   const [showPricing, setShowPricing] = useState(false);
   const [anonymousUpgradePlan, setAnonymousUpgradePlan] = useState<{ planId: string; billingInterval: "monthly" | "yearly" } | null>(null);
 
-  const { data: me } = useGetMe();
+  const { data: me, isLoading: isMeLoading } = useGetMe();
   const isAnonymousUser = !!(me as any)?.isAnonymous;
-  const { data: coachSettings } = useQuery({
+  const shouldLoadAccountCoachSettings = !isMeLoading && !!me && !isAnonymousUser;
+  const {
+    data: coachSettings,
+    isSuccess: hasLoadedAccountCoachSettings,
+  } = useQuery({
     queryKey: ["coach-settings"],
     queryFn: async () => {
       const response = await fetch("/api/profile/coach-settings", { credentials: "include" });
@@ -1491,7 +1541,9 @@ export default function SettingsPage() {
       return settings as Record<string, unknown>;
     },
     staleTime: 0,
+    enabled: shouldLoadAccountCoachSettings,
   });
+  const coachSettingsReady = isAnonymousUser || !shouldLoadAccountCoachSettings || hasLoadedAccountCoachSettings;
 
   const { data: sub, isLoading: subLoading } = useQuery({
     queryKey: ["subscription"],
@@ -1564,10 +1616,18 @@ export default function SettingsPage() {
           <AtlasIntelligenceSection profile={profile} memories={memories} />
 
           {/* 3. Coaching Behavior */}
-          <CoachingBehaviorSection key={`behavior-${JSON.stringify(coachSettings ?? {})}`} />
+          {coachSettingsReady ? (
+            <CoachingBehaviorSection key={`behavior-${JSON.stringify(coachSettings ?? {})}`} />
+          ) : (
+            <SettingsLoadingSection title="Coaching Behavior" />
+          )}
 
           {/* 4. Adaptation + Recovery */}
-          <AdaptationSection key={`adaptation-${JSON.stringify(coachSettings ?? {})}`} />
+          {coachSettingsReady ? (
+            <AdaptationSection key={`adaptation-${JSON.stringify(coachSettings ?? {})}`} />
+          ) : (
+            <SettingsLoadingSection title="Adaptation + Recovery" />
+          )}
 
           {/* 5. Memory + Privacy */}
           <MemoryPrivacySection memories={memories} onMemoriesChanged={onMemoriesChanged} />

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   changedProgramConstraints,
+  calibrationProfileFieldsSchema,
   coachSettingsSchema,
   profileSettingsSchema,
 } from "../profile-settings";
@@ -47,6 +48,16 @@ describe("canonical profile validation", () => {
 
   it("rejects unknown stale-client fields", () => {
     expect(profileSettingsSchema.safeParse({ ...validProfile, hiddenMode: true }).success).toBe(false);
+  });
+
+  it.each([
+    ["daysPerWeek", 999],
+    ["primaryGoal", "bulk_at_all_costs"],
+    ["experienceLevel", "wizard"],
+    ["sessionDuration", 42],
+    ["injuries", "x".repeat(1001)],
+  ])("rejects an invalid calibration %s before persistence", (field, value) => {
+    expect(calibrationProfileFieldsSchema.safeParse({ [field]: value }).success).toBe(false);
   });
 });
 

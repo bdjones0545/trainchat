@@ -22,6 +22,21 @@ export const profileSettingsSchema = z.object({
   exercisesToAvoid: boundedOptionalText,
 }).strict();
 
+/**
+ * Calibration writes only a subset of the full profile, but every field it
+ * persists must still obey the exact same product contract as Settings.
+ */
+export const calibrationProfileFieldsSchema = z.object({
+  experienceLevel: z.enum(EXPERIENCE_LEVELS).optional(),
+  primaryGoal: z.enum(TRAINING_GOALS).optional(),
+  injuries: boundedOptionalText,
+  equipmentAccess: z.string().trim().min(1).max(1000).optional(),
+  daysPerWeek: z.number().int().refine((v) => (DAYS_PER_WEEK as readonly number[]).includes(v), "must be one of 2, 3, 4, 5, 6").optional(),
+  sessionDuration: z.number().int().refine((v) => (SESSION_DURATIONS as readonly number[]).includes(v), "must be one of 30, 45, 60, 75, 90").optional(),
+  sportFocus: boundedOptionalText,
+  exercisesToAvoid: boundedOptionalText,
+}).strict();
+
 export const coachSettingsSchema = z.object({
   conciseResponses: z.boolean(),
   proactiveInsights: z.boolean(),

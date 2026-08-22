@@ -4,8 +4,8 @@
  * Verifies that mergeAnonymousToRegistered correctly migrates all anonymous
  * user data to a registered target user without cascade-deleting anything.
  *
- * Run (in Replit, where DATABASE_URL is set):
- *   pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
+ * Run against an explicitly selected disposable database:
+ *   TEST_DATABASE_URL='postgresql://…' pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
  *
  * What this does:
  *   1. Creates an anonymous user with data in all 14 cascade-affected tables
@@ -16,32 +16,31 @@
  *   6. Cleans up all test data regardless of pass/fail
  *   7. Prints a structured pass/fail report per table
  *
- * This script is SAFE to run against the development database.
+ * This script is SAFE only against an explicitly selected disposable database.
  * It creates and deletes all data under test user IDs that it controls.
  * It never touches existing user data.
  */
 
-import {
-  pool,
-  db,
-  usersTable,
-  conversationsTable,
-  trainingSystems,
-  userMemoriesTable,
-  atlasMemoriesTable,
-  userProfilesTable,
-  neuralProfilesTable,
-  readinessEntriesTable,
-  sessionFeedbackTable,
-  sessionLogsTable,
-  exerciseLogsTable,
-  activeSessionsTable,
-  pendingClarificationsTable,
-  savedProgramsTable,
-  passwordResetTokensTable,
-} from "@workspace/db";
 import { eq, and, inArray } from "drizzle-orm";
-import { mergeAnonymousToRegistered } from "../src/lib/anonymousMerge";
+
+let pool: any;
+let db: any;
+let usersTable: any;
+let conversationsTable: any;
+let trainingSystems: any;
+let userMemoriesTable: any;
+let atlasMemoriesTable: any;
+let userProfilesTable: any;
+let neuralProfilesTable: any;
+let readinessEntriesTable: any;
+let sessionFeedbackTable: any;
+let sessionLogsTable: any;
+let exerciseLogsTable: any;
+let activeSessionsTable: any;
+let pendingClarificationsTable: any;
+let savedProgramsTable: any;
+let passwordResetTokensTable: any;
+let mergeAnonymousToRegistered: any;
 
 // ── Colours & formatting ──────────────────────────────────────────────────────
 
@@ -488,16 +487,26 @@ async function scenarioE_transactionRollback() {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
+  const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+  if (!testDatabaseUrl) {
+    throw new Error(
+      "TEST_DATABASE_URL is required for this live integration test. Refusing to fall back to DATABASE_URL.",
+    );
+  }
+  process.env.DATABASE_URL = testDatabaseUrl;
+  const dbModule = await import("@workspace/db");
+  ({
+    pool, db, usersTable, conversationsTable, trainingSystems, userMemoriesTable,
+    atlasMemoriesTable, userProfilesTable, neuralProfilesTable, readinessEntriesTable,
+    sessionFeedbackTable, sessionLogsTable, exerciseLogsTable, activeSessionsTable,
+    pendingClarificationsTable, savedProgramsTable, passwordResetTokensTable,
+  } = dbModule);
+  ({ mergeAnonymousToRegistered } = await import("../src/lib/anonymousMerge"));
+
   console.log(`\n${BOLD}${CYAN}DR-0025 Integration Test — mergeAnonymousToRegistered${RESET}`);
   console.log(`${"─".repeat(60)}`);
-  console.log(`Database: ${process.env.DATABASE_URL?.replace(/:[^:@]+@/, ":***@") ?? "(not set)"}`);
+  console.log("Database: explicit TEST_DATABASE_URL");
   console.log(`${"─".repeat(60)}`);
-
-  if (!process.env.DATABASE_URL) {
-    console.log(`\n${RED}ERROR: DATABASE_URL is not set. This test requires a live PostgreSQL database.${RESET}`);
-    console.log(`Set DATABASE_URL and re-run:\n  pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts\n`);
-    process.exit(1);
-  }
 
   try {
     await scenarioA_freshTarget();

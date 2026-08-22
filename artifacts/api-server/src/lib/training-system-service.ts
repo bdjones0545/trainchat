@@ -2145,6 +2145,12 @@ export async function upsertTrainingSystemFromProgram(
           intensityProfile: program.blockMetadata.intensityProfile,
         } : {}),
       } as any,
+      // A fully validated rebuild is the only successful resolution for a
+      // profile-review state. Because this write shares the hierarchy rebuild
+      // transaction, a failed or rolled-back regeneration retains the warning.
+      needsReview: false,
+      reviewReasons: null,
+      markedNeedsReviewAt: null,
     })
     .where(eq(trainingSystems.id, existingSystem.id));
 

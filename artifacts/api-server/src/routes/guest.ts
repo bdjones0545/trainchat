@@ -113,15 +113,15 @@ router.patch("/guest/session/:deviceId", async (req, res): Promise<void> => {
 const OnboardingBody = z.object({
   deviceId: z.string().min(8).max(128),
   answers: z.object({
-    goal: z.string(),
-    experience: z.string(),
-    frequency: z.number().int().min(1).max(7),
-    equipment: z.array(z.string()),
-    injuries: z.string(),
-    style: z.string(),
-    timeline: z.string(),
-    sport: z.string(),
-  }),
+    goal: z.string().trim().min(1).max(100),
+    experience: z.string().trim().min(1).max(100),
+    frequency: z.number().int().min(2).max(6),
+    equipment: z.array(z.string().trim().min(1).max(200)).max(20),
+    injuries: z.string().max(1000),
+    style: z.string().trim().min(1).max(100),
+    timeline: z.string().max(200),
+    sport: z.string().max(1000),
+  }).strict(),
 });
 
 const GenerateBody = z.object({

@@ -1,9 +1,13 @@
 import express from "express";
 import request from "supertest";
 import { eq } from "drizzle-orm";
-import { db, trainingSystems, userProfilesTable, usersTable } from "@workspace/db";
-import profileRouter from "../src/routes/profile";
-import { resolveAgentSettingsContext } from "../src/lib/agent-settings-resolver";
+
+let db: any;
+let trainingSystems: any;
+let userProfilesTable: any;
+let usersTable: any;
+let profileRouter: any;
+let resolveAgentSettingsContext: any;
 
 let passed = 0;
 function check(value: unknown, message: string) {
@@ -26,6 +30,18 @@ const baseProfile = {
 };
 
 async function main() {
+  const testDatabaseUrl = process.env.TEST_DATABASE_URL;
+  if (!testDatabaseUrl) {
+    throw new Error(
+      "TEST_DATABASE_URL is required for this live integration test. Refusing to fall back to DATABASE_URL.",
+    );
+  }
+  process.env.DATABASE_URL = testDatabaseUrl;
+  const dbModule = await import("@workspace/db");
+  ({ db, trainingSystems, userProfilesTable, usersTable } = dbModule);
+  ({ default: profileRouter } = await import("../src/routes/profile"));
+  ({ resolveAgentSettingsContext } = await import("../src/lib/agent-settings-resolver"));
+
   const [user] = await db.insert(usersTable).values({ isAnonymous: true, deviceId: `feature-audit-${Date.now()}` }).returning();
   const app = express();
   app.use(express.json());

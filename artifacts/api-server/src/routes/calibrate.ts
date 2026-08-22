@@ -7,11 +7,12 @@
  */
 
 import { Router, type IRouter } from "express";
-import { db, userProfilesTable, userMemoriesTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, userProfilesTable, userMemoriesTable, trainingSystems } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
 import { upsertMemory } from "../lib/memory";
 import { logger } from "../lib/logger";
+import { calibrationProfileFieldsSchema, changedProgramConstraints } from "../lib/profile-settings";
 import {
   calculateCoachingPrecision,
   buildAthleteDNA,
@@ -89,6 +90,26 @@ interface PrecisionHistoryEntry {
 router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
   const userId = req.session.userId!;
   const data: CalibrationPayload = req.body ?? {};
+  const profileFields = calibrationProfileFieldsSchema.safeParse({
+    ...(data.experienceLevel !== undefined ? { experienceLevel: data.experienceLevel } : {}),
+    ...(data.primaryGoal !== undefined ? { primaryGoal: data.primaryGoal } : {}),
+    ...(data.injuries !== undefined ? { injuries: data.injuries } : {}),
+    ...(data.equipmentAccess !== undefined ? { equipmentAccess: data.equipmentAccess } : {}),
+    ...(data.daysPerWeek !== undefined ? { daysPerWeek: data.daysPerWeek } : {}),
+    ...(data.sessionDuration !== undefined ? { sessionDuration: data.sessionDuration } : {}),
+    ...(data.sportFocus !== undefined ? { sportFocus: data.sportFocus } : {}),
+    ...(data.exercisesToAvoid !== undefined ? { exercisesToAvoid: data.exercisesToAvoid } : {}),
+  });
+  if (!profileFields.success) {
+    res.status(400).json({
+      error: "Validation failed",
+      issues: profileFields.error.issues.map((issue) => ({
+        field: issue.path.join("."),
+        message: issue.message,
+      })),
+    });
+    return;
+  }
 
   try {
     // ── Coaching Precision (6-dimensional) ──────────────────────────────────
@@ -117,15 +138,15 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
       updatedAt: new Date(),
     };
 
-    if (data.experienceLevel) updatePayload.experienceLevel = data.experienceLevel;
+    if (profileFields.data.experienceLevel) updatePayload.experienceLevel = profileFields.data.experienceLevel;
     if (data.yearsTraining != null) updatePayload.yearsTraining = data.yearsTraining;
-    if (data.primaryGoal) updatePayload.trainingGoal = data.primaryGoal;
-    if (data.injuries !== undefined) updatePayload.injuries = data.injuries;
-    if (data.equipmentAccess) updatePayload.equipmentAccess = data.equipmentAccess;
-    if (data.daysPerWeek != null) updatePayload.daysPerWeek = data.daysPerWeek;
-    if (data.sessionDuration != null) updatePayload.sessionDuration = data.sessionDuration;
-    if (data.sportFocus) updatePayload.sportFocus = data.sportFocus;
-    if (data.exercisesToAvoid) updatePayload.exercisesToAvoid = data.exercisesToAvoid;
+    if (profileFields.data.primaryGoal) updatePayload.trainingGoal = profileFields.data.primaryGoal;
+    if (profileFields.data.injuries !== undefined) updatePayload.injuries = profileFields.data.injuries;
+    if (profileFields.data.equipmentAccess) updatePayload.equipmentAccess = profileFields.data.equipmentAccess;
+    if (profileFields.data.daysPerWeek != null) updatePayload.daysPerWeek = profileFields.data.daysPerWeek;
+    if (profileFields.data.sessionDuration != null) updatePayload.sessionDuration = profileFields.data.sessionDuration;
+    if (profileFields.data.sportFocus !== undefined) updatePayload.sportFocus = profileFields.data.sportFocus;
+    if (profileFields.data.exercisesToAvoid !== undefined) updatePayload.exercisesToAvoid = profileFields.data.exercisesToAvoid;
 
     // Behavioral fields (T005)
     if (data.scheduleConsistency) updatePayload.scheduleConsistency = data.scheduleConsistency;
@@ -139,7 +160,7 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
 
     // ── Upsert profile ───────────────────────────────────────────────────────
     const existing = await db
-      .select({ id: userProfilesTable.id, coachingPrecisionHistory: userProfilesTable.coachingPrecisionHistory })
+      .select()
       .from(userProfilesTable)
       .where(eq(userProfilesTable.userId, userId));
 
@@ -156,22 +177,32 @@ router.post("/calibrate", requireAuth, async (req, res): Promise<void> => {
     updatePayload.coachingPrecisionHistory = updatedHistory;
 
     if (existing.length > 0) {
-      await db
-        .update(userProfilesTable)
-        .set(updatePayload as any)
-        .where(eq(userProfilesTable.userId, userId));
+      await db.transaction(async (tx) => {
+        const [updated] = await tx
+          .update(userProfilesTable)
+          .set(updatePayload as any)
+          .where(eq(userProfilesTable.userId, userId))
+          .returning();
+        const reviewReasons = changedProgramConstraints(existing[0], updated);
+        if (reviewReasons.length > 0) {
+          await tx
+            .update(trainingSystems)
+            .set({ needsReview: true, reviewReasons, markedNeedsReviewAt: new Date() })
+            .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.status, "active")));
+        }
+      });
     } else {
       await db.insert(userProfilesTable).values({
         userId,
-        trainingGoal: (data.primaryGoal as any) ?? "General Fitness",
-        experienceLevel: data.experienceLevel ?? "intermediate",
-        trainingStyle: "strength",
-        daysPerWeek: data.daysPerWeek ?? 4,
-        sessionDuration: data.sessionDuration ?? 60,
-        equipmentAccess: data.equipmentAccess ?? "full gym",
-        injuries: data.injuries ?? null,
-        sportFocus: data.sportFocus ?? null,
-        exercisesToAvoid: data.exercisesToAvoid ?? null,
+        trainingGoal: profileFields.data.primaryGoal ?? "general_fitness",
+        experienceLevel: profileFields.data.experienceLevel ?? "intermediate",
+        trainingStyle: "general_strength",
+        daysPerWeek: profileFields.data.daysPerWeek ?? 4,
+        sessionDuration: profileFields.data.sessionDuration ?? 60,
+        equipmentAccess: profileFields.data.equipmentAccess ?? "full gym",
+        injuries: profileFields.data.injuries ?? null,
+        sportFocus: profileFields.data.sportFocus ?? null,
+        exercisesToAvoid: profileFields.data.exercisesToAvoid ?? null,
         yearsTraining: data.yearsTraining ?? null,
         calibrationScore: precision.score,
         coachingPrecisionScore: precision.score,
