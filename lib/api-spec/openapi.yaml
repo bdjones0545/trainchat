@@ -686,8 +686,12 @@ components:
       properties:
         content:
           type: string
+        clientTurnId:
+          type: string
+          format: uuid
       required:
         - content
+        - clientTurnId
 
     Message:
       type: object

@@ -3,8 +3,7 @@ import { db, conversationsTable, messagesTable, neuralProfilesTable, trainingSys
 import { eq, desc, count, and } from "drizzle-orm";
 import { CreateConversationBody, GetConversationParams, DeleteConversationParams, ListMessagesParams, SendMessageBody, SendMessageParams } from "@workspace/api-zod";
 import { requireAuth } from "../middlewares/auth";
-import { captureWithTags } from "../lib/sentry";
-import { generateAIResponse, type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
+import { type ProgramStructure, validateProgramAgainstConstraints } from "../lib/ai";
 // getLastMonthlyPlan moved to program-build-service (Phase 2 extraction — no longer called directly here)
 import { classifyIntent, logIntentSummary, extractConstraints, detectSport, type IntentResult, type ExtractedConstraints } from "../lib/intent";
 import { extractAgentIntentProfile } from "../lib/language-system";
@@ -38,6 +37,7 @@ import { verifyResponseAlignment } from "../lib/response-alignment-verifier";
 import {
   persistConstraintsFromTurn,
   validateAgainstHardConstraints,
+  validatePainConstraints,
   type HardConstraints,
 } from "../lib/constraint-memory";
 import {
@@ -108,9 +108,17 @@ import {
 import { interpretMutationRequest } from "../services/mutation-execution-service";
 import { setupSseHeaders, sseEmit, sseDone, checkSseRateLimit } from "../lib/sse";
 import { sharedRateLimit } from "../lib/shared-rate-limiter";
-import { isPaywallBlocked, buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
-import { buildConversationContext } from "../lib/conversation-context-injection";
+import { buildPaywallHttpBody, buildPaywallSseEvent } from "../lib/conversation-plan-gating";
 import { resolveResponseMode, classifyOrchMutationType, shouldBypassEditEngine, resolveClarificationPendingFamily, formatChoiceCard, formatSafetyRefusal, formatSaveProgram, formatSystemEditData, formatMutationFailureContent } from "../lib/conversation-routing";
+import { resolveGenerationAttempts } from "../lib/generation-safety";
+import {
+  classifyConversationOutcome,
+  executeConversationAi,
+  finalizeConversationExecution,
+  loadConversationExecutionContext,
+  prepareConversationExecution,
+  renderTerminalOutcome,
+} from "../services/conversation-execution-service";
 
 const router: IRouter = Router();
 
@@ -162,6 +170,28 @@ function resolveCurrentProgram(
     }
   }
   return null;
+}
+
+async function loadConversationRoutingState(input: {
+  userId: number;
+  content: string;
+  history: Array<{ role: string; structuredData?: string | null }>;
+  freshBuild: boolean;
+  focusMode: FocusMode;
+  focusExplicit: boolean;
+}) {
+  const [latestStructuredProgram, activeSystem] = await Promise.all([
+    Promise.resolve(resolveCurrentProgram(input.history)),
+    getActiveTrainingSystem(input.userId, input.focusExplicit ? input.focusMode : undefined).catch(() => null),
+  ]);
+  const hasActiveProgram = latestStructuredProgram !== null;
+  const hasActiveSystem = activeSystem !== null;
+  const hasAnyProgram = input.freshBuild ? hasActiveProgram : hasActiveProgram || hasActiveSystem;
+  const intentResult = classifyIntent(input.content, {
+    hasActiveProgram: hasAnyProgram,
+    conversationTurnCount: input.history.filter((message) => message.role === "user").length,
+  });
+  return { latestStructuredProgram, activeSystem, hasActiveProgram, hasActiveSystem, hasAnyProgram, intentResult };
 }
 
 /**
@@ -441,10 +471,11 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
     return;
   }
 
+  const deletionResult = await db.transaction(async (tx) => {
   // ── Cascade: delete linked training systems ───────────────────────────────
   // CASE A: find any training systems that were built from this conversation.
   // If they are singly owned (only linked to this chat), delete them too.
-  const linkedSystems = await db
+  const linkedSystems = await tx
     .select({ id: trainingSystems.id, status: trainingSystems.status, metadata: trainingSystems.metadata })
     .from(trainingSystems)
     .where(and(eq(trainingSystems.userId, userId), eq(trainingSystems.conversationId, conversationId)));
@@ -459,7 +490,7 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
       // FOCUS-AWARE: only promote archived systems in the same focus lane.
       // Prevents a Speed system from being promoted when a Strength system is deleted.
       const systemFocusMode = ((system.metadata as any)?.focusMode ?? "strength") as string;
-      const allArchived = await db
+      const allArchived = await tx
         .select({ id: trainingSystems.id, metadata: trainingSystems.metadata })
         .from(trainingSystems)
         .where(
@@ -476,21 +507,21 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
       const next = sameFocusArchived[0] ?? null;
 
       if (next) {
-        await db
+        await tx
           .update(trainingSystems)
           .set({ status: "active", updatedAt: new Date() })
           .where(eq(trainingSystems.id, next.id));
         newActiveSystemId = next.id;
       }
     }
-    await db.delete(trainingSystems).where(eq(trainingSystems.id, system.id));
+    await tx.delete(trainingSystems).where(eq(trainingSystems.id, system.id));
     trainingSystemsDeleted++;
   }
 
   // ── Cascade: delete linked saved_programs snapshots ──────────────────────
   // The DB constraint is "set null" on delete, but we want to actually remove
   // the orphaned snapshot row when the source conversation is deleted.
-  const deletedPrograms = await db
+  const deletedPrograms = await tx
     .delete(savedProgramsTable)
     .where(and(eq(savedProgramsTable.userId, userId), eq(savedProgramsTable.conversationId, conversationId)))
     .returning({ id: savedProgramsTable.id });
@@ -511,9 +542,12 @@ router.delete("/conversations/:id", requireAuth, async (req, res): Promise<void>
   }, "[DeleteCascadeAudit]");
 
   // Delete the conversation (messages cascade via DB FK)
-  await db.delete(conversationsTable).where(eq(conversationsTable.id, conversationId));
+  await tx.delete(conversationsTable).where(eq(conversationsTable.id, conversationId));
 
-  res.json({ success: true, trainingSystemsDeleted, savedProgramsDeleted, wasActiveSystemDeleted, newActiveSystemId });
+  return { trainingSystemsDeleted, savedProgramsDeleted, wasActiveSystemDeleted, newActiveSystemId };
+  });
+
+  res.json({ success: true, ...deletionResult });
 });
 
 router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise<void> => {
@@ -547,7 +581,23 @@ router.get("/conversations/:id/messages", requireAuth, async (req, res): Promise
   })));
 });
 
-router.post("/conversations/:id/messages", requireAuth, chatRateLimiter, async (req, res): Promise<void> => {
+interface NormalizedConversationRequest {
+  params: unknown;
+  body: unknown;
+  session: { userId?: number };
+  transport: "non_sse" | "sse";
+}
+
+interface ConversationOutcomeSink {
+  statusCode: number;
+  status(code: number): ConversationOutcomeSink;
+  json: ((payload: any) => ConversationOutcomeSink) & { bind(thisArg: unknown): (payload: any) => ConversationOutcomeSink };
+}
+
+async function executeCanonicalConversation(
+  req: NormalizedConversationRequest,
+  res: ConversationOutcomeSink,
+): Promise<void> {
   const params = SendMessageParams.safeParse(req.params);
   if (!params.success) {
     res.status(400).json({ error: params.error.message });
@@ -593,19 +643,36 @@ router.post("/conversations/:id/messages", requireAuth, chatRateLimiter, async (
   const rawCoachSettings = (req.body as any)?.coachSettings as Partial<CoachBehaviorSettings> | undefined;
   const agentSettings: AgentSettingsContext = await resolveAgentSettingsContext(userId, rawCoachSettings ?? null);
 
-  // --- Plan gating ---
-  let planInfo = await getUserPlanInfo(userId).catch(() => null);
-  if (isPaywallBlocked(planInfo)) {
-    res.status(402).json(buildPaywallHttpBody(planInfo!));
+  const preparation = await prepareConversationExecution({
+    conversationId: params.data.id,
+    userId,
+    clientTurnId: parsed.data.clientTurnId,
+  });
+  if (preparation.state === "terminal") {
+    if (preparation.outcome.kind !== "replay" && preparation.outcome.code === "PAYWALL" && preparation.planInfo) {
+      res.status(402).json(buildPaywallHttpBody(preparation.planInfo));
+      return;
+    }
+    const rendered = renderTerminalOutcome(preparation.outcome, "http");
+    res.status(rendered.status).json(rendered.payload);
     return;
   }
 
-  const [convo] = await db.select().from(conversationsTable).where(eq(conversationsTable.id, params.data.id));
-
-  if (!convo || convo.userId !== userId) {
-    res.status(404).json({ error: "Conversation not found" });
-    return;
-  }
+  const planInfo = preparation.planInfo;
+  const originalJson = res.json.bind(res);
+  res.json = ((payload: any) => {
+    const outcome = classifyConversationOutcome(payload, res.statusCode);
+    void finalizeConversationExecution({
+      preparation,
+      userId,
+      outcome,
+    }).then(() => originalJson(payload)).catch((err) => {
+      logger.error({ err, turnId: preparation.turnId }, "[ChatTurn] Failed to finalize HTTP turn");
+      res.status(500);
+      originalJson({ error: "The response could not be finalized safely.", code: "TURN_FINALIZATION_FAILED" });
+    });
+    return res;
+  }) as typeof res.json;
 
   // Save user message
   const [userMessage] = await db.insert(messagesTable).values({
@@ -627,43 +694,26 @@ router.post("/conversations/:id/messages", requireAuth, chatRateLimiter, async (
       .where(eq(conversationsTable.id, params.data.id));
   }
 
-  // Get history
-  const history = await db
-    .select()
-    .from(messagesTable)
-    .where(eq(messagesTable.conversationId, params.data.id))
-    .orderBy(messagesTable.createdAt);
-
-  const isPro = planInfo?.features.adaptationContext ?? false;
-  const hasMemory = planInfo?.features.memoryContext ?? false;
-
   const nonStreamFocusModeForCtx = resolveFocusMode((req.body as any)?.uiContext?.focusMode ?? null);
   const {
+    history,
+    isPro,
+    hasMemory,
     adaptationCtx,
     memoryCtx: _memoryCtxNonSSE,
     insightHint,
     hardConstraints: hardConstraintsNonSSE,
     constraintDirective: constraintDirectiveNonSSE,
-  } = await buildConversationContext({
+    conversionHint,
+  } = await loadConversationExecutionContext({
     userId,
-    isPro,
+    conversationId: params.data.id,
     agentSettings,
     sessionFocusMode: nonStreamFocusModeForCtx,
-    isFirstUserMessage: history.filter((m) => m.role === "user").length === 0,
     userMessageContent: userMessage.content,
+    planInfo,
   });
   let memoryCtx = _memoryCtxNonSSE;
-
-  // Agent-driven conversion hint for free/starter users
-  let conversionHint = "";
-  if (planInfo?.plan === "free") {
-    const remaining = planInfo.messagesRemaining ?? 0;
-    conversionHint = `
-## COACHING CONTEXT (internal)
-This athlete is on the free access tier with ${remaining} interaction${remaining === 1 ? "" : "s"} remaining.
-When it feels natural — especially when discussing program details, progress tracking, or long-term planning — mention capabilities like adaptive training, session memory, and program evolution that you can offer them as they progress.
-Keep it helpful and intelligent, never promotional.`;
-  }
 
   // ── Phase A: Intent Classification & Request Routing ─────────────────────
 
@@ -683,29 +733,16 @@ Keep it helpful and intelligent, never promotional.`;
   // Exception: when isFreshBuildSession = true, we treat the DB system as
   // non-existent for intent purposes so the agent is not biased toward editing
   // the old program.
-  const [latestStructuredProgram, activeSystem] = await Promise.all([
-    Promise.resolve(resolveCurrentProgram(history)),
-    // Pass focusMode so we resolve the correct focus's training system.
-    // Only filter by focus when the UI explicitly sends a focusMode; otherwise
-    // fall back to the unscoped query (handles old clients and edge cases).
-    getActiveTrainingSystem(userId, nonStreamUiCtx?.focusMode ? nonStreamFocusMode : undefined).catch(() => null),
-  ]);
-
-  const hasActiveProgram = latestStructuredProgram !== null;
-  const hasActiveSystem = activeSystem !== null;
-
-  // For intent classification, combine both signals: a program exists if it's
-  // in either the conversation history OR the live DB system.
-  // Exception: during a fresh build session, only use conversation-scoped history.
-  const hasAnyProgram = isFreshBuildSession
-    ? hasActiveProgram
-    : (hasActiveProgram || hasActiveSystem);
-
-  // Classify the intent — this is the single source of truth for routing
-  let intentResult = classifyIntent(parsed.data.content, {
-    hasActiveProgram: hasAnyProgram,
-    conversationTurnCount: history.filter((m) => m.role === "user").length,
+  const routingState = await loadConversationRoutingState({
+    userId,
+    content: parsed.data.content,
+    history,
+    freshBuild: isFreshBuildSession,
+    focusMode: nonStreamFocusMode,
+    focusExplicit: Boolean(nonStreamUiCtx?.focusMode),
   });
+  const { latestStructuredProgram, activeSystem, hasActiveProgram, hasActiveSystem, hasAnyProgram } = routingState;
+  let intentResult = routingState.intentResult;
 
   // ── Pending Clarification Check ────────────────────────────────────────────
   // Before acting on the classified intent, check whether there is an active
@@ -1185,9 +1222,6 @@ Keep it helpful and intelligent, never promotional.`;
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       await resolvePendingClarification(pending.id, "no_program").catch(() => {});
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       res.json({
         userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
         assistantMessage: { id: assistantMsg.id, conversationId: assistantMsg.conversationId, role: assistantMsg.role, content: assistantMsg.content, createdAt: assistantMsg.createdAt.toISOString(), structuredData: null },
@@ -1247,9 +1281,6 @@ Keep it helpful and intelligent, never promotional.`;
             }).returning();
             await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
             await resolvePendingClarification(pending.id, "verification_failed").catch(() => {});
-            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-              stripeStorage.incrementMessageCount(userId).catch(() => {});
-            }
             res.json({
               userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
               assistantMessage: { id: failedMsg.id, conversationId: failedMsg.conversationId, role: failedMsg.role, content: failedMsg.content, createdAt: failedMsg.createdAt.toISOString(), structuredData: null },
@@ -1318,9 +1349,6 @@ Keep it helpful and intelligent, never promotional.`;
           await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
           await resolvePendingClarification(pending.id, "mutation_applied").catch(() => {});
 
-          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-            stripeStorage.incrementMessageCount(userId).catch(() => {});
-          }
 
           res.json({
             userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
@@ -1349,9 +1377,6 @@ Keep it helpful and intelligent, never promotional.`;
           conversationId: params.data.id, role: "assistant", content: noOpFollowupContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
           assistantMessage: { id: noOpMsg.id, conversationId: noOpMsg.conversationId, role: noOpMsg.role, content: noOpMsg.content, createdAt: noOpMsg.createdAt.toISOString(), structuredData: null },
@@ -1386,9 +1411,6 @@ Keep it helpful and intelligent, never promotional.`;
         conversationId: params.data.id, role: "assistant", content: pipelineErrContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       res.json({
         userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
         assistantMessage: { id: pipelineErrMsg.id, conversationId: pipelineErrMsg.conversationId, role: pipelineErrMsg.role, content: pipelineErrMsg.content, createdAt: pipelineErrMsg.createdAt.toISOString(), structuredData: null },
@@ -1506,9 +1528,6 @@ Keep it helpful and intelligent, never promotional.`;
           structuredData: choiceStructuredData,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: {
             id: userMessage.id,
@@ -1546,9 +1565,6 @@ Keep it helpful and intelligent, never promotional.`;
         structuredData: refusalStructuredData,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       res.json({
         userMessage: {
           id: userMessage.id,
@@ -1703,9 +1719,6 @@ Keep it helpful and intelligent, never promotional.`;
         conversationId: params.data.id, role: "assistant", content: noProgramContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       res.json({
         userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
         assistantMessage: { id: assistantMsg.id, conversationId: assistantMsg.conversationId, role: assistantMsg.role, content: assistantMsg.content, createdAt: assistantMsg.createdAt.toISOString(), structuredData: null },
@@ -1738,9 +1751,6 @@ Keep it helpful and intelligent, never promotional.`;
           conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
           assistantMessage: { id: errMsg.id, conversationId: errMsg.conversationId, role: errMsg.role, content: errMsg.content, createdAt: errMsg.createdAt.toISOString(), structuredData: null },
@@ -1828,9 +1838,6 @@ Keep it helpful and intelligent, never promotional.`;
             : null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         if (hierarchicalResult.applied) {
           createChangeLogEntry({
             userId,
@@ -1886,9 +1893,6 @@ Keep it helpful and intelligent, never promotional.`;
             conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
           }).returning();
           await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-          if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-            stripeStorage.incrementMessageCount(userId).catch(() => {});
-          }
           res.json({
             userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
             assistantMessage: { id: noChangesMsg.id, conversationId: noChangesMsg.conversationId, role: noChangesMsg.role, content: noChangesMsg.content, createdAt: noChangesMsg.createdAt.toISOString(), structuredData: null },
@@ -1941,9 +1945,6 @@ Keep it helpful and intelligent, never promotional.`;
           structuredData: JSON.stringify(bulkSystemEditData),
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
           assistantMessage: { id: bulkMsg.id, conversationId: bulkMsg.conversationId, role: bulkMsg.role, content: bulkMsg.content, createdAt: bulkMsg.createdAt.toISOString(), structuredData: bulkMsg.structuredData ?? null },
@@ -1971,9 +1972,6 @@ Keep it helpful and intelligent, never promotional.`;
           conversationId: params.data.id, role: "assistant", content: clarContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
           assistantMessage: { id: clarMsg.id, conversationId: clarMsg.conversationId, role: clarMsg.role, content: clarMsg.content, createdAt: clarMsg.createdAt.toISOString(), structuredData: null },
@@ -2098,9 +2096,6 @@ Keep it helpful and intelligent, never promotional.`;
               structuredData: null,
             }).returning();
             await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-            if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-              stripeStorage.incrementMessageCount(userId).catch(() => {});
-            }
             res.json({
               userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
               assistantMessage: { id: clarMsg.id, conversationId: clarMsg.conversationId, role: clarMsg.role, content: clarMsg.content, createdAt: clarMsg.createdAt.toISOString(), structuredData: null },
@@ -2186,9 +2181,6 @@ Keep it helpful and intelligent, never promotional.`;
           conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
           assistantMessage: { id: noChangesMsg.id, conversationId: noChangesMsg.conversationId, role: noChangesMsg.role, content: noChangesMsg.content, createdAt: noChangesMsg.createdAt.toISOString(), structuredData: null },
@@ -2219,9 +2211,6 @@ Keep it helpful and intelligent, never promotional.`;
           conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
           assistantMessage: { id: failedMsg.id, conversationId: failedMsg.conversationId, role: failedMsg.role, content: failedMsg.content, createdAt: failedMsg.createdAt.toISOString(), structuredData: null },
@@ -2376,9 +2365,6 @@ Keep it helpful and intelligent, never promotional.`;
       }).returning();
 
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
 
       const _directPropStatus = directEditResult.propagationSummary?.status === "propagated" ? "full"
         : directEditResult.propagationSummary?.status === "partial" ? "partial"
@@ -2432,9 +2418,6 @@ Keep it helpful and intelligent, never promotional.`;
           conversationId: params.data.id, role: "assistant", content: fallbackContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         res.json({
           outcomeType: "mutation_applied",
           userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
@@ -2453,9 +2436,6 @@ Keep it helpful and intelligent, never promotional.`;
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       res.json({
         userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
         assistantMessage: { id: errMessage.id, conversationId: errMessage.conversationId, role: errMessage.role, content: errMessage.content, createdAt: errMessage.createdAt.toISOString(), structuredData: null },
@@ -2492,9 +2472,6 @@ Keep it helpful and intelligent, never promotional.`;
         conversationId: params.data.id, role: "assistant", content: _reconcilContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       res.json({
         userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
         assistantMessage: { id: _reconcilMsg.id, conversationId: _reconcilMsg.conversationId, role: _reconcilMsg.role, content: _reconcilMsg.content, createdAt: _reconcilMsg.createdAt.toISOString(), structuredData: null },
@@ -2693,8 +2670,9 @@ Keep it helpful and intelligent, never promotional.`;
   // ── Rate-limit / API failure safety wrapper (non-SSE) ─────────────────────
   let aiContent: string;
   let structuredData: any;
-  try {
-    const _nonSseAiResult = await generateAIResponse(
+  let generationProvenance: import("../lib/ai").GenerationProvenance | undefined;
+  let generationSafetyFailure = false;
+  const _nonSseAiStep = await executeConversationAi([
       parsed.data.content,
       history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       userId,
@@ -2720,30 +2698,23 @@ Keep it helpful and intelligent, never promotional.`;
         focusMode: nonStreamFocusMode,
         failSafeResolution,
         hardConstraints: hardConstraintsNonSSE,
-      }
-    );
+      },
+    ], req.transport);
+  if (_nonSseAiStep.ok) {
+    const _nonSseAiResult = _nonSseAiStep.result;
     aiContent = _nonSseAiResult.content;
     structuredData = _nonSseAiResult.structuredData;
-  } catch (aiErrNonSSE: any) {
-    const is429 = /429|rate.?limit/i.test(String(aiErrNonSSE?.message ?? ""));
-    const errContent = is429
-      ? "I'm experiencing high demand right now — please try again in a moment. Your program hasn't been changed."
-      : "Something went wrong generating your response. Please try again — your program is unchanged.";
-    logger.error(
-      { aiErr: aiErrNonSSE?.message, is429 },
-      "[NonSSE/AIFallback] generateAIResponse threw — returning graceful error"
-    );
-    if (!is429) {
-      captureWithTags(aiErrNonSSE, { subsystem: "ai_coach", feature: "generate_response", endpoint: "non_sse" });
-    }
+    generationProvenance = _nonSseAiResult.generationProvenance;
+  } else {
+    const errContent = _nonSseAiStep.message;
     const [fallbackMsg] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-      stripeStorage.incrementMessageCount(userId).catch(() => {});
-    }
     res.json({
+      outcomeType: "true_failure",
+      failureCategory: _nonSseAiStep.category,
+      code: _nonSseAiStep.code,
       userMessage: { id: userMessage.id, conversationId: userMessage.conversationId, role: userMessage.role, content: userMessage.content, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
       assistantMessage: { id: fallbackMsg.id, conversationId: fallbackMsg.conversationId, role: fallbackMsg.role, content: fallbackMsg.content, createdAt: fallbackMsg.createdAt.toISOString(), structuredData: null },
       planInfo: planInfo ? { plan: planInfo.plan, messagesRemaining: planInfo.messagesRemaining } : null,
@@ -2831,7 +2802,7 @@ Keep it helpful and intelligent, never promotional.`;
       );
       // Retry once with a reinforced enforcement hint
       const enforceHint = `\n## CONSTRAINT ENFORCEMENT — RETRY\nThe previous program generation FAILED validation:\n${violations.map(v => `- ${v.field}: expected ${v.expected}, got ${v.actual}`).join("\n")}\n\nThis is your SECOND AND FINAL attempt. The constraints listed above are ABSOLUTE. Correct every violation before outputting JSON.`;
-      const retryResult = await generateAIResponse(
+      const retryStep = await executeConversationAi([
         parsed.data.content,
         history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         userId,
@@ -2850,29 +2821,29 @@ Keep it helpful and intelligent, never promotional.`;
           neuralImbalances,
           agentSettings,
           hardConstraints: hardConstraintsNonSSE,
-        }
-      ).catch(() => null);
+        },
+      ], req.transport);
+      const retryResult = retryStep.ok ? retryStep.result : null;
 
       if (retryResult?.structuredData) {
+        if (retryResult.generationProvenance) {
+          generationProvenance = {
+            ...retryResult.generationProvenance,
+            attemptCount: (generationProvenance?.attemptCount ?? 0) + retryResult.generationProvenance.attemptCount,
+          };
+        }
         const retryViolations = validateProgramAgainstConstraints(retryResult.structuredData, extractedConstraints);
         if (retryViolations.length === 0) {
           logger.info("[ConstraintValidation] Retry succeeded — using corrected program");
           aiContent = retryResult.content;
           structuredData = retryResult.structuredData;
         } else {
-          logger.warn(
+          logger.error(
             { retryViolations },
-            "[ConstraintValidation] Retry still invalid — using best-available result"
+            "[ConstraintValidation] Retry still invalid — generation will fail closed"
           );
-          // Use the retry anyway if the day count is now correct (the most critical constraint)
-          const dayViolation = violations.find(v => v.field === "daysPerWeek");
-          const retryDayViolation = retryViolations.find(v => v.field === "daysPerWeek");
-          if (dayViolation && !retryDayViolation) {
-            logger.info("[ConstraintValidation] Day count fixed in retry — using retry despite remaining violations");
-            aiContent = retryResult.content;
-            structuredData = retryResult.structuredData;
-          }
-          // Otherwise keep the first result — both failed, use first attempt
+          aiContent = retryResult.content;
+          structuredData = retryResult.structuredData;
         }
       }
     } else {
@@ -2886,12 +2857,55 @@ Keep it helpful and intelligent, never promotional.`;
   // ── Hard constraint validation against persisted memory ───────────────────
   if (structuredData) {
     const hardViolations = validateAgainstHardConstraints(structuredData, hardConstraintsNonSSE);
-    if (hardViolations.length > 0) {
+    const criticalPainViolations = validatePainConstraints(structuredData, hardConstraintsNonSSE)
+      .filter((violation) => violation.severity === "critical");
+    const extractedViolations = extractedConstraints &&
+      (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM")
+      ? validateProgramAgainstConstraints(structuredData, extractedConstraints)
+      : [];
+    const safetyResolution = resolveGenerationAttempts([{
+      value: structuredData,
+      schemaIssues: [],
+      constraintIssues: extractedViolations,
+      hardConstraintIssues: hardViolations,
+      criticalPainIssues: criticalPainViolations,
+    }]);
+    if (!safetyResolution.accepted) {
       logger.warn(
-        { violations: hardViolations.map((v) => ({ exercise: v.exerciseName, type: v.violationType, constraint: v.matchedConstraint })) },
-        "[ConstraintMemory] Hard constraint violations detected in generated program"
+        {
+          hardViolations: hardViolations.map((v) => ({ exercise: v.exerciseName, type: v.violationType, constraint: v.matchedConstraint })),
+          criticalPainViolations,
+          extractedViolations,
+        },
+        "[AISafety] Generated program rejected before persistence"
       );
+      if (generationProvenance) generationProvenance.constraintValidationVerdict = "failed";
+      structuredData = null;
+      generationSafetyFailure = true;
+      aiContent = "I couldn't produce a program that safely satisfied every mandatory constraint. Nothing was saved. Please retry or clarify the restriction.";
+    } else if (generationProvenance) {
+      generationProvenance.constraintValidationVerdict = "passed";
+      (structuredData as Record<string, unknown>)._generationProvenance = generationProvenance;
     }
+  }
+
+  if (generationSafetyFailure) {
+    const [rejectedMsg] = await db.insert(messagesTable).values({
+      conversationId: params.data.id,
+      role: "assistant",
+      content: aiContent,
+      structuredData: null,
+    }).returning();
+    await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+    res.json({
+      outcomeType: "true_failure",
+      failureCategory: "hard_constraint_violation",
+      userMessage: { ...userMessage, createdAt: userMessage.createdAt.toISOString(), structuredData: null },
+      assistantMessage: { ...rejectedMsg, createdAt: rejectedMsg.createdAt.toISOString(), structuredData: null },
+      systemSaved: false,
+      generationProvenance,
+    });
+    return;
   }
 
   // ── Enrich structuredData with build metadata for all program builds ────────
@@ -3009,9 +3023,6 @@ Keep it helpful and intelligent, never promotional.`;
   }
 
   // Increment message count for free/starter users
-  if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-    stripeStorage.incrementMessageCount(userId).catch(() => {});
-  }
 
   // ── Action Contract Enforcement ────────────────────────────────────────────
   // Build the audit receipt and check compliance. Non-fatal — enforcement
@@ -3061,7 +3072,38 @@ Keep it helpful and intelligent, never promotional.`;
     systemId: autoSavedSystemId,
     auditReceipt,
   });
+}
+
+router.post("/conversations/:id/messages", requireAuth, chatRateLimiter, async (req, res): Promise<void> => {
+  await executeCanonicalConversation(
+    { params: req.params, body: req.body, session: { userId: req.session.userId }, transport: "non_sse" },
+    res as unknown as ConversationOutcomeSink,
+  );
 });
+
+function createSseOutcomeSink(res: Parameters<typeof setupSseHeaders>[0]): ConversationOutcomeSink {
+  const sink: ConversationOutcomeSink = {
+    statusCode: 200,
+    status(code: number) {
+      sink.statusCode = code;
+      return sink;
+    },
+    json(payload: any) {
+      if (sink.statusCode >= 400) {
+        sseDone(res, payload?.type === "error" ? payload : {
+          type: "error",
+          status: sink.statusCode,
+          code: payload?.code ?? "CONVERSATION_EXECUTION_FAILED",
+          message: payload?.message ?? payload?.error ?? "The conversation turn could not be completed.",
+        });
+      } else {
+        sseDone(res, payload?.type ? payload : { type: "complete", ...payload });
+      }
+      return sink;
+    },
+  } as ConversationOutcomeSink;
+  return sink;
+}
 
 // ─── SSE Streaming Endpoint ───────────────────────────────────────────────────
 // POST /api/conversations/:id/messages/stream
@@ -3105,6 +3147,37 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
+  // The streaming endpoint is now a transport adapter over the same domain
+  // executor used by HTTP. Progress is advisory; all business decisions,
+  // persistence, safety, replay and quota finalization happen in the executor.
+  setupSseHeaders(res);
+  const canonicalUserId = req.session.userId!;
+  if (!(await checkSseRateLimit(canonicalUserId))) {
+    sseDone(res, {
+      type: "error",
+      status: 429,
+      code: "RATE_LIMITED",
+      message: "You're sending messages too quickly. Please wait a moment before trying again.",
+    });
+    return;
+  }
+  const uiContext = (req.body as any)?.uiContext ?? null;
+  if (uiContext?.newBuildSession === true) clearConversationContext(String(params.data.id));
+  sseEmit(res, { type: "acknowledged", text: "Got it — working on this now." });
+  sseEmit(res, buildStageEvent("understanding", undefined, undefined, {
+    action: "",
+    userMessageHint: parsed.data.content.slice(0, 120),
+  }));
+  sseEmit(res, buildStageEvent("loading", undefined, undefined, {
+    action: "",
+    userMessageHint: parsed.data.content.slice(0, 120),
+  }));
+  const handledByCanonicalExecutor = await executeCanonicalConversation(
+    { params: req.params, body: req.body, session: { userId: canonicalUserId }, transport: "sse" },
+    createSseOutcomeSink(res),
+  ).then((): boolean => true);
+  if (handledByCanonicalExecutor) return;
+
   // ── Pipeline Latency Tracking ─────────────────────────────────────────────
   const _pipeline_t0 = Date.now();
   let _t_history_done = 0;
@@ -3141,7 +3214,25 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   setupSseHeaders(res);
 
   const emit = (event: Record<string, unknown>) => sseEmit(res, event);
-  const done = (event: Record<string, unknown>) => sseDone(res, event);
+  let activePreparation: Extract<Awaited<ReturnType<typeof prepareConversationExecution>>, { state: "ready" }> | null = null;
+  let planInfo: Awaited<ReturnType<typeof getUserPlanInfo>> | null = null;
+  const done = (event: Record<string, unknown>) => {
+    if (activePreparation === null) {
+      sseDone(res, event);
+      return;
+    }
+    const outcome = classifyConversationOutcome(event, typeof event.status === "number" ? event.status : 200);
+    // Final state is durable before the stream closes. Duplicate requests replay
+    // this exact event and can never re-enter mutation execution.
+    void finalizeConversationExecution({
+      preparation: activePreparation,
+      userId: req.session.userId!,
+      outcome,
+    }).then(() => sseDone(res, event)).catch((err) => {
+      logger.error({ err, turnId: activePreparation?.turnId }, "[ChatTurn] Failed to persist terminal turn state");
+      sseDone(res, { type: "error", code: "TURN_FINALIZATION_FAILED", message: "The response could not be finalized safely. Please refresh before retrying." });
+    });
+  };
 
   const userId = req.session.userId!;
 
@@ -3156,22 +3247,21 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     return;
   }
 
-  // ── Plan gating ───────────────────────────────────────────────────────────
-  let planInfo = await getUserPlanInfo(userId).catch(() => null);
-  if (isPaywallBlocked(planInfo)) {
-    done(buildPaywallSseEvent(planInfo!));
+  const preparation = await prepareConversationExecution({
+    conversationId: params.data.id,
+    userId,
+    clientTurnId: parsed.data.clientTurnId,
+  });
+  planInfo = preparation.planInfo;
+  if (preparation.state === "terminal") {
+    if (preparation.outcome.kind !== "replay" && preparation.outcome.code === "PAYWALL" && preparation.planInfo) {
+      sseDone(res, buildPaywallSseEvent(preparation.planInfo));
+    } else {
+      sseDone(res, renderTerminalOutcome(preparation.outcome, "sse").payload);
+    }
     return;
   }
-
-  const [convo] = await db
-    .select()
-    .from(conversationsTable)
-    .where(eq(conversationsTable.id, params.data.id));
-
-  if (!convo || convo.userId !== userId) {
-    done({ type: "error", status: 404, message: "Conversation not found" });
-    return;
-  }
+  activePreparation = preparation;
 
   // Save user message
   const [userMessage] = await db
@@ -3229,28 +3319,23 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // Fetch conversation history and pro context before loading program state
   emit(buildStageEvent("loading", undefined, undefined, _earlyNarrationCtx));
 
-  const history = await db
-    .select()
-    .from(messagesTable)
-    .where(eq(messagesTable.conversationId, params.data.id))
-    .orderBy(messagesTable.createdAt);
-
-  const isPro = planInfo?.features.adaptationContext ?? false;
-  const hasMemory = planInfo?.features.memoryContext ?? false;
-
   const {
+    history,
+    isPro,
+    hasMemory,
     adaptationCtx,
     memoryCtx: _memoryCtxSSE,
     insightHint,
     hardConstraints: hardConstraintsSSE,
     constraintDirective: constraintDirectiveSSE2,
-  } = await buildConversationContext({
+    conversionHint,
+  } = await loadConversationExecutionContext({
     userId,
-    isPro,
+    conversationId: params.data.id,
     agentSettings,
     sessionFocusMode: streamFocusMode,
-    isFirstUserMessage: history.filter((m) => m.role === "user").length === 0,
     userMessageContent: userMessage.content,
+    planInfo,
   });
   let memoryCtx = _memoryCtxSSE;
 
@@ -3277,32 +3362,19 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     logger.warn({ err }, "[NeuralGraph:stream] Failed to load neural profile — proceeding without bias");
   }
 
-  let conversionHint = "";
-  if (planInfo?.plan === "free") {
-    const remaining = planInfo.messagesRemaining ?? 0;
-    conversionHint = `\n## COACHING CONTEXT (internal)\nThis athlete is on the free access tier with ${remaining} interaction${remaining === 1 ? "" : "s"} remaining.\nWhen it feels natural — especially when discussing program details, progress tracking, or long-term planning — mention capabilities like adaptive training, session memory, and program evolution that you can offer them as they progress.\nKeep it helpful and intelligent, never promotional.`;
-  }
-
   // ── Stage 3: Classify Change Type ────────────────────────────────────────
   // Load active program + system in parallel, then classify intent.
   // Pass focusMode so we resolve the correct focus's training system.
-  const [latestStructuredProgram, activeSystem] = await Promise.all([
-    Promise.resolve(resolveCurrentProgram(history)),
-    getActiveTrainingSystem(userId, streamUIContext?.focusMode ? streamFocusMode : undefined).catch(() => null),
-  ]);
-
-  const hasActiveProgram = latestStructuredProgram !== null;
-  const hasActiveSystem = activeSystem !== null;
-  // During a fresh build session, only use conversation-scoped history for intent classification.
-  // This prevents the old DB system from biasing routing toward EDIT on ambiguous first messages.
-  const hasAnyProgram = isFreshBuildSession
-    ? hasActiveProgram
-    : (hasActiveProgram || hasActiveSystem);
-
-  let intentResult = classifyIntent(parsed.data.content, {
-    hasActiveProgram: hasAnyProgram,
-    conversationTurnCount: history.filter((m) => m.role === "user").length,
+  const routingState = await loadConversationRoutingState({
+    userId,
+    content: parsed.data.content,
+    history,
+    freshBuild: isFreshBuildSession,
+    focusMode: streamFocusMode,
+    focusExplicit: Boolean(streamUIContext?.focusMode),
   });
+  const { latestStructuredProgram, activeSystem, hasActiveProgram, hasActiveSystem, hasAnyProgram } = routingState;
+  let intentResult = routingState.intentResult;
 
   // ── Pending Clarification Check (SSE path) ─────────────────────────────────
   let activePendingClarification = await getActivePendingClarification(params.data.id).catch(() => null);
@@ -3495,9 +3567,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       structuredData: null,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-      stripeStorage.incrementMessageCount(userId).catch(() => {});
-    }
     done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: _ctxClarMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
     return;
   }
@@ -3778,7 +3847,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
       await resolvePendingClarification(pending.id, "no_program").catch(() => {});
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
       done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "conversation_only" }));
       return;
     }
@@ -3864,7 +3932,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           }).returning();
           await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
           await resolvePendingClarification(pending.id, "mutation_applied").catch(() => {});
-          if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
 
           // ── Store conversation context for follow-up resolution (clarification path) ──
           try {
@@ -3921,7 +3988,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           conversationId: params.data.id, role: "assistant", content: noOpFollowupContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
         done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: noOpMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "conversation_only" }));
         return;
       }
@@ -3934,7 +4000,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         conversationId: params.data.id, role: "assistant", content: _sseClariErrContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
       done({
         ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: _sseClariErrMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, systemEditVal: { applied: false }, outcomeTypeVal: "true_failure" }),
         systemEdit: { applied: false, route: "clarification_followup", scope: "system", changedIds: [], error: "pipeline_error" },
@@ -4011,9 +4076,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           structuredData: choiceStructuredData,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }));
         return;
       }
@@ -4031,9 +4093,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         structuredData: refusalStructuredData,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       done(buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only" }));
       return;
     } // end case "SAFETY_REFUSAL" (SSE)
@@ -4099,9 +4158,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       structuredData: saveStructuredData,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-      stripeStorage.incrementMessageCount(userId).catch(() => {});
-    }
     done({
       ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: assistantMessage, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: saveSuccess, systemIdVal: savedSystemId, outcomeTypeVal: saveSuccess ? "mutation_applied" : (!programToSave ? "conversation_only" : "true_failure") }),
       saveFailure: !saveSuccess && !!programToSave ? { reason: "persistence_error" } : undefined,
@@ -4168,9 +4224,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         conversationId: params.data.id, role: "assistant", content: noProgramContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       done(buildCompleteEvent({
         userMsg: userMessage, assistantMsg: assistantMsg, planInfoVal: planInfo,
         intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "conversation_only",
@@ -4199,9 +4252,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         done({
           ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure" }),
           systemEdit: { applied: false },
@@ -4298,9 +4348,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
             : null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         if (streamHierarchicalResult.applied) {
           createChangeLogEntry({
             userId,
@@ -4351,9 +4398,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           conversationId: params.data.id, role: "assistant", content: clarContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         done(buildCompleteEvent({
           userMsg: userMessage, assistantMsg: clarMsg, planInfoVal: planInfo,
           intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed",
@@ -4454,9 +4498,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           conversationId: params.data.id, role: "assistant", content: noChangesContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         done({
           ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: noChangesMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure", mutationOutcomeVal: _noChangeOutcome }),
           systemEdit: { applied: false },
@@ -4489,9 +4530,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           conversationId: params.data.id, role: "assistant", content: failedContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         done({
           ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: failedMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure", mutationOutcomeVal: _verifyFailOutcome }),
           systemEdit: { applied: false },
@@ -4636,9 +4674,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
       }).returning();
 
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
 
       // ── Store conversation context for follow-up resolution ────────────────
       // Mutation reference: enables "do the same for Day 2", "undo that", etc.
@@ -4735,9 +4770,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           conversationId: params.data.id, role: "assistant", content: fallbackContent, structuredData: null,
         }).returning();
         await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-        if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-          stripeStorage.incrementMessageCount(userId).catch(() => {});
-        }
         done({
           ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: successMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "mutation_applied" }),
           systemEdit: { applied: true, changeLogId },
@@ -4762,9 +4794,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         conversationId: params.data.id, role: "assistant", content: errContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-        stripeStorage.incrementMessageCount(userId).catch(() => {});
-      }
       done({
         ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: errMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure", mutationOutcomeVal: _catchFailOutcome }),
         systemEdit: { applied: false },
@@ -4798,7 +4827,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         conversationId: params.data.id, role: "assistant", content: _sseReconcilContent, structuredData: null,
       }).returning();
       await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-      if (planInfo?.plan === "free" || planInfo?.plan === "starter") { stripeStorage.incrementMessageCount(userId).catch(() => {}); }
       done({
         ...buildCompleteEvent({ userMsg: userMessage, assistantMsg: _sseReconcilMsg, planInfoVal: planInfo, intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "clarification_needed" }),
         systemEdit: { applied: false, route: "clarification_followup", scope: "system", changedIds: [] },
@@ -4985,8 +5013,8 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // graceful user-facing message instead of crashing the SSE stream.
   let aiContent: string;
   let structuredData: any;
-  try {
-    const _sseAiResult = await generateAIResponse(
+  let streamGenerationProvenance: import("../lib/ai").GenerationProvenance | undefined;
+  const _sseAiStep = await executeConversationAi([
       parsed.data.content,
       history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
       userId,
@@ -5013,36 +5041,30 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         focusMode: streamFocusMode,
         failSafeResolution,
         hardConstraints: hardConstraintsSSE,
-      }
-    );
+      },
+    ], "sse");
+  if (_sseAiStep.ok) {
+    const _sseAiResult = _sseAiStep.result;
     aiContent = _sseAiResult.content;
     structuredData = _sseAiResult.structuredData;
-  } catch (aiErrSSE: any) {
-    const is429 = /429|rate.?limit/i.test(String(aiErrSSE?.message ?? ""));
-    const sseErrContent = is429
-      ? "I'm experiencing high demand right now — please try again in a moment. Your program hasn't been changed."
-      : "Something went wrong on my end while generating your response. Please try again — your program is unchanged.";
-    logger.error(
-      { aiErr: aiErrSSE?.message, is429 },
-      "[SSE/AIFallback] generateAIResponse threw — returning graceful error to client"
-    );
-    if (!is429) {
-      captureWithTags(aiErrSSE, { subsystem: "ai_coach", feature: "generate_response", endpoint: "sse" });
-    }
+    streamGenerationProvenance = _sseAiResult.generationProvenance;
+  } else {
+    const sseErrContent = _sseAiStep.message;
     // Emit structured error event so the frontend can set stream phase to "error"
     // before the complete event closes the stream.
-    emit({ type: "error", message: sseErrContent, code: is429 ? "RATE_LIMITED_UPSTREAM" : "AI_ERROR" });
+    emit({ type: "error", message: sseErrContent, code: _sseAiStep.code });
     const [sseErrMsg] = await db.insert(messagesTable).values({
       conversationId: params.data.id, role: "assistant", content: sseErrContent, structuredData: null,
     }).returning();
     await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
-    if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-      stripeStorage.incrementMessageCount(userId).catch(() => {});
-    }
-    done(buildCompleteEvent({
-      userMsg: userMessage, assistantMsg: sseErrMsg, planInfoVal: planInfo,
-      intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure",
-    }));
+    done({
+      ...buildCompleteEvent({
+        userMsg: userMessage, assistantMsg: sseErrMsg, planInfoVal: planInfo,
+        intentResultVal: intentResult, systemSavedVal: false, outcomeTypeVal: "true_failure",
+      }),
+      failureCategory: _sseAiStep.category,
+      code: _sseAiStep.code,
+    });
     return;
   }
 
@@ -5116,7 +5138,7 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
         "[SSE/ConstraintValidation] Program violates constraints — retrying"
       );
       const enforceHint = `\n## CONSTRAINT ENFORCEMENT — RETRY\nThe previous program generation FAILED validation:\n${violations.map(v => `- ${v.field}: expected ${v.expected}, got ${v.actual}`).join("\n")}\n\nThis is your SECOND AND FINAL attempt. Correct every violation before outputting JSON.`;
-      const retryResult = await generateAIResponse(
+      const retryStep = await executeConversationAi([
         parsed.data.content,
         history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
         userId,
@@ -5130,23 +5152,26 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
           transformHint: enforceHint,
           agentSettings,
           hardConstraints: hardConstraintsSSE,
-        }
-      ).catch(() => null);
+        },
+      ], "sse");
+      const retryResult = retryStep.ok ? retryStep.result : null;
 
       if (retryResult?.structuredData) {
+        if (retryResult.generationProvenance) {
+          streamGenerationProvenance = {
+            ...retryResult.generationProvenance,
+            attemptCount: (streamGenerationProvenance?.attemptCount ?? 0) + retryResult.generationProvenance.attemptCount,
+          };
+        }
         const retryViolations = validateProgramAgainstConstraints(retryResult.structuredData, extractedConstraints);
         if (retryViolations.length === 0) {
           aiContent = retryResult.content;
           structuredData = retryResult.structuredData;
           logger.info("[SSE/ConstraintValidation] Retry succeeded");
         } else {
-          const dayViolation = violations.find(v => v.field === "daysPerWeek");
-          const retryDayViolation = retryViolations.find(v => v.field === "daysPerWeek");
-          if (dayViolation && !retryDayViolation) {
-            aiContent = retryResult.content;
-            structuredData = retryResult.structuredData;
-            logger.info("[SSE/ConstraintValidation] Day count fixed in retry — accepting");
-          }
+          aiContent = retryResult.content;
+          structuredData = retryResult.structuredData;
+          logger.error({ retryViolations }, "[SSE/ConstraintValidation] Retry still invalid — generation will fail closed");
         }
       }
     }
@@ -5155,11 +5180,53 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
   // ── Hard constraint validation against persisted memory ───────────────────
   if (structuredData) {
     const hardViolations = validateAgainstHardConstraints(structuredData, hardConstraintsSSE);
-    if (hardViolations.length > 0) {
+    const criticalPainViolations = validatePainConstraints(structuredData, hardConstraintsSSE)
+      .filter((violation) => violation.severity === "critical");
+    const extractedViolations = extractedConstraints &&
+      (intentResult.type === "CREATE_PROGRAM" || intentResult.type === "START_NEW_PROGRAM")
+      ? validateProgramAgainstConstraints(structuredData, extractedConstraints)
+      : [];
+    const safetyResolution = resolveGenerationAttempts([{
+      value: structuredData,
+      schemaIssues: [],
+      constraintIssues: extractedViolations,
+      hardConstraintIssues: hardViolations,
+      criticalPainIssues: criticalPainViolations,
+    }]);
+    if (!safetyResolution.accepted) {
       logger.warn(
-        { violations: hardViolations.map((v) => ({ exercise: v.exerciseName, type: v.violationType, constraint: v.matchedConstraint })) },
-        "[ConstraintMemory] Hard constraint violations detected in SSE-generated program"
+        {
+          hardViolations: hardViolations.map((v) => ({ exercise: v.exerciseName, type: v.violationType, constraint: v.matchedConstraint })),
+          criticalPainViolations,
+          extractedViolations,
+        },
+        "[AISafety] SSE-generated program rejected before persistence"
       );
+      if (streamGenerationProvenance) streamGenerationProvenance.constraintValidationVerdict = "failed";
+      const rejectionContent = "I couldn't produce a program that safely satisfied every mandatory constraint. Nothing was saved. Please retry or clarify the restriction.";
+      const [rejectedMsg] = await db.insert(messagesTable).values({
+        conversationId: params.data.id,
+        role: "assistant",
+        content: rejectionContent,
+        structuredData: null,
+      }).returning();
+      await db.update(conversationsTable).set({ updatedAt: new Date() }).where(eq(conversationsTable.id, params.data.id));
+      done({
+        ...buildCompleteEvent({
+          userMsg: userMessage,
+          assistantMsg: rejectedMsg,
+          planInfoVal: planInfo,
+          intentResultVal: intentResult,
+          systemSavedVal: false,
+          outcomeTypeVal: "true_failure",
+        }),
+        failureCategory: "hard_constraint_violation",
+        generationProvenance: streamGenerationProvenance,
+      });
+      return;
+    } else if (streamGenerationProvenance) {
+      streamGenerationProvenance.constraintValidationVerdict = "passed";
+      (structuredData as Record<string, unknown>)._generationProvenance = streamGenerationProvenance;
     }
   }
 
@@ -5282,9 +5349,6 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
     }
   }
 
-  if (planInfo?.plan === "free" || planInfo?.plan === "starter") {
-    stripeStorage.incrementMessageCount(userId).catch(() => {});
-  }
 
   // ── Final Response Alignment Verification ─────────────────────────────────
   // Checks consistency between narration context, action contract, mutation
@@ -5407,4 +5471,3 @@ router.post("/conversations/:id/messages/stream", requireAuth, async (req, res):
 });
 
 export default router;
-

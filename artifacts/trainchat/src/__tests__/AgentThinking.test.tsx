@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 /**
  * AgentThinking — Thinking UX Shell Tests (14 spec tests)
  *
@@ -18,8 +20,19 @@
  * 14. Mobile layout stays compact
  */
 
-import { describe, it, expect } from "vitest";
+import React from "react";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+
+vi.mock("@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png", () => ({
+  default: "stub-image",
+}));
+
+vi.mock("@/components/laser-skill", () => ({
+  LaserScanLine: () => null,
+  ArchitectPlanningDot: () => null,
+}));
+
 import AgentThinking, {
   combineNarrationAndReasons,
 } from "../components/chat/AgentThinking";

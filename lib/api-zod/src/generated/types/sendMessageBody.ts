@@ -8,4 +8,5 @@
 
 export interface SendMessageBody {
   content: string;
+  clientTurnId: string;
 }

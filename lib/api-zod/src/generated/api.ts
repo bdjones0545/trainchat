@@ -186,6 +186,7 @@ export const SendMessageParams = zod.object({
 
 export const SendMessageBody = zod.object({
   content: zod.string(),
+  clientTurnId: zod.string().uuid(),
 });
 
 export const SendMessageResponse = zod.object({

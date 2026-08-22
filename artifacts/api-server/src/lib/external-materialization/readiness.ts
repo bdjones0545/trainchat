@@ -40,7 +40,7 @@ export async function checkExternalMaterializationReadiness(
   if (!exists) {
     deps.onWarn?.(
       "External materialization/surgical flags are enabled but external_programs.training_system_id is MISSING. " +
-        "Apply manual migration 0002 (psql \"$DATABASE_URL\" -f lib/db/manual-migrations/0002_external_programs_training_system_id.sql). " +
+        "Apply the ordered database migrations (pnpm --filter @workspace/db migrate). " +
         "Until then, materialized edits fail-soft to the LLM regeneration path.",
     );
     return "missing_migration";

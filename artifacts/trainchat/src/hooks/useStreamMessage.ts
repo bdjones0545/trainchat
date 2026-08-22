@@ -468,7 +468,12 @@ export function useStreamMessage(): UseStreamMessageResult {
             method: "POST",
             headers: { "Content-Type": "application/json", ...getDefaultHeaders() },
             credentials: "include",
-            body: JSON.stringify({ content, coachSettings, ...(uiContext ? { uiContext } : {}) }),
+            body: JSON.stringify({
+              content,
+              clientTurnId: crypto.randomUUID(),
+              coachSettings,
+              ...(uiContext ? { uiContext } : {}),
+            }),
             signal: controller.signal,
           }
         );

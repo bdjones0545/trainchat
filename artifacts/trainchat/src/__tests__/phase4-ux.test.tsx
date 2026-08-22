@@ -1,3 +1,5 @@
+// @vitest-environment happy-dom
+
 /**
  * Phase 4 — UX Refinement & Trust Layer Tests (12 spec tests)
  *
@@ -16,6 +18,7 @@
  * 12. Empty microReasons array renders no bullet section
  */
 
+import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import SystemUpdateCard from "../components/chat/SystemUpdateCard";

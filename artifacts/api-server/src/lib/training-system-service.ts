@@ -1590,6 +1590,8 @@ export interface ChatProgram {
   days: ChatProgramDay[];
   /** Block metadata from the monthly planner — attached server-side before DB save */
   blockMetadata?: BlockMetadata | null;
+  /** Bounded AI generation provenance; contains no prompt text or credentials. */
+  _generationProvenance?: Record<string, unknown>;
 }
 
 // ─── Speed / Footwork canonical slot patterns ─────────────────────────────────
@@ -1823,6 +1825,7 @@ export async function createTrainingSystemFromProgram(
       source: "chat",
       focusMode: resolvedFocusMode,
       progressionStrategy: program.progressionStrategy ?? null,
+      generationProvenance: program._generationProvenance ?? null,
       ...(program.blockMetadata ? {
         blockType: program.blockMetadata.blockType,
         blockDisplayName: program.blockMetadata.blockDisplayName,
@@ -2065,6 +2068,7 @@ export async function upsertTrainingSystemFromProgram(
         source: "chat_edit",
         focusMode: resolvedFocusMode,
         progressionStrategy: program.progressionStrategy ?? null,
+        generationProvenance: program._generationProvenance ?? null,
         ...(program.blockMetadata ? {
           blockType: program.blockMetadata.blockType,
           blockDisplayName: program.blockMetadata.blockDisplayName,

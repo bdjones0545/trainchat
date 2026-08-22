@@ -53,6 +53,11 @@ const {
   mockBuildCompleteEvent,
   mockResolveAgentSettingsContext,
   mockGetActiveTrainingSystem,
+  mockBeginChatTurn,
+  mockFinalizeChatTurn,
+  mockValidateProgramAgainstConstraints,
+  mockValidateAgainstHardConstraints,
+  mockValidatePainConstraints,
 } = vi.hoisted(() => {
   // ── Drizzle chain builders ─────────────────────────────────────────────────
   function selectChain(rows: unknown[]) {
@@ -101,6 +106,7 @@ const {
     insert: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    transaction: vi.fn(),
     // chain builders for per-test setup
     _select: selectChain,
     _insert: insertChain,
@@ -120,6 +126,11 @@ const {
     mockBuildCompleteEvent: vi.fn(),
     mockResolveAgentSettingsContext: vi.fn(),
     mockGetActiveTrainingSystem: vi.fn(),
+    mockBeginChatTurn: vi.fn(),
+    mockFinalizeChatTurn: vi.fn(),
+    mockValidateProgramAgainstConstraints: vi.fn(),
+    mockValidateAgainstHardConstraints: vi.fn(),
+    mockValidatePainConstraints: vi.fn(),
   };
 });
 
@@ -139,6 +150,11 @@ vi.mock("drizzle-orm", () => ({
   desc: vi.fn((col: unknown) => ({ __desc: col })),
   count: vi.fn(() => ({ __count: true })),
   and: vi.fn((...args: unknown[]) => ({ __and: args })),
+}));
+
+vi.mock("../lib/chat-turn-integrity", () => ({
+  beginChatTurn: mockBeginChatTurn,
+  finalizeChatTurn: mockFinalizeChatTurn,
 }));
 
 // F10: the chat limiter (lib/sse + the non-SSE chat middleware) now counts in
@@ -190,7 +206,7 @@ vi.mock("@workspace/api-zod", () => ({
 
 vi.mock("../lib/ai", () => ({
   generateAIResponse: mockGenerateAIResponse,
-  validateProgramAgainstConstraints: vi.fn().mockResolvedValue({ passed: true, violations: [] }),
+  validateProgramAgainstConstraints: mockValidateProgramAgainstConstraints,
 }));
 
 vi.mock("../lib/planGating", () => ({
@@ -339,7 +355,8 @@ vi.mock("../lib/constraint-memory", () => ({
   persistConstraintsFromTurn: vi.fn().mockResolvedValue(undefined),
   loadHardConstraints: vi.fn().mockReturnValue({ bannedItems: [], dislikedItems: [], painRegions: [], monitorRegions: [], sport: null }),
   buildConstraintEnforcementDirective: vi.fn().mockReturnValue(null),
-  validateAgainstHardConstraints: vi.fn().mockReturnValue({ violations: [] }),
+  validateAgainstHardConstraints: mockValidateAgainstHardConstraints,
+  validatePainConstraints: mockValidatePainConstraints,
 }));
 
 vi.mock("../lib/pending-clarification-service", () => ({
@@ -595,6 +612,12 @@ beforeEach(() => {
   });
   mockInterpretMutationRequest.mockResolvedValue(null);
   mockCaptureWithTags.mockReturnValue(undefined);
+  mockBeginChatTurn.mockResolvedValue({ state: "claimed", turnId: 1001 });
+  mockFinalizeChatTurn.mockResolvedValue(undefined);
+  mockValidateProgramAgainstConstraints.mockReturnValue([]);
+  mockValidateAgainstHardConstraints.mockReturnValue([]);
+  mockValidatePainConstraints.mockReturnValue([]);
+  mockDb.transaction.mockImplementation(async (work: (tx: typeof mockDb) => unknown) => work(mockDb));
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -847,6 +870,27 @@ describe("POST /conversations/:id/messages — plan gating", () => {
     // Should not be 402 (no paywall applied when planInfo is null)
     expect(res.status).not.toBe(402);
   });
+
+  it("W2-IDEMP-01: replays a completed duplicate without repeating message writes", async () => {
+    setupSelects([CONVO]);
+    mockBeginChatTurn.mockResolvedValueOnce({
+      state: "duplicate",
+      status: "succeeded",
+      responsePayload: {
+        userMessage: { id: 10 },
+        assistantMessage: { id: 11, content: "Already completed" },
+      },
+    });
+
+    const res = await makeApp(makeMockSession({ userId: 42 }))
+      .post("/api/conversations/1/messages")
+      .send({ content: "hello", clientTurnId: "8b779e34-1574-4e43-b455-85cfb39bf513" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.assistantMessage.content).toBe("Already completed");
+    expect(mockDb.insert).not.toHaveBeenCalled();
+    expect(mockFinalizeChatTurn).not.toHaveBeenCalled();
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -947,6 +991,10 @@ describe("POST /conversations/:id/messages — AI failure + Sentry", () => {
     expect(res.status).toBe(200);
     expect(res.body.assistantMessage).toMatchObject({ role: "assistant" });
     expect(res.body.assistantMessage.content).not.toMatch(/Error:|stack:|at Object\.|TypeError/);
+    expect(mockFinalizeChatTurn).toHaveBeenCalledWith(expect.objectContaining({
+      successful: false,
+      shouldChargeQuota: false,
+    }));
   });
 });
 

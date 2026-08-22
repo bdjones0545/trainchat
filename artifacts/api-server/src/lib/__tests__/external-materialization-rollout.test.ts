@@ -103,7 +103,7 @@ describe("migration-readiness diagnostic", () => {
       await checkExternalMaterializationReadiness({ anyFlagEnabled: true, columnExists: async () => false, onWarn }),
     ).toBe("missing_migration");
     expect(onWarn).toHaveBeenCalledTimes(1);
-    expect(onWarn.mock.calls[0][0]).toMatch(/migration 0002/);
+    expect(onWarn.mock.calls[0][0]).toMatch(/ordered database migrations/);
   });
 
   it("READY-04: probe error → probe_error (never throws)", async () => {

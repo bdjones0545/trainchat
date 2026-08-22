@@ -10,13 +10,14 @@ import { and, eq } from "drizzle-orm";
 import { startWhitepaperCron } from "./lib/whitepaper-cron";
 import { Sentry, sentryEnabled, captureWithTags, setSentryUser, generateRequestId } from "./lib/sentry";
 import { corsMiddleware } from "./middlewares/cors-config";
+import { resolveSessionPolicy } from "./lib/session-policy";
 
 const app: Express = express();
 
 // Trust the Replit reverse proxy so that secure cookies and real IPs work
 // correctly in production. Without this, Express sees all connections as HTTP
 // even though they arrive over HTTPS via the proxy.
-app.set("trust proxy", 1);
+app.set("trust proxy", resolveSessionPolicy(process.env).trustProxy);
 
 // Security headers via Helmet. Applied globally before any route handler.
 // CSP is disabled because the API server serves JSON only — no HTML documents.
@@ -116,7 +117,7 @@ app.use(async (req: Request, _res: Response, next: NextFunction): Promise<void> 
       req.session.userId = user.id;
     }
   } catch (err) {
-    logger.warn({ err, deviceId }, "device-id auth fallback: DB lookup failed — skipping");
+    logger.warn({ err }, "device-id auth fallback: DB lookup failed — skipping");
   }
 
   next();

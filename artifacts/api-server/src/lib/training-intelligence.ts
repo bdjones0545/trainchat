@@ -442,9 +442,9 @@ export interface ExerciseFilter {
 export function selectExercises(filter: ExerciseFilter): ExerciseEntry[] {
   const equipmentMap: Record<EquipmentLevel, EquipmentTag[]> = {
     full_gym: ["barbell", "dumbbell", "cable", "machine", "bodyweight", "kettlebell", "band", "trap_bar"],
-    dumbbells_only: ["dumbbell", "bodyweight", "band", "kettlebell"],
+    dumbbells_only: ["dumbbell", "bodyweight"],
     home_limited: ["dumbbell", "bodyweight", "band", "kettlebell"],
-    bodyweight: ["bodyweight", "band"],
+    bodyweight: ["bodyweight"],
   };
 
   const allowedEquipment = equipmentMap[filter.equipment];
