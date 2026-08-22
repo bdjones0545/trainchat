@@ -188,8 +188,8 @@ See [`.env.example`](.env.example) for the full list.
 ### Initialize a fresh database
 
 ```bash
-# Push the Drizzle schema to the database (creates all tables)
-pnpm --filter db push
+# Apply ordered production migrations (creates all tables)
+pnpm --filter @workspace/db migrate
 
 # Seed Stripe products and prices (first time or new environment only)
 pnpm --filter @workspace/scripts run stripe:setup-products
@@ -223,8 +223,8 @@ pnpm install
 cp .env.example .env
 # Edit .env: set DATABASE_URL, SESSION_SECRET, OPENAI_API_KEY, STRIPE_*, PORT=3000
 
-# 3. Push schema to your local database
-pnpm --filter db push
+# 3. Apply migrations to your local database
+pnpm --filter @workspace/db migrate
 
 # 4. Build and start the API server
 pnpm --filter @workspace/api-server run build
@@ -455,9 +455,9 @@ fallbacks. Getting this wrong silently puts users on the wrong plan.
 
 ### 🟠 Database schema changes (`lib/db/src/schema/`)
 
-`drizzle-kit push` is not reversible without manual SQL. The post-merge script runs it
-automatically with a 20-second timeout. Destructive changes (column drops, table drops) will hang
-the script waiting for confirmation. Test schema changes against a dev snapshot before merging.
+Production uses ordered SQL migrations with recorded history. The post-merge
+script applies pending migrations and exits on failure. Test every schema change
+from an empty database and against a representative snapshot before merging.
 
 ### 🟠 AI system prompt (`src/lib/ai.ts`)
 
@@ -533,10 +533,9 @@ it's in the spec first.
 ### Trap 7 — The post-merge hook is a 20-second gate
 
 `scripts/post-merge.sh` runs automatically on every GitHub→Replit merge. It runs
-`pnpm install --frozen-lockfile` and `drizzle-kit push`. If your merge adds a new package
-without updating `pnpm-lock.yaml`, the frozen install will fail. If your schema change is
-destructive, the push will hang and time out. Both cause the deployment to fail silently from
-the git perspective.
+`pnpm install --frozen-lockfile` and the ordered migration runner. If your merge
+adds a package without updating `pnpm-lock.yaml`, installation fails. If a
+migration fails, the hook aborts before rollout.
 
 ---
 
@@ -675,7 +674,7 @@ Before pushing to `main` (which triggers Replit auto-deploy):
 - [ ] Unit tests pass: `pnpm --filter @workspace/api-server test`
 - [ ] No new TypeScript errors (new errors only — pre-existing TS6305 from unbuilt lib/db are expected)
 - [ ] `pnpm-lock.yaml` is committed if new packages were added (frozen install will fail otherwise)
-- [ ] Schema changes tested: `pnpm --filter db push` runs without destructive-change prompts
+- [ ] Schema changes tested from empty PostgreSQL with `pnpm --filter @workspace/db migrate`
 - [ ] Required secrets confirmed in Replit Secrets: `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `OPENAI_API_KEY`
 - [ ] If DB schema changed: tested against a dev data snapshot, not just empty tables
 - [ ] If auth changed: tested in Replit (not locally) — cookie behavior differs
@@ -700,6 +699,5 @@ The following were noticed while writing this document and are recorded for tran
    roles (as of the `openai-models.ts` migration). This is `DR-0014` (low-severity, already in
    the register). Not a new finding, but worth knowing.
 
-3. **`replit.md` says "DB Push: `pnpm drizzle-kit push:pg`"** but the actual command is
-   `pnpm --filter db push`. The old syntax `push:pg` is the Drizzle 0.x syntax; the current
-   Drizzle 0.45.x uses `push`. This could cause confusion for a new engineer following `replit.md`.
+3. **Resolved:** `replit.md` now documents the authoritative
+   `pnpm --filter @workspace/db migrate` production command.

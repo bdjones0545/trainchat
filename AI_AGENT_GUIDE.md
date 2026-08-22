@@ -506,13 +506,11 @@ Two systems use module-level in-memory state that is NOT shared across instances
 
 ### 🟡 Database schema changes (`lib/db/src/schema/`)
 
-**Why it's risky:** `drizzle-kit push` is not reversible. The post-merge script runs it
-automatically with a 20-second timeout.
+**Why it's risky:** production migrations change durable data and are not
+automatically reversible. The post-merge script applies them with a 20-second timeout.
 
-- Destructive changes (dropping a column, renaming a table) cause `drizzle-kit push` to prompt
-  for confirmation. The post-merge script will time out and fail. The schema change will not be
-  applied automatically — you must run `pnpm --filter db push-force` manually in the Replit shell.
-- There is no migration history. Rolling back a schema change requires manual SQL.
+- Every change requires a new reviewed migration; never rewrite an applied file.
+- Rollback requires a reviewed forward corrective migration or an owner-approved restore.
 - `pnpm-lock.yaml` must be committed if `package.json` changes. The post-merge script uses
   `--frozen-lockfile` — a lockfile mismatch causes the deployment to fail.
 
@@ -530,7 +528,7 @@ These areas require verification in the live Replit environment, not just unit t
 | Stripe / billing | Webhook delivery confirmed | Stripe Dashboard → Developers → Webhooks → Recent deliveries |
 | AI prompt / chat | Program generation returns a valid structured program | Open chat, type "Build me a 3-day strength program", verify output |
 | Email | Delivery confirmed in inbox | Submit a support form, check `EMAIL_SUPPORT_TO` inbox |
-| Schema change | `pnpm --filter db push` runs without prompts | Run manually in Replit shell before merging |
+| Schema change | Empty-database migration rehearsal passes | `pnpm --filter @workspace/db migrate` |
 | Deployment script change | Post-merge hook completes within 20 seconds | Check Replit merge logs |
 
 **The minimum post-change check for any code change:**
@@ -548,8 +546,8 @@ If the health check fails, the server did not start. Check startup logs for the 
 |---|---|
 | Pure logic (parser, classifier, formatter) | Unit tests covering the new behavior |
 | New DB table | Updated `anonymousMerge.ts` + new test case + integration test re-run |
-| Schema change (additive) | `pnpm --filter db push` runs cleanly in Replit shell |
-| Schema change (destructive) | Explicit confirmation from operator + `push-force` in Replit shell |
+| Schema change (additive) | Ordered migration succeeds from empty DB and representative snapshot |
+| Schema change (destructive) | Explicit operator approval, backup, and reviewed forward/rollback plan |
 | Auth flow | Unit tests (if applicable) + manual verification in Replit browser |
 | Billing / Stripe | Unit tests + Stripe Dashboard webhook delivery confirmation |
 | AI prompt | Scenario replay or manual generation test in Replit |
@@ -585,9 +583,8 @@ These rules apply when any change is being pushed to `main`, which triggers auto
 2. **`scripts/post-merge.sh` runs automatically** after every GitHub→Replit merge. It has a
    20-second timeout. Do not add long-running commands to this script.
 
-3. **`drizzle-kit push` is in the post-merge script.** Schema changes that require confirmation
-   will hang and time out. If your change has a destructive schema operation, warn the operator
-   before merging and coordinate a manual `pnpm --filter db push-force` in the Replit shell.
+3. **The ordered migration runner is in the post-merge script.** Any migration
+   failure aborts rollout. Destructive operations require explicit operator approval and backup.
 
 4. **Do not set `DEBUG_RESET_ENABLED=true` in production Replit Secrets.** This enables routes
    that reset anonymous user state.
@@ -692,6 +689,6 @@ Do not attempt these without being directly asked and without the operator confi
 | Changing `SESSION_SECRET` in production | Logs out all users immediately |
 | Changing `STRIPE_WEBHOOK_SECRET` in production | Invalidates in-flight Stripe events |
 | Modifying `scripts/post-merge.sh` | Affects every deployment; timeout behavior is load-bearing |
-| Adding a `drizzle-kit push-force` to the post-merge script | Could cause irreversible schema changes on every merge |
+| Adding `dev:push-force` to the post-merge script | Bypasses production migration history and can cause irreversible changes |
 | Running `git push --force` to any branch | Potentially destroys commit history |
 | Deleting any file not clearly identified as temporary or generated | May remove intentional scaffolding (see DR-0011, DR-0012) |

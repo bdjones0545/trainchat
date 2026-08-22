@@ -154,11 +154,12 @@ microsites (`DR-0041`).
 Drizzle ORM over PostgreSQL 16; client created from `DATABASE_URL`. Schema lives in
 `lib/db/src/schema/*.ts` (**52 tables across 30 files** — `external_program_versions` added in
 Phase 1C), re-exported through `schema/index.ts`.
-Schema changes are applied with `drizzle-kit push` (push-based).
+Production schema changes use ordered SQL in `lib/db/drizzle/`, applied with
+`pnpm --filter @workspace/db migrate`. Schema push is development-only.
 
 > **[drifted → corrected] Schema realities (from `docs/db-schema.md`):**
-> - The `drizzle/0000_*` migration is a **stale snapshot** (covers 29 of 51 tables). Read the
->   TypeScript schema, **not** the migration, to learn the data model (`DR-0002`).
+> - `drizzle/0000_current_schema.sql` is the complete generated 62-table baseline.
+>   New schema changes must be added as ordered migrations.
 > - **Enums are app-level** `text` columns with Drizzle `{enum}` hints — **no `pgEnum`, no CHECK**.
 >   Only `atlas_memories` declares secondary indexes (`db-schema §6`).
 > - **Referential integrity is partial:** a user-cascade backbone + the two program hierarchies use
@@ -413,8 +414,8 @@ TrainChat verifies at four layers. A change is "done" only when the relevant lay
    skills) before declaring success on anything user-visible. Report failures with output; never
    claim a gate passed that you did not run.
 
-Data-shape changes are verified by applying schema with `drizzle-kit push` and exercising the
-affected routes — there is no long migration history to lean on.
+Data-shape changes are verified by migrating an empty database with the ordered
+migration chain, comparing it with the current Drizzle schema, and exercising affected routes.
 
 ---
 

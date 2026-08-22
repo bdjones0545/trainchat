@@ -37,7 +37,7 @@
 8. Exercise the relevant verification layer where applicable (per `CLAUDE.md §8`):
    - run the subsystem's Vitest suite and record pass/fail;
    - observe runtime gates (Architecture Gate, CEO Heartbeat, mutation verifier) for AI/program docs;
-   - exercise the route or `drizzle-kit push` for API/schema docs.
+   - exercise the route or apply the ordered migration chain for API/schema docs.
 9. Record verification metadata: `last_verified`, `verified_by`, `verified_commit` (short SHA at
    verification time), `verification_method`. Set `status: VERIFIED`.
 

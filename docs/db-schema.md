@@ -10,28 +10,23 @@ source_of_truth:
   - lib/db/drizzle.config.ts
   - lib/db/src/index.ts
   - lib/db/src/schema/*.ts
-  - lib/db/drizzle/0000_flat_thunderbolt_ross.sql
+  - lib/db/drizzle/0000_current_schema.sql
   - lib/db/drizzle/meta/_journal.json
 related_architecture:
   - "CLAUDE.md §3 Data Architecture"
   - "CLAUDE.md §2 Repository Organization (package boundaries)"
 
 last_generated: 2026-06-28
-last_verified: 2026-06-28
+last_verified: 2026-08-21
 verified_by: claude (Version 2, Wave 1 doc #1)
 verified_commit: 78ee536
 verification_method: >
-  Read 100% of lib/db source (index.ts, drizzle.config.ts, all 30 schema files,
-  package.json) and the single migration + journal. Independently cross-checked claims:
-  counted `pgTable(` definitions (51 distinct tables) and diffed table names against the
-  migration's CREATE TABLE set (29) to confirm migration drift; grep-verified FK presence,
-  `text`-typed userId outliers, raw `sql` tag usage (16 files), transaction usage (0),
-  and `pgEnum` usage (0). NOT performed: live-database introspection (`drizzle-kit push`
-  against a provisioned DB) — this was a documentation-only task with no DB provisioned.
-  All claims about *runtime database state* are therefore marked UNVERIFIED inline.
+  Wave 5 migration repair generated a complete baseline from the current Drizzle
+  schema, applied it to empty PostgreSQL 16.14, and compared the public schema
+  with a separate Drizzle-push reference using schema-only pg_dump output.
 
 discrepancies:
-  - { id: DR-0002, summary: "drizzle/0000 migration snapshot is stale — covers 29 of 51 tables", kind: doc-vs-code, severity: medium, status: open }
+  - { id: DR-0002, summary: "Resolved: complete 62-table ordered migration baseline now matches Drizzle schema", kind: doc-vs-code, severity: medium, status: resolved }
   - { id: DR-0003, summary: "performance_profiles.userId is text; users.id is serial int — cannot be a real FK", kind: code-vs-architecture, severity: medium, status: open }
   - { id: DR-0004, summary: "mutation_audit_receipts.conversationId is text; conversations.id is serial int", kind: code-vs-architecture, severity: low, status: open }
   - { id: DR-0005, summary: "Many cross-entity references are soft (plain integer, no FK); CLAUDE.md §3 implies relational coupling", kind: doc-vs-code, severity: medium, status: open }
@@ -63,8 +58,8 @@ It implements `CLAUDE.md §3`.
 | `lib/db/src/index.ts` | Creates a single `pg.Pool` from `DATABASE_URL` and exports `pool`, `db = drizzle(pool, { schema })`, and re-exports all schema. Throws if `DATABASE_URL` is unset. |
 | `lib/db/drizzle.config.ts` | drizzle-kit config: `dialect: "postgresql"`, schema = `src/schema/index.ts`, credentials from `DATABASE_URL` (throws if unset). |
 | `lib/db/src/schema/index.ts` | Barrel: `export *` from all 30 domain schema files. |
-| `lib/db/src/schema/*.ts` (30 files) | One file per domain; define 51 tables, their enums (as TS const tuples), Zod insert schemas, and inferred TS types. |
-| `lib/db/drizzle/0000_flat_thunderbolt_ross.sql` | The **only** generated migration. Covers 29 tables (stale — see §9). |
+| `lib/db/src/schema/*.ts` | Domain schema files defining 62 tables, app-level enums, Zod insert schemas, and inferred TS types. |
+| `lib/db/drizzle/0000_current_schema.sql` | Complete generated 62-table production baseline. |
 | `lib/db/drizzle/meta/{_journal.json,0000_snapshot.json}` | drizzle-kit journal (version 7, single entry) + schema snapshot. |
 
 ## 3. Database architecture
@@ -279,19 +274,13 @@ The migration encodes **26 foreign keys** for the 29 tables it covers; the 22 ne
 
 ## 9. Migration strategy
 
-- **Mechanism:** `drizzle-kit push` / `push-force` (the only two package scripts). This is
-  **push-based**: drizzle-kit diffs the live DB against `schema/index.ts` and applies changes
-  directly. There is **no `migrate()` runtime call** in source (matches `CLAUDE.md §3`).
-- **The `drizzle/` migration folder is a single, stale snapshot.** It holds exactly one migration
-  (`0000_flat_thunderbolt_ross.sql`, journal version 7, generated ≈2026-04-18) covering **29
-  tables**. The current schema defines **51 tables**, so **22 tables exist only in schema, not in
-  the migration** — including `atlas_memories`, all `external_*`, all `whitepaper_*`, all
-  `assessment*`, `product_directory`, `performance_profiles`, `mutation_audit_receipts`,
-  `system_adjustment_events`, all `research_*`, `stripe_processed_events`, and
-  `share_moment_audit`. The migration is therefore **not** an authoritative description of the live
-  schema; `lib/db/src/schema/*` is (DR-0002).
-- **Implication for engineers:** never read `drizzle/0000_*.sql` to learn the schema — read the
-  TypeScript schema. Treat the migration file as a historical snapshot only.
+- **Production mechanism:** ordered versioned SQL in `lib/db/drizzle/`, applied
+  with `pnpm --filter @workspace/db migrate` and tracked in
+  `drizzle.__drizzle_migrations`.
+- **Baseline:** `0000_current_schema.sql` contains all 62 current public tables,
+  foreign keys, constraints, and indexes. It is generated from the TypeScript schema.
+- **Development only:** `dev:push` may be used for disposable databases but is
+  not a production migration authority.
 
 ## 10. Architectural observations discovered directly from source
 
@@ -320,7 +309,7 @@ Mirror of frontmatter; registered in `docs/documentation-governance.md §5`.
 
 | id | Summary | Kind | Severity |
 |---|---|---|---|
-| DR-0002 | `drizzle/0000` migration covers 29 of 51 tables — stale; schema source is authoritative. | doc-vs-code | medium |
+| DR-0002 | Complete 62-table migration baseline matches current Drizzle schema. **Resolved 2026-08-21.** | doc-vs-code | medium |
 | DR-0003 | `performance_profiles.user_id` is `text` vs serial-int `users.id`; cannot be a real FK. | code-vs-architecture | medium |
 | DR-0004 | `mutation_audit_receipts.conversation_id` is `text` vs serial-int `conversations.id`. | code-vs-architecture | low |
 | DR-0005 | Many cross-entity references are soft (no FK); `CLAUDE.md §3` reads as fully relational. | doc-vs-code | medium |
@@ -331,9 +320,8 @@ Mirror of frontmatter; registered in `docs/documentation-governance.md §5`.
 These are **proposals**, not applied edits (governance §2/§7 — architecture changes are deliberate
 and owned). Suggested for the next architecture-owner pass:
 
-1. **§3** — Add: "The `lib/db/drizzle/` migration is a single stale snapshot (29/51 tables); the
-   authoritative schema is `lib/db/src/schema/*`, applied via `drizzle-kit push`. Do not read the
-   migration to learn the schema." (Closes DR-0002.)
+1. **§3** — Completed: document ordered migrations as production authority and
+   keep schema push development-only. (Closes DR-0002.)
 2. **§3** — Disambiguate the three+one exercise tables and explicitly label the legacy
    `saved_programs`/`exercises` model as legacy vs the canonical `training_systems` model.
 3. **§3** — State that referential integrity is **partial**: a user-cascade backbone + the two
@@ -354,7 +342,7 @@ password-reset-tokens, conversations, pending-clarifications, programs, training
 exercise-logs, active-sessions, readiness, session-logs, memory, atlas-memories, neural-profile,
 performance-profiles, mutation-audit-receipts, system-adjustment-events, global-learning, research,
 knowledge, whitepapers, assessments, product-directory, external-api, billing, support, analytics,
-share-moments`. Plus `lib/db/drizzle/0000_flat_thunderbolt_ross.sql` and
+share-moments`. Plus `lib/db/drizzle/0000_current_schema.sql` and
 `lib/db/drizzle/meta/_journal.json`. Cross-check greps across `artifacts/api-server/src` and
 `lib/db/src/schema` (table counts, FKs, types, `sql`/transaction/`pgEnum` usage).
 
@@ -364,25 +352,22 @@ share-moments`. Plus `lib/db/drizzle/0000_flat_thunderbolt_ross.sql` and
 |---|---|---|
 | Table inventory, columns, enums, types | **High** | Read 100% of schema source; counts cross-verified. |
 | FK / cascade / unique / index constraints (as written in schema) | **High** | Read directly; grep-confirmed. |
-| Migration staleness (29 vs 51) | **High** | Diffed migration CREATE TABLE set vs schema `pgTable` set. |
+| Migration equivalence (62 tables) | **High** | Empty migration DB schema-only dump matches Drizzle reference except pg_dump nonce. |
 | Repository pattern & transaction absence | **High (source)** | Grep: 0 `transaction(`, 0 repo files, 83 direct-builder files. |
 | Raw SQL characterization | **Medium-High** | 16 `sql`-tag files sampled; full `pool.query` census not run. |
-| **Live database conformance** (does the running DB match schema?) | **UNVERIFIED** | No DB introspection performed (doc-only task; no DB provisioned). |
+| **Isolated database conformance** | **High** | PostgreSQL 16.14 migration-built and Drizzle-reference schemas compared. Production remains untouched. |
 | Intent behind soft refs / no-transaction design | **Medium** | Inferred from comments + structure, not from a design doc. |
 
-Overall: **high confidence in the schema-as-source description; the one open verification gap is
-live-database introspection**, which caps promotion to L4 until a `drizzle-kit push --dry-run` or DB
-introspection is run in a future cycle.
+Overall: **high confidence in migration/schema equivalence in isolated PostgreSQL**.
 
 ## 15. Verification record
 
 - Generated and verified at commit `78ee536` (working tree clean except the untracked `CLAUDE.md`
   and `docs/` from this Knowledge Base effort).
-- Independent re-derivation performed: `grep -c 'pgTable('` and name extraction → 51 tables;
-  `CREATE TABLE` extraction from migration → 29; set difference → 22 missing (enumerated in §9).
+- Empty-database migration and separate Drizzle-reference materialization both produced 62 public tables.
 - Negative checks: `pgEnum` → 0; `db.transaction(`/`transaction(` → 0; explicit `index(` → only
   `atlas-memories.ts`.
-- Not run (documented gap): `drizzle-kit push` / live DB introspection; exhaustive `pool.query` census.
+- Production database introspection was not run and remains outside this repair scope.
 
 ---
 *Generated from code. Reconcile against `CLAUDE.md` per `docs/documentation-governance.md`.*

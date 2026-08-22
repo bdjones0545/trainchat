@@ -217,7 +217,7 @@ per-pilot gating, observability, a migration diagnostic, and a documented kill s
 
 - **Prerequisite — migration 0002.** Before enabling anything, apply the nullable
   `external_programs.training_system_id` column:
-  `psql "$DATABASE_URL" -f lib/db/manual-migrations/0002_external_programs_training_system_id.sql`.
+  `pnpm --filter @workspace/db migrate`.
   At startup the server runs a **best-effort diagnostic** (`runExternalMaterializationReadinessCheck`):
   if a flag could be active but the column is missing, it logs a loud, actionable warning (it never
   throws — materialized edits already fail-soft to regeneration).

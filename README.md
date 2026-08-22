@@ -112,13 +112,17 @@ cp .env.example .env
 |---|---|
 | `OPENAI_API_KEY` | Powers all AI generation (chat, program design). Falls back to `AI_INTEGRATIONS_OPENAI_API_KEY` on Replit. |
 
-**Common optional vars:** `CLIENT_URL` / `APP_URL`, `SENDGRID_API_KEY` + `EMAIL_FROM`, `STRIPE_PRICE_*` (price fallbacks), `ADMIN_SECRET` / `ADMIN_EMAILS`, `SENTRY_DSN`, `RESEARCH_DISCOVERY_ENABLED` (+ `PUBMED_*` / `SEMANTIC_SCHOLAR_API_KEY`), `LOG_LEVEL`, `BASE_PATH` (required by Vite builds). See [`.env.example`](.env.example) and [DEPLOYMENT.md](DEPLOYMENT.md) §4 for the complete, annotated list.
+**Common optional vars:** `CLIENT_URL` / `APP_URL`, `SENDGRID_API_KEY` + `EMAIL_FROM`, `STRIPE_PRICE_*` (price fallbacks), `ADMIN_EMAILS`, `SENTRY_DSN`, `RESEARCH_DISCOVERY_ENABLED` (+ `PUBMED_*` / `SEMANTIC_SCHOLAR_API_KEY`), `LOG_LEVEL`, `BASE_PATH` (required by Vite builds). See [`.env.example`](.env.example) and [DEPLOYMENT.md](DEPLOYMENT.md) §4 for the complete, annotated list.
 
 ### 3. Set up the database
 
 ```bash
-pnpm --filter @workspace/db push          # apply the Drizzle schema (push-based)
+pnpm --filter @workspace/db migrate       # apply ordered production migrations
 ```
+
+Versioned SQL in `lib/db/drizzle/` is the production authority. Development
+schema push is available only as `dev:push` for disposable local databases; see
+[`lib/db/MIGRATIONS.md`](lib/db/MIGRATIONS.md).
 
 ### 4. (Optional) Provision Stripe products
 

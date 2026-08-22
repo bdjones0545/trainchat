@@ -433,7 +433,7 @@ No secrets are displayed in any response.
 | File | Purpose |
 |---|---|
 | `lib/db/src/schema/kevin.ts` | All Kevin DB table definitions |
-| `lib/db/manual-migrations/0004_kevin_integration.sql` | Additive migration SQL |
+| `lib/db/drizzle/0000_current_schema.sql` | Versioned production schema baseline |
 | `artifacts/api-server/src/lib/kevin-config.ts` | Env var validation + config singleton |
 | `artifacts/api-server/src/lib/kevin-pseudonym.ts` | HMAC pseudonymous ID derivation |
 | `artifacts/api-server/src/lib/kevin-circuit-breaker.ts` | Process-local circuit breaker |
@@ -462,27 +462,16 @@ No secrets are displayed in any response.
 ## Applying the Migration
 
 ```bash
-# Development / first-time setup — apply in order
-psql $DATABASE_URL -f lib/db/manual-migrations/0004_kevin_integration.sql
-psql $DATABASE_URL -f lib/db/manual-migrations/0005_kevin_outcomes_worker.sql
-psql $DATABASE_URL -f lib/db/manual-migrations/0006_kevin_capability_unique.sql
-psql $DATABASE_URL -f lib/db/manual-migrations/0007_kevin_durability.sql
+# Development / first-time setup
+pnpm --filter @workspace/db migrate
 
 # Verify tables created
 psql $DATABASE_URL -c "\dt kevin_*"
 ```
 
-All migrations are idempotent — safe to re-run. `0006` deduplicates
-`kevin_app_capabilities` and upgrades its scope index to UNIQUE so
-`seedKevinCapabilities()` is genuinely idempotent. `0007` adds
-`processing_started_at` (stale-recovery, events + outcomes) and the outcome
-`idempotency_key` (UNIQUE). Apply both before enabling Kevin dispatch.
-
-> **Deploy ordering (push-based schema):** the Drizzle schema now declares the
-> new columns/indexes (unique capability scope index; outcome `idempotency_key`
-> NOT NULL UNIQUE). Because this repo applies schema with `drizzle-kit push`, run
-> `0006` and `0007` (which deduplicate/backfill existing rows) **before** the next
-> push — pushing the unique/NOT NULL constraints against un-migrated data will fail.
+The ordered production baseline includes the Kevin tables, recovery columns,
+idempotency key, unique capability scope, and supporting indexes. Future Kevin
+schema changes must be generated as new ordered migrations.
 
 ---
 

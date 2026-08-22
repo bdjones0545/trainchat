@@ -286,7 +286,7 @@ Smallest reviewable increments. Every behavior-changing PR is **flag-gated with 
 ### PR 2.1 — Schema + service user (additive, dormant)
 - **Scope:** nullable `external_programs.trainingSystemId` FK (→ `training_systems`, `on delete set null`);
   provision a dedicated external-service user (idempotent seed).
-- **Files:** `lib/db/src/schema/external-api.ts`; additive manual migration under `lib/db/manual-migrations/`;
+- **Files:** `lib/db/src/schema/external-api.ts`; ordered migration under `lib/db/drizzle/`;
   seed script in `scripts/`.
 - **Tests:** migration applies additively; FK/nullable; seed idempotent.
 - **Rollout risk:** very low (column unused). **Rollback:** column is inert.

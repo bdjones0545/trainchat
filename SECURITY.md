@@ -112,11 +112,8 @@ Admin routes use two independent checks applied in order:
 If `ADMIN_EMAILS` is empty or unset, `requireAdmin` returns `403 Forbidden` to all requests.
 An unconfigured admin list denies everyone — it does not open the admin panel. See §15.
 
-### Seeders and plan manipulation (separate check)
-
-Some admin routes (`/admin/seed-exercises`, `/admin/users/set-plan`) use an additional
-`X-Admin-Key` header check against `ADMIN_SECRET` instead of the session/email flow. These
-are operational endpoints intended for scripts, not browser-based admin panel use.
+Seeder and plan-manipulation endpoints use the same authenticated session and
+server-side allowlist boundary. Shared header credentials are not accepted.
 
 ### External API authorization
 
@@ -327,6 +324,20 @@ session context does not carry injected persona changes across conversations.
 - A deterministic fallback (`generateFallbackResponse`) runs when no API key is present —
   the application does not fail open to undefined behavior.
 
+### Program-generation safety boundary
+
+- Authenticated and guest program generation share the strict provider contract identified as
+  `trainchat.program.v1`, the canonical validator in `program-structure-schema.ts`, and the
+  bounded retry selector in `generation-safety.ts`.
+- Guest generation has a separate versioned prompt adapter because its onboarding context is
+  smaller. It validates the frequency, equipment, and injury/pain information actually supplied
+  by the guest before returning or persisting an artifact. Guest onboarding currently has no
+  excluded/disliked-movement field and no authenticated constraint-memory record; those
+  authenticated-only constraints are therefore not fabricated for guests.
+- Successful guest artifacts store bounded provenance with the guest session metadata and return
+  that provenance with the program. Provider credentials and full prompt/context bodies are not
+  stored in provenance.
+
 ### Structured output safety
 
 - Program JSON extracted from AI responses is validated against the program schema before DB write.
@@ -418,12 +429,8 @@ everyone rather than granting open access. This fail-closed posture means a misc
 environment locks out admins rather than granting them to all users. Set `ADMIN_EMAILS` to a
 comma-separated list of administrator email addresses to unlock the admin panel.
 
-### Header-key routes (operational scripts)
-
-`POST /api/admin/seed-exercises` and `POST /api/admin/users/set-plan` accept an `X-Admin-Key`
-header matched against `ADMIN_SECRET`. These routes are designed for script invocation (not
-browser-based admin panel use) and require the secret to be non-empty — they return `503` if
-`ADMIN_SECRET` is unset.
+Seeder and plan-manipulation routes are protected by the same fail-closed
+`requireAuth` + `requireAdmin` chain as the browser admin surface.
 
 ### Debug endpoints (`/api/debug/*`)
 
@@ -452,7 +459,6 @@ to Sentry — a useful post-deploy verification step, but must not be left enabl
 | `STRIPE_SECRET_KEY` | Replit Secrets | `sk_live_...` or `sk_test_...` |
 | `STRIPE_WEBHOOK_SECRET` | Replit Secrets | `whsec_...`; server throws on startup if absent |
 | `SENDGRID_API_KEY` | Replit Secrets | Email delivery |
-| `ADMIN_SECRET` | Replit Secrets (production) | X-Admin-Key for seeder scripts |
 | `ADMIN_EMAILS` | Replit Secrets | Comma-separated; must be non-empty in production |
 | `DATABASE_URL` | Replit Secrets | Full connection string including credentials |
 | `SENTRY_DSN` | Replit Secrets | Optional; enables error tracking |
@@ -599,6 +605,7 @@ posture and a hardened production baseline.
 | ~~L-10~~ | ~~ADMIN_EMAILS~~ | **Fixed 2026-06-30** — empty/unset `ADMIN_EMAILS` now returns `403 Forbidden` to all requests (fail-closed). Previously passed all authenticated users through. | ✅ Resolved |
 | ~~L-11~~ | ~~Dependency audit~~ | **Fixed 2026-07-01** — `pnpm audit --audit-level=high` added as CI step #4 (after install, before typecheck). Fails on any un-acknowledged high/critical advisory. Two HIGH advisories are acknowledged in `pnpm-workspace.yaml auditConfig.ignoreCves` (picomatch v2 in mockup-sandbox, lodash in mockup-sandbox — both non-production). Nodemailer updated to v9.0.1. | ✅ Resolved |
 | ~~L-12~~ | ~~Session fixation~~ | **Fixed 2026-07-01** — `activateAuthSession()` in `src/lib/session-activation.ts` calls `session.regenerate()` before writing `userId` on both login and register. The pre-auth session ID is destroyed; the authenticated session gets a fresh ID. | ✅ Resolved |
+| L-13 | Historical production admin credential | **Accepted deferred risk (owner decision, 2026-08-20):** the formerly tracked production `ADMIN_SECRET` was removed from the repository and is no longer an accepted authorization mechanism, but the production secret was not rotated and its former value was not live-verified unusable. Keep this risk visible until owner-performed rotation and adversarial verification are complete. | Credential may remain present in the production secret store; repository remediation alone does not prove revocation |
 
 ---
 

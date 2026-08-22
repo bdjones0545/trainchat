@@ -69,7 +69,7 @@ The single ledger of every known gap between code, implementation docs, and arch
 | id | subsystem | summary | kind | severity | status |
 |---|---|---|---|---|---|
 | DR-0001 | ai-agents | `replit.md` cites model "GPT-4o"; live registry `lib/openai-models.ts` resolves the GPT-4.1 family. CLAUDE.md §9 already notes this. | doc-vs-code | low | open |
-| DR-0002 | db-schema | `drizzle/0000` migration snapshot covers 29 of 51 tables — stale; `lib/db/src/schema/*` is authoritative (applied via `drizzle-kit push`). | doc-vs-code | medium | open |
+| DR-0002 | db-schema | Complete 62-table ordered migration baseline matches the Drizzle schema. | doc-vs-code | medium | resolved |
 | DR-0003 | db-schema | `performance_profiles.user_id` is `text` while `users.id` is serial int — cannot be a real FK; type-inconsistent soft reference. | code-vs-architecture | medium | open |
 | DR-0004 | db-schema | `mutation_audit_receipts.conversation_id` is `text` while `conversations.id` is serial int — type-inconsistent soft reference. | code-vs-architecture | low | open |
 | DR-0005 | db-schema | Many cross-entity references are soft (plain integer, no FK); CLAUDE.md §3 reads as fully relational. Referential integrity is partly application-enforced. | doc-vs-code | medium | open |

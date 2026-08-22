@@ -5,7 +5,7 @@
 - **Build**: `pnpm build`
 - **Typecheck**: `pnpm typecheck`
 - **Codegen**: `pnpm run gen:api-client` (for API clients from OpenAPI spec)
-- **DB Push**: `pnpm drizzle-kit push:pg` (for Drizzle ORM schema changes)
+- **DB Migrate**: `pnpm --filter @workspace/db migrate` (ordered production migrations)
 - **Stripe Setup**: `pnpm --filter @workspace/scripts run stripe:setup-products` (idempotent, creates Stripe products/prices)
 
 **Required ENV Vars**:

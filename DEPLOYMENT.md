@@ -42,7 +42,7 @@ TypeScript source (src/)
     → node --enable-source-maps dist/index.mjs
 ```
 
-**No migration runner.** Schema changes are applied via `drizzle-kit push` (see §5). There are no numbered migration files — the schema is always pushed as the authoritative definition.
+**Production migration authority:** ordered, versioned SQL in `lib/db/drizzle/`, applied by `pnpm --filter @workspace/db migrate`. `drizzle-kit push` is development-only and is never run by deployment automation.
 
 ### Same-origin routing vs. dev preview proxy
 
@@ -103,7 +103,7 @@ Replit is connected to the GitHub repo via the `github:1.0.0` integration (`.rep
 1. Code changes are pushed to `main` on GitHub
 2. Replit detects the push (via GitHub integration) and pulls the changes
 3. The `[postMerge]` hook in `.replit` runs `scripts/post-merge.sh`
-4. The post-merge script installs dependencies and pushes the DB schema
+4. The post-merge script installs dependencies and applies pending versioned migrations
 5. Replit rebuilds and restarts the server
 
 **Manual pull (if auto-sync didn't trigger):**
@@ -111,7 +111,7 @@ Replit is connected to the GitHub repo via the `github:1.0.0` integration (`.rep
 # In Replit shell
 git pull
 pnpm install --frozen-lockfile
-pnpm --filter db push
+pnpm --filter @workspace/db migrate
 ```
 
 **The post-merge script** (`scripts/post-merge.sh`):
@@ -119,11 +119,11 @@ pnpm --filter db push
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile   # install/update dependencies
-pnpm --filter db push            # push schema changes to the live database
+pnpm --filter @workspace/db migrate # apply pending versioned migrations
 ```
 - Runs with a 20-second timeout (`timeoutMs = 20000`)
 - `set -e` means any failure aborts the script
-- If `drizzle-kit push` conflicts (destructive change), it will hang waiting for confirmation — see §17
+- A migration failure exits non-zero and stops the post-merge hook before rollout
 
 ---
 
@@ -138,6 +138,7 @@ Set all secrets in the **Replit Secrets panel** (`Tools → Secrets`). Values in
 | `PORT` | Injected by Replit. Server throws if absent. |
 | `DATABASE_URL` | Injected by Replit. DB module throws if absent. |
 | `SESSION_SECRET` | Express session signing key. Must be a long, random string. Server throws if absent. |
+| `SESSION_TRUST_PROXY` | Optional. Set to `1` only for a verified single-hop HTTPS-terminating proxy outside Replit. Replit is detected from `REPLIT_DOMAINS`; local HTTP should leave this unset. |
 | `STRIPE_SECRET_KEY` | Stripe secret key (`sk_live_...` or `sk_test_...`). `validateBillingConfig()` throws on startup if missing. |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret (`whsec_...`). Required by `validateBillingConfig()`. |
 
@@ -169,7 +170,6 @@ Set all secrets in the **Replit Secrets panel** (`Tools → Secrets`). Values in
 | `APP_URL` | Falls back to `REPLIT_DEV_DOMAIN`, then `https://www.trainchat.ai` | Used to construct password reset email links (`src/routes/auth.ts`). Also added to the CORS allowlist. |
 | `BASE_PATH` | Replit-injected during frontend build | Required by all Vite configs (`artifacts/trainchat/`, `artifacts/mockup-sandbox/`, whitepaper prototypes). Throws at build time if missing. Not needed at API server runtime. |
 | `WEBHOOK_URL` | None | Override for Stripe webhook URL in the `stripe:setup-products` script only. Not used by the API server at runtime. |
-| `ADMIN_SECRET` | Set in `.replit [userenv.production]` | Bearer token for `/api/admin/*` routes. |
 | `ADMIN_EMAILS` | None | Comma-separated list of admin email addresses. **If empty or unset, all admin routes return 403 (fail-closed).** Set this to grant admin access. |
 | `LOG_LEVEL` | `info` | Pino log level (`trace`, `debug`, `info`, `warn`, `error`). |
 | `NODE_ENV` | `development` | Set to `production` in production. Affects cookie security and debug route availability. |
@@ -200,11 +200,6 @@ EMAIL_SUPPORT_TO               = Bryan.jones@trainchat.ai
 STRIPE_PRICE_TRAINCHAT_MONTHLY = price_1Tn35DGOcsf8J09luBjtpksA
 ```
 
-Production-only (also in `.replit`):
-```
-ADMIN_SECRET = eeb65552cd109f4d4c0e2115728b58620a66c018f8a8751adb359e2585dab641
-```
-
 ---
 
 ## 5. Database
@@ -217,43 +212,19 @@ ADMIN_SECRET = eeb65552cd109f4d4c0e2115728b58620a66c018f8a8751adb359e2585dab641
 ### Applying schema changes
 
 ```bash
-# Push schema to the live database (Replit shell)
-pnpm --filter db push
+# Apply pending production migrations (Replit shell)
+pnpm --filter @workspace/db migrate
 ```
 
-This is `drizzle-kit push` — it introspects the live DB and applies the diff. There are no numbered migration files. This runs automatically on every merge via `scripts/post-merge.sh`.
+`drizzle-kit migrate` records applied files in `drizzle.__drizzle_migrations`
+and executes only newer journal entries. Production changes must be generated
+and reviewed as new files; do not edit a migration after deployment.
 
-**Warning:** `drizzle-kit push` will prompt for confirmation on destructive changes (column drops, table drops). The post-merge script's 20-second timeout will cause it to fail if it hangs waiting for input. If you need to apply a destructive schema change:
-```bash
-# Force-push without confirmation prompt (use with extreme care)
-pnpm --filter db push-force
-```
-Only use `push-force` when you have confirmed the change is safe and tested it against a dev snapshot first.
-
-### ⚠️ `drizzle-kit push` is currently unsafe — apply new tables manually
-
-The live DB has drifted from the schema files: several production objects are **not** modeled in
-`lib/db/src/schema/*.ts` (`user_sessions` — intentionally external — plus `training_methods`,
-`goal_knowledge_graph`, `exercise_product_links`, and ~12 `product_directory` columns). Because push
-treats the schema as the desired end-state, it wants to **DROP** all of them, and will abort (or, with
-`push-force`, destroy data). This also means the auto-push in `scripts/post-merge.sh` cannot safely
-apply new schema right now.
-
-Until that drift is reconciled, apply **additive** schema changes with hand-written SQL in
-`lib/db/manual-migrations/` instead of push. For the `external_program_versions` table
-(External API parity Phase 1C):
-
-```bash
-# Run in the Replit shell — additive only (CREATE TABLE + FKs, no DROP). Do NOT run drizzle push.
-psql "$DATABASE_URL" -f lib/db/manual-migrations/0001_external_program_versions.sql
-
-# Phase 2.1 — adds the nullable external_programs.training_system_id FK (ADD COLUMN + FK, no DROP).
-# Additive and unused by production code today; safe to apply anytime.
-psql "$DATABASE_URL" -f lib/db/manual-migrations/0002_external_programs_training_system_id.sql
-```
-
-The migration is idempotent (`IF NOT EXISTS` + `duplicate_object` guards) and DDL-identical to the
-Drizzle model, so once the unrelated drift is reconciled a future push will see it already in sync.
+For disposable local databases, `pnpm --filter @workspace/db dev:push` remains
+available. It is not a production migration mechanism. Existing non-empty
+databases without Drizzle migration history require an owner-controlled,
+backed-up baseline cutover before this automation is enabled; see
+`lib/db/MIGRATIONS.md`.
 
 ### Session table
 
@@ -471,7 +442,7 @@ Or set `SENTRY_RELEASE` in Replit Secrets to a static release identifier and upd
 #!/bin/bash
 set -e
 pnpm install --frozen-lockfile   # install/update all workspace dependencies
-pnpm --filter db push            # push Drizzle schema to the live database
+pnpm --filter @workspace/db migrate # apply pending versioned migrations
 ```
 
 **What can go wrong:**
@@ -479,7 +450,7 @@ pnpm --filter db push            # push Drizzle schema to the live database
 | Problem | Symptom | Fix |
 |---|---|---|
 | `pnpm install` fails | Lockfile mismatch | Run `pnpm install` locally, commit the updated `pnpm-lock.yaml` |
-| `drizzle-kit push` prompts for destructive confirmation | Script hangs, times out after 20s | Run `pnpm --filter db push-force` manually in Replit shell, or use `pnpm --filter db push-force` in the script for that change (then revert) |
+| Migration fails | Post-merge exits before rollout | Inspect the failed versioned SQL; do not bypass or substitute schema push |
 | Script exits 1 on non-zero | Any step fails | Check Replit shell for error output |
 
 ---
@@ -551,7 +522,7 @@ verification (items below).
 ### Database
 - [ ] Schema changes reviewed — confirm no destructive changes (column drops, table drops) without a backup plan
 - [ ] If destructive changes: confirmed behavior tested against a dev data snapshot
-- [ ] `pnpm --filter db push` runs cleanly without prompts (or documented reason it requires `push-force`)
+- [ ] `pnpm --filter @workspace/db migrate` succeeds on an empty rehearsal database and the target has valid migration history
 
 ### Environment Variables
 - [ ] All required secrets are set in Replit Secrets: `PORT`, `DATABASE_URL`, `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `OPENAI_API_KEY`
@@ -588,7 +559,7 @@ git commit -m "your message"
 git push origin main
 
 # 2. Replit picks up the push automatically
-# post-merge.sh runs: pnpm install --frozen-lockfile && pnpm --filter db push
+# post-merge.sh runs: pnpm install --frozen-lockfile && pnpm --filter @workspace/db migrate
 # Replit rebuilds and restarts the server
 
 # 3. Verify in Replit logs
@@ -599,13 +570,9 @@ git push origin main
 
 ```bash
 # 1. Push code to main (same as above)
-# 2. If drizzle-kit push prompts for destructive confirmation, it will time out
-# 3. Run manually in Replit shell if needed:
-pnpm --filter db push
-# or for destructive changes:
-pnpm --filter db push-force
-
-# 4. Restart the server in Replit if it didn't auto-restart
+# 2. The post-merge hook applies pending versioned migrations and aborts on failure
+# 3. Verify migration history and /api/readyz before enabling traffic
+# Never substitute dev:push or dev:push-force in production.
 ```
 
 ### First-time environment setup (new Replit environment)
@@ -617,8 +584,8 @@ pnpm --filter db push-force
 #    STRIPE_WEBHOOK_SECRET, OPENAI_API_KEY, SENDGRID_API_KEY
 # 3. Install dependencies:
 pnpm install
-# 4. Push schema to the new DB:
-pnpm --filter db push
+# 4. Apply the ordered production migration chain:
+pnpm --filter @workspace/db migrate
 # 5. Set up Stripe products and prices (first time only):
 pnpm --filter @workspace/scripts run stripe:setup-products
 # 6. Start the server:
@@ -694,10 +661,10 @@ git push origin main
 Pushing to main triggers the post-merge hook, which will reinstall and restart.
 
 ### Step 3: If schema was changed
-If a schema change (via `drizzle-kit push`) caused the issue, you cannot auto-rollback the database via git revert alone. You must:
+If a versioned schema migration caused the issue, you cannot auto-rollback the database via git revert alone. You must:
 1. Identify the schema change that was applied
 2. Apply the inverse change manually (add back dropped column, etc.)
-3. Run `pnpm --filter db push` manually
+3. Add and review a new forward corrective migration; never rewrite an applied migration
 
 **There is no automated schema rollback.** This is a known gap in the current deployment setup. For destructive schema changes, take a DB snapshot before applying.
 
@@ -736,11 +703,11 @@ If a schema change (via `drizzle-kit push`) caused the issue, you cannot auto-ro
 - Check Stripe Dashboard → Webhooks for delivery failures
 - Verify `STRIPE_WEBHOOK_SECRET` matches the registered webhook's signing secret
 
-### `drizzle-kit push` hangs during post-merge
+### A versioned migration fails during post-merge
 
-- Cause: destructive schema change requires confirmation
-- Timeout after 20 seconds; post-merge script exits 1
-- Fix: run `pnpm --filter db push-force` manually in Replit shell
+- The post-merge script exits non-zero before rollout.
+- Fix the migration in a new reviewed migration when it may already have been applied elsewhere.
+- Never use `dev:push` or `dev:push-force` to bypass the production migration history.
 
 ### `pnpm install --frozen-lockfile` fails
 
@@ -776,11 +743,11 @@ pnpm --filter @workspace/api-server test
 # Run DR-0025 integration test
 pnpm --filter @workspace/api-server exec tsx scripts/integration-test-dr0025.ts
 
-# Push DB schema manually
-pnpm --filter db push
+# Apply pending production migrations
+pnpm --filter @workspace/db migrate
 
-# Force-push DB schema (destructive — use with care)
-pnpm --filter db push-force
+# Disposable local development only
+pnpm --filter @workspace/db dev:push
 
 # Build api-server manually
 pnpm --filter @workspace/api-server run build
@@ -866,7 +833,7 @@ These rules exist because TrainChat has a live user database, real Stripe billin
 
 - **Do not edit `dist/` files directly.** `dist/` is generated by esbuild from `src/`. Changes to `dist/` are overwritten on the next build. Edit `src/` only.
 
-- **Do not change `scripts/post-merge.sh` without understanding the timeout.** The post-merge script has a 20-second timeout. Commands that prompt for input (like `drizzle-kit push` on destructive changes) will hang and fail. Document any changes to this script in this file.
+- **Do not change `scripts/post-merge.sh` without understanding the timeout.** The post-merge script has a 20-second timeout. Migration failures abort rollout; never bypass them with development schema-push commands. Document changes here.
 
 - **Do not add `DEBUG_RESET_ENABLED=true` to production secrets.** This enables routes that can reset anonymous user state. It is only safe in non-production environments.
 
