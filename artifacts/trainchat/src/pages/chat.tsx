@@ -4513,6 +4513,7 @@ export default function Chat() {
                 <textarea
                   ref={inputRef}
                   data-testid="input-message"
+                  aria-label="Message Atlas"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
@@ -4523,8 +4524,8 @@ export default function Chat() {
                       : voice.isListening
                         ? "Speak now…"
                         : hasActiveSystem
-                          ? "Ask me to adjust your program…"
-                          : "Type or speak your command…"
+                          ? "Adjust your program…"
+                          : "Describe your goal…"
                   }
                   disabled={stream.isActive}
                   onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
