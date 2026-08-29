@@ -139,22 +139,22 @@ export default defineConfig({
             return "vendor-motion";
           }
 
-          // TanStack Query — shared across chat and auth flows
-          if (id.includes("/@tanstack/")) {
-            return "vendor-query";
-          }
-
-          // Radix UI primitives + Lucide icons — UI component dependencies
+          // Three.js and the React Three Fiber stack power only the optional
+          // empty-chat atmosphere. Leave their chunk placement to Rollup so
+          // they stay attached to the lazy NeuralTerrainR3F import instead of
+          // becoming a statically imported manual vendor chunk.
           if (
-            id.includes("/@radix-ui/") ||
-            id.includes("/lucide-react/")
+            id.includes("/three/") ||
+            id.includes("/@react-three/") ||
+            id.includes("/postprocessing/")
           ) {
-            return "vendor-ui";
+            return undefined;
           }
 
-          // Remaining node_modules: wouter, zod, sonner, etc.
-          // Grouped into a single "vendor" chunk rather than inlining into app.
-          return "vendor";
+          // Let Rollup place remaining dependencies with the routes/features
+          // that use them. A catch-all vendor chunk pulled lazy-only libraries
+          // into every page and made the initial preload unnecessarily large.
+          return undefined;
         },
       },
     },

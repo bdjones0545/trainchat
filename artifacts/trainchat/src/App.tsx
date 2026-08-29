@@ -28,7 +28,16 @@ import Login from "@/pages/login";
 import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
 import ResetPassword from "@/pages/reset-password";
-import Chat from "@/pages/chat";
+
+let chatModulePromise: ReturnType<typeof importChatModule> | undefined;
+function importChatModule() {
+  return import("@/pages/chat");
+}
+function loadChatModule() {
+  chatModulePromise ??= importChatModule();
+  return chatModulePromise;
+}
+const Chat = lazy(loadChatModule);
 
 // ─── Lazy-loaded: authenticated app pages ─────────────────────────────────────
 // Never needed on first load — only authenticated users reach these routes.
@@ -225,6 +234,9 @@ function ChatPage() {
 
   useEffect(() => {
     console.log("[TrainChat] ChatPage mounted");
+    // Fetch the chat bundle alongside identity bootstrap. Lazy-loading keeps it
+    // off marketing/auth routes without adding a second wait on /chat.
+    void loadChatModule();
     const deviceId = getOrCreateDeviceId();
     initializeChatIdentity(deviceId)
       .then((identity) => {
