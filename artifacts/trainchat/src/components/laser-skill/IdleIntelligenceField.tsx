@@ -14,8 +14,14 @@
  *  isThinking — passed to terrain; triggers faster wave + violet drift
  */
 
+import { lazy, Suspense } from "react";
 import { motion } from "framer-motion";
-import { NeuralTerrainR3F } from "./NeuralTerrainR3F";
+
+const NeuralTerrainR3F = lazy(() =>
+  import("./NeuralTerrainR3F").then((module) => ({
+    default: module.NeuralTerrainR3F,
+  })),
+);
 
 // Ambient blobs — each carries its own color from the terrain palette.
 // Using inline rgba tuples so the gradient matches the vertex color system.
@@ -138,7 +144,9 @@ export function IdleIntelligenceField({
           pointerEvents: "none",
         }}
       >
-        <NeuralTerrainR3F isThinking={isThinking} />
+        <Suspense fallback={null}>
+          <NeuralTerrainR3F isThinking={isThinking} />
+        </Suspense>
       </div>
 
       {/* ── L5: Sweep lines ───────────────────────────────────────────────── */}
