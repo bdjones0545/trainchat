@@ -1,0 +1,378 @@
+# TrainChat — Read-Only Production Database & Rollback Discovery
+
+TrainChat has completed its repository audit, remediation, migration repair, browser verification, and Linux/Replit compatibility verification.
+
+Current engineering status:
+
+**CONDITIONALLY READY**
+
+**NO KNOWN INTERNAL REPOSITORY BLOCKERS REMAIN**
+
+The next task is production discovery only.
+
+## CRITICAL SAFETY BOUNDARY
+
+This task is **READ-ONLY**.
+
+Do NOT:
+
+* deploy;
+* change application code;
+* modify production data;
+* modify production schema;
+* run migrations against production;
+* run `drizzle push`;
+* establish or modify migration history;
+* insert into `drizzle.__drizzle_migrations`;
+* restart production;
+* modify secrets;
+* rotate credentials;
+* call OpenAI;
+* initiate Stripe operations;
+* modify subscriptions;
+* delete anything.
+
+If any verification requires a write, STOP and report that owner authorization is required.
+
+---
+
+# 1. Identify the Actual Production Environment
+
+Determine the currently deployed TrainChat production environment.
+
+Report without exposing secrets:
+
+* production deployment/service;
+* production hostname;
+* active revision/commit if available;
+* database provider;
+* PostgreSQL version;
+* database name;
+* whether the database is clearly the actual TrainChat production database.
+
+Never print database credentials or full connection URLs.
+
+---
+
+# 2. Migration History — Read Only
+
+Inspect production PostgreSQL.
+
+Determine:
+
+* whether the `drizzle` schema exists;
+* whether `drizzle.__drizzle_migrations` exists;
+* migration-history row count;
+* migration identifiers/hashes/timestamps where safe;
+* whether the database appears to already use the new authoritative migration mechanism.
+
+Do not insert or alter anything.
+
+Return exactly one:
+
+**ALREADY BASELINED**
+
+**NOT BASELINED**
+
+**MIGRATION HISTORY AMBIGUOUS**
+
+---
+
+# 3. Production Schema Inspection
+
+Read the production schema metadata.
+
+Compare it against the current authoritative TrainChat schema represented by:
+
+`lib/db/drizzle/0000_current_schema.sql`
+
+Compare:
+
+* tables;
+* columns;
+* types;
+* nullability;
+* defaults;
+* primary keys;
+* foreign keys;
+* unique constraints;
+* indexes;
+* relevant sequences/enums.
+
+Do NOT compare table count alone.
+
+Do not alter production to make it match.
+
+Return exactly one:
+
+**PRODUCTION SCHEMA EQUIVALENT**
+
+**PRODUCTION SCHEMA DRIFT EXISTS**
+
+**PRODUCTION SCHEMA COMPARISON NOT COMPLETE**
+
+If drift exists, list structural differences without exposing customer data.
+
+---
+
+# 4. Critical Wave Schema Verification
+
+Specifically verify production presence/state of the schema required by the approved TrainChat release, including:
+
+* `chat_turns`;
+* unique `(conversation_id, client_turn_id)` protection;
+* required turn ownership fields;
+* account-deletion lifecycle/state fields;
+* external program/version relationships;
+* current authentication/session structures;
+* current training-system/program structures;
+* current billing/subscription structures.
+
+READ ONLY.
+
+---
+
+# 5. Production Data-Volume Inventory
+
+Collect counts and/or storage metadata only.
+
+Do not retrieve or report customer content.
+
+Report approximate counts for important production tables such as:
+
+* users;
+* conversations;
+* messages;
+* training systems/programs;
+* chat turns;
+* sessions;
+* subscriptions/billing records.
+
+The purpose is migration/release risk estimation.
+
+Do not display names, emails, conversation text, programs, tokens, or other user data.
+
+---
+
+# 6. Backup Capability
+
+Inspect the actual Replit/database backup capability available for TrainChat.
+
+Determine:
+
+* whether automated backups exist;
+* most recent successful backup timestamp if available;
+* backup type;
+* retention;
+* whether restore capability is documented/available;
+* whether a restore rehearsal has ever been verified;
+* what mechanism would be used to restore production.
+
+Do NOT create or restore a backup.
+
+Return exactly one:
+
+**BACKUP/RESTORE EVIDENCE VERIFIED**
+
+**BACKUP EXISTS BUT RESTORE NOT VERIFIED**
+
+**BACKUP EVIDENCE NOT VERIFIED**
+
+---
+
+# 7. Replit Application Rollback
+
+Inspect Replit deployment controls without changing them.
+
+Determine:
+
+* whether previous production revisions are retained;
+* whether TrainChat can be rolled back to a previous revision;
+* whether a specific revision can be selected;
+* whether API/frontend are one deployment or independently reversible;
+* whether traffic can be stopped/held during an incident;
+* what happens if a deployment fails;
+* whether application rollback can occur without database rollback.
+
+Do NOT perform a rollback.
+
+Return exactly one:
+
+**APPLICATION ROLLBACK CAPABILITY VERIFIED**
+
+or
+
+**APPLICATION ROLLBACK CAPABILITY NOT VERIFIED**
+
+---
+
+# 8. Determine Production Baseline Case
+
+Based on the evidence, classify production:
+
+## Case A
+
+Schema equivalent AND migration history already correctly baselined.
+
+## Case B
+
+Schema equivalent BUT new Drizzle migration history is not established.
+
+## Case C
+
+Schema drift exists.
+
+## Case D
+
+Insufficient evidence to determine equivalence/baseline state.
+
+Do not establish the baseline.
+
+---
+
+# 9. Important Migration Rule
+
+The new authoritative TrainChat migration mechanism is:
+
+`pnpm --filter @workspace/db migrate`
+
+However:
+
+**DO NOT RUN `0000_current_schema` AGAINST AN EXISTING POPULATED PRODUCTION DATABASE.**
+
+If production is structurally equivalent but not baselined, it requires an owner-controlled baseline-history procedure.
+
+This task does NOT authorize that procedure.
+
+---
+
+# 10. Repository / Deployment Comparison
+
+Determine whether the currently deployed TrainChat revision predates the six approved release commits.
+
+The approved release commits are:
+
+1. `613942e808382fab831e5dc87b2a64544d70b9a3`
+2. `775f19dc7209168d69323016efa735ce80a02312`
+3. `b7afb4b8488469076a0d1ee5904859199d24d3cc`
+4. `d2c3104cc06a587ce239033f9cd161988c35d0be`
+5. `f93d63e2122caa24d981c19417583701f58d3f87`
+6. `050fb25a8b17a7da8bcb8ef95c862db03f7bc584`
+
+Do not deploy these commits.
+
+Simply report whether production currently includes them.
+
+---
+
+# Required Report
+
+## 1. Discovery Verdict
+
+Exactly one:
+
+**PRODUCTION CUTOVER DISCOVERY PASS**
+
+or
+
+**PRODUCTION CUTOVER DISCOVERY NOT COMPLETE**
+
+## 2. Production Environment
+
+Report deployment/database/version information without secrets.
+
+## 3. Current Production Revision
+
+State whether the six approved release commits are currently deployed.
+
+## 4. Migration History
+
+Exactly one:
+
+**ALREADY BASELINED**
+
+**NOT BASELINED**
+
+**MIGRATION HISTORY AMBIGUOUS**
+
+## 5. Schema Comparison
+
+Exactly one:
+
+**PRODUCTION SCHEMA EQUIVALENT**
+
+**PRODUCTION SCHEMA DRIFT EXISTS**
+
+**PRODUCTION SCHEMA COMPARISON NOT COMPLETE**
+
+List structural differences if any.
+
+## 6. Critical Schema Objects
+
+Report presence/state of the Wave-required tables/indexes/columns.
+
+## 7. Data Volume
+
+Report counts/sizes only.
+
+Do not expose customer data.
+
+## 8. Backup / Restore
+
+Exactly one:
+
+**BACKUP/RESTORE EVIDENCE VERIFIED**
+
+**BACKUP EXISTS BUT RESTORE NOT VERIFIED**
+
+**BACKUP EVIDENCE NOT VERIFIED**
+
+## 9. Application Rollback
+
+Exactly one:
+
+**APPLICATION ROLLBACK CAPABILITY VERIFIED**
+
+or
+
+**APPLICATION ROLLBACK CAPABILITY NOT VERIFIED**
+
+## 10. Production Baseline Case
+
+Exactly:
+
+**CASE A**
+
+**CASE B**
+
+**CASE C**
+
+or
+
+**CASE D**
+
+Explain briefly.
+
+## 11. Release Blockers
+
+List only actual blockers to a production-clone rehearsal or eventual deployment.
+
+## 12. Deferred Items
+
+Continue carrying:
+
+**DEFERRED EXTERNAL VERIFICATION — LIVE NON-PRODUCTION OPENAI NOT RUN**
+
+**DEFERRED EXTERNAL VERIFICATION — STRIPE TEST MODE NOT RUN**
+
+**ACCEPTED DEFERRED RISK — production admin credential not rotated or live-verified.**
+
+**DEFERRED HISTORICAL RISK — removed database backup remains in Git history**
+
+## 13. Next Action
+
+Recommend exactly one next action.
+
+Do NOT perform it.
+
+Stop after reporting.

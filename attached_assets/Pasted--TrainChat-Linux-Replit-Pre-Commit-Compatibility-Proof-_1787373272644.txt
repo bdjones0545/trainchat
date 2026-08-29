@@ -1,0 +1,264 @@
+# TrainChat — Linux/Replit Pre-Commit Compatibility Proof
+
+This is a **verification-only** task.
+
+Do not redesign TrainChat.
+
+Do not deploy to production.
+
+Do not modify production data.
+
+Do not change application behavior unless a genuine Linux compatibility defect is discovered and must be repaired to complete this proof.
+
+## Objective
+
+Prove that the current TrainChat release candidate can install and build successfully in the actual Linux/Replit environment.
+
+The remaining pre-commit blocker is:
+
+**LINUX/REPLIT FROZEN INSTALL NOT PROVEN**
+
+All other current repository-level gates have already passed elsewhere.
+
+---
+
+# 1. Environment Identification
+
+Before running anything, report the actual Replit environment:
+
+* OS
+* architecture
+* Node version
+* pnpm version
+* relevant Replit runtime/module configuration
+
+Expected deployment configuration currently targets:
+
+* Linux/Replit
+* Node 24
+* PostgreSQL 16
+
+Do not change versions merely to make the test easier.
+
+If the active environment differs from the repository's configured production runtime, report the difference.
+
+---
+
+# 2. Clean Dependency Proof
+
+From the TrainChat repository root, run the equivalent of:
+
+```bash
+CI=true pnpm install --frozen-lockfile
+```
+
+Required result:
+
+**PASS**
+
+Do not regenerate the lockfile.
+
+Do not use `--no-frozen-lockfile`.
+
+Do not manually install Darwin packages.
+
+Verify Linux native optional dependencies resolve normally.
+
+Specifically confirm the installation does NOT require:
+
+* `@tailwindcss/oxide-darwin-arm64`
+* `lightningcss-darwin-arm64`
+
+Linux-compatible optional packages should resolve through the lockfile/package ecosystem normally.
+
+---
+
+# 3. Dependency Integrity
+
+Run the repository's applicable dependency/lockfile checks.
+
+Confirm:
+
+* lockfile remains unchanged;
+* no missing Linux-native package;
+* no unsupported platform error;
+* no optional dependency resolution failure;
+* no package install scripts fail.
+
+Report warnings separately from failures.
+
+---
+
+# 4. TypeScript Gates
+
+Run:
+
+* shared/library TypeScript;
+* API TypeScript;
+* frontend TypeScript.
+
+Required:
+
+**PASS**
+
+Do not modify source solely to silence unrelated warnings.
+
+---
+
+# 5. Production Builds
+
+Run the actual production build commands for:
+
+## API
+
+Required:
+
+**PASS**
+
+## Frontend
+
+Required:
+
+**PASS**
+
+Report any:
+
+* native-module failure;
+* architecture mismatch;
+* missing package;
+* sourcemap warning;
+* bundle-size warning.
+
+Warnings do not automatically fail the gate unless they prevent a valid production artifact.
+
+---
+
+# 6. Repository Integrity
+
+After install/build verification run:
+
+```bash
+git diff --check
+git status --short
+```
+
+The Linux proof must not silently rewrite:
+
+* `package.json`;
+* `pnpm-lock.yaml`;
+* workspace configuration;
+* source files;
+* generated migration files.
+
+If the install or build modifies tracked files, report exactly which files and why.
+
+Do not commit anything.
+
+---
+
+# 7. Optional Test Proof
+
+If the environment already has a safe isolated PostgreSQL database available without touching production, you may additionally run the repository test suite.
+
+However:
+
+This is NOT required to close the Linux compatibility gate because the migration-backed suite has already passed:
+
+**2,319 PASS / 0 FAIL / 4 SKIPPED**
+
+Do not connect to the production database merely to repeat tests.
+
+The primary objective is Linux frozen-install and build compatibility.
+
+---
+
+# 8. Production Safety
+
+Do NOT:
+
+* deploy;
+* publish;
+* push;
+* commit;
+* modify Replit production secrets;
+* change production database state;
+* invoke live OpenAI;
+* invoke Stripe;
+* run production migrations;
+* establish migration history;
+* rotate credentials.
+
+This is an execution-environment compatibility test only.
+
+---
+
+# Required Report
+
+## 1. Linux/Replit Verdict
+
+Exactly one:
+
+**LINUX/REPLIT FROZEN INSTALL PASS**
+
+or
+
+**LINUX/REPLIT FROZEN INSTALL NOT PROVEN**
+
+## 2. Environment
+
+Report:
+
+* OS
+* architecture
+* Node
+* pnpm
+
+## 3. Frozen Install
+
+Report exact result.
+
+## 4. Native Dependencies
+
+Confirm whether Linux-native Tailwind/Lightning CSS dependencies resolved without requiring Darwin packages.
+
+## 5. TypeScript
+
+Report:
+
+* shared
+* API
+* frontend
+
+as PASS/FAIL.
+
+## 6. Production Builds
+
+Report:
+
+* API
+* frontend
+
+as PASS/FAIL.
+
+## 7. Repository Mutation
+
+Report whether install/build changed any tracked files.
+
+## 8. Git Integrity
+
+Report:
+
+* `git diff --check`
+* `git status --short`
+
+## 9. Pre-Commit Gate
+
+If Linux frozen install and builds pass, state:
+
+**LINUX/REPLIT COMPATIBILITY GATE CLOSED**
+
+If not, state the exact compatibility blocker.
+
+Do not deploy or commit.
+
+Stop after reporting.
