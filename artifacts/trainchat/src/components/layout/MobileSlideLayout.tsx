@@ -148,7 +148,7 @@ export default function MobileSlideLayout({
           ref={rightPanelRef}
           role="dialog"
           aria-modal="true"
-          aria-label="Live program"
+          aria-label="Program"
           aria-hidden={activePanel !== "right"}
           className={`fixed inset-y-0 right-0 z-50 w-[85vw] max-w-sm bg-background border-l border-border flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
             activePanel === "right" ? "translate-x-0" : "translate-x-full"
@@ -168,13 +168,13 @@ export default function MobileSlideLayout({
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border flex-shrink-0">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-foreground">Live Program</span>
+              <span className="text-sm font-bold text-foreground">Program</span>
               <span className="text-[9px] text-muted-foreground/40 font-medium">swipe → to close</span>
             </div>
             <button
               type="button"
               onClick={onPanelClose}
-              aria-label="Close live program"
+              aria-label="Close program"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
             >
               <X className="w-4 h-4" />

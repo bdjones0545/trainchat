@@ -3781,9 +3781,9 @@ export default function Chat() {
               >
                 <IdleIntelligenceField isTyping={inputText.trim().length > 0} isThinking={stream.isActive} />
 
-                {/* ── Zone 1: Upper — Atlas Interface label + conversational message ── */}
+                {/* ── Zone 1: Upper — Coach label + conversational message ── */}
                 <div className="flex-none px-6 md:px-10 max-w-2xl mx-auto w-full">
-                  {/* Atlas Interface section label — centered, muted, with presence indicator */}
+                  {/* Coach section label — centered, muted, with presence indicator */}
                   <div className="flex items-center justify-center gap-2 mb-3 md:mb-6 select-none">
                     <span className="relative flex h-[7px] w-[7px] flex-shrink-0">
                       <span
@@ -3798,7 +3798,7 @@ export default function Chat() {
                     <p
                       style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.20em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.62)", textShadow: "0 0 14px rgba(56,189,248,0.15)" }}
                     >
-                      Atlas Interface
+                      Coach
                     </p>
                   </div>
 
@@ -3863,14 +3863,14 @@ export default function Chat() {
                 {/* On mobile: fixed height so composer stays in view; on desktop: grows to fill */}
                 <div className="md:flex-1" style={{ height: "clamp(16px, 3dvh, 60px)" }} />
 
-                {/* ── Zone 3: Lower — Adaptive Command + vertical chips ── */}
+                {/* ── Zone 3: Lower — starter actions ── */}
                 <div className="flex-none px-6 md:px-10 pb-6 max-w-2xl mx-auto w-full flex flex-col items-center">
                   {/* Section label */}
                   <p
                     className="text-center mb-2 md:mb-4 select-none"
                     style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.68)" }}
                   >
-                    Adaptive Command
+                    Start your program
                   </p>
 
                   {/* Chips — buttons stay mounted (no blink), only label text crossfades inside each slot */}
@@ -4430,8 +4430,8 @@ export default function Chat() {
                   <div className="flex-1 flex justify-end">
                     <motion.button
                       type="button"
-                      aria-label="Open Live Program"
-                      title="Open Live Program"
+                      aria-label="Open program"
+                      title="Open program"
                       onClick={() => {
                         setRightPanelOpen(true);
                         setMobilePanel("right");
@@ -4598,7 +4598,7 @@ export default function Chat() {
                 <div className="flex items-center gap-2.5">
                   <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasActiveSystem || latestProgram ? "bg-green-400" : "bg-muted-foreground/25"}`} style={hasActiveSystem || latestProgram ? { animation: "system-core-pulse 2.5s ease-in-out infinite" } : undefined} />
                   <span className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-[0.15em]">
-                    Live Program
+                    Program
                   </span>
                   {(hasActiveSystem || latestProgram) && (
                     <span className="text-[9px] text-green-400/80 font-medium">Active</span>
