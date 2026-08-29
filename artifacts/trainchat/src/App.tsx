@@ -230,7 +230,7 @@ function BootstrapError() {
  */
 function ChatPage() {
   const queryClient = useQueryClient();
-  const [bootstrapped, setBootstrapped] = useState(false);
+  const [bootstrapStatus, setBootstrapStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
     console.log("[TrainChat] ChatPage mounted");
@@ -241,17 +241,27 @@ function ChatPage() {
     initializeChatIdentity(deviceId)
       .then((identity) => {
         queryClient.setQueryData(getGetMeQueryKey(), identity.user);
+        console.log("[TrainChat] bootstrap complete");
+        setBootstrapStatus("ready");
       })
-      .catch((err) => { console.error("[TrainChat] bootstrap fetch failed", err); })
-      .finally(() => { console.log("[TrainChat] bootstrap complete"); setBootstrapped(true); });
+      .catch((err) => {
+        console.error("[TrainChat] bootstrap fetch failed", err);
+        setBootstrapStatus("error");
+      });
   }, [queryClient]);
 
-  const { data: me, isLoading } = useGetMe();
+  // The ordered identity resolver above owns the first /auth/me request. Keep
+  // React Query dormant until it has populated the cache so startup cannot race
+  // a second current-user lookup against anonymous bootstrap.
+  const { data: me, isLoading } = useGetMe({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: { enabled: bootstrapStatus === "ready" } as any,
+  });
 
   const hadUser = useRef(false);
   if (me && !hadUser.current) hadUser.current = true;
 
-  if (!bootstrapped || isLoading) {
+  if (bootstrapStatus === "loading" || (bootstrapStatus === "ready" && isLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-5 h-5 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -259,6 +269,7 @@ function ChatPage() {
     );
   }
 
+  if (bootstrapStatus === "error") return <BootstrapError />;
   if (me) return <Chat />;
   if (hadUser.current) return <Redirect to="/login" />;
   return <BootstrapError />;
