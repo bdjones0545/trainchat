@@ -385,8 +385,6 @@ export default function Chat() {
   const THINKING_TIMEOUT_MS = 90_000;
   const [thinkingStuck, setThinkingStuck] = useState(false);
 
-  // Startup state: fail-safe lets the agent render even if auth hangs
-  const [forceReady, setForceReady] = useState(false);
   // Calibration nudge guard: one-shot, never auto-triggers twice
   const hasCheckedCalibrationNudge = useRef(false);
   /**
@@ -1012,19 +1010,6 @@ export default function Chat() {
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasActiveSystem, activeSystem?.id, dbSystemProgram, latestProgram, isNewBuildSession, hasUnsavedDraft, isSaved, messages.length]);
-
-  // FIX 7: fail-safe — fires ONCE on mount; if auth is still unresolved after 4s,
-  // force the agent shell to render so the user is never stuck on a spinner.
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setForceReady((prev) => {
-        if (prev) return prev;
-        console.warn("[Chat] startup timeout — forcing agent render");
-        return true;
-      });
-    }, 4000);
-    return () => clearTimeout(id);
-  }, []); // intentionally empty — runs once on mount only
 
   // Auth failure is handled by the ChatPage wrapper in App.tsx which re-renders
   // GuestStart when me is null. No redirect needed here — Chat only renders
@@ -2881,7 +2866,7 @@ export default function Chat() {
   // profileLoading is intentionally excluded: it starts loading AFTER me resolves,
   // so including it causes a second flash (gate clears → profileLoading starts → gate flashes again).
   // Profile data (calibrationScore, etc.) hydrates in the background without blocking the agent.
-  if (meLoading && !forceReady) {
+  if (meLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
@@ -3445,7 +3430,12 @@ export default function Chat() {
                 <p className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mb-0.5">Choose Your</p>
                 <h2 className="text-base font-bold text-foreground">Training Focus</h2>
               </div>
-              <button onClick={() => setShowFocusInfo(false)} className="text-muted-foreground/50 hover:text-muted-foreground transition-colors p-1 rounded-lg hover:bg-muted/30">
+              <button
+                type="button"
+                onClick={() => setShowFocusInfo(false)}
+                aria-label="Close training focus information"
+                className="text-muted-foreground/70 hover:text-foreground transition-colors p-1 rounded-lg hover:bg-muted/30"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -3591,6 +3581,7 @@ export default function Chat() {
           <button
             onClick={() => setSidebarOpen((s) => !s)}
             className="hidden md:flex absolute top-3 left-3 z-10 p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-all duration-150"
+            aria-label={sidebarOpen ? "Close sidebar" : "Open sidebar"}
             title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
           >
             {sidebarOpen ? <PanelLeftClose className="w-4 h-4" /> : <PanelLeft className="w-4 h-4" />}
@@ -3608,7 +3599,8 @@ export default function Chat() {
               </span>
               <button
                 onClick={() => setShowFocusInfo(true)}
-                className="text-muted-foreground/40 hover:text-muted-foreground transition-colors"
+                className="text-muted-foreground/70 hover:text-foreground transition-colors"
+                aria-label="What is Training Focus?"
                 title="What is Training Focus?"
               >
                 <Info className="w-2.5 h-2.5" />
@@ -3769,7 +3761,7 @@ export default function Chat() {
             ) : messages.length === 0 && !optimisticUserMsg && !stream.isActive ? (
               /* ─── Empty state — three-zone cinematic layout ─── */
               <div
-                className="relative flex flex-col animate-in fade-in duration-700 min-h-[78dvh]"
+                className="relative flex flex-col animate-in fade-in duration-700 min-h-[62dvh] md:min-h-[78dvh]"
                 style={{ paddingTop: "clamp(14px, 3dvh, 52px)" }}
                 onPointerDown={(e) => {
                   // Only trigger for background taps — ignore chips, input, buttons
@@ -3815,7 +3807,7 @@ export default function Chat() {
                       switching focus modes never resizes the container and shifts the chips / composer below. */}
                   <div style={{ position: "relative", minHeight: "clamp(5.6rem, 15vw, 10rem)", overflow: "hidden" }}>
                     <AnimatePresence mode="sync">
-                      <motion.p
+                      <motion.h1
                         key={atlasContext.heroMessage}
                         initial={{ opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -3826,7 +3818,7 @@ export default function Chat() {
                         onPointerEnter={triggerCorePulse}
                       >
                         {atlasContext.heroMessage}
-                      </motion.p>
+                      </motion.h1>
                     </AnimatePresence>
                   </div>
 
@@ -3876,7 +3868,7 @@ export default function Chat() {
                   {/* Section label */}
                   <p
                     className="text-center mb-2 md:mb-4 select-none"
-                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.40)" }}
+                    style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.18em", textTransform: "uppercase", color: "hsl(var(--muted-foreground) / 0.68)" }}
                   >
                     Adaptive Command
                   </p>
@@ -4354,7 +4346,7 @@ export default function Chat() {
           {/* Input bar — safe-area aware, always visible above Safari chrome */}
           <div
             className="flex-shrink-0 px-4 pt-3 border-t border-border/30 bg-background"
-            style={{ paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}
+            style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
           >
             <div className="max-w-2xl mx-auto">
               {/* Voice status strip — zero height when idle, no layout shift */}
@@ -4536,7 +4528,7 @@ export default function Chat() {
                   }
                   disabled={stream.isActive}
                   onFocus={() => { if (messages.length === 0) triggerCorePulse(); }}
-                  className="flex-1 resize-none bg-transparent px-2 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/35 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
+                  className="flex-1 resize-none bg-transparent px-2 py-3.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none leading-relaxed max-h-40 overflow-y-auto disabled:opacity-60"
                   style={{ minHeight: "52px" }}
                   onInput={(e) => {
                     const t = e.target as HTMLTextAreaElement;

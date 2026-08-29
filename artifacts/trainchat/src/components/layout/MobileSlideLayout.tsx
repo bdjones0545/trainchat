@@ -25,6 +25,11 @@ export default function MobileSlideLayout({
   const isOpen = activePanel !== null;
   const touchStartXRef = useRef<number | null>(null);
   const touchStartYRef = useRef<number | null>(null);
+  const leftPanelRef = useRef<HTMLDivElement>(null);
+  const rightPanelRef = useRef<HTMLDivElement>(null);
+  const bottomPanelRef = useRef<HTMLDivElement>(null);
+  const onPanelCloseRef = useRef(onPanelClose);
+  onPanelCloseRef.current = onPanelClose;
 
   useEffect(() => {
     if (isOpen) {
@@ -48,6 +53,52 @@ export default function MobileSlideLayout({
     };
   }, [isOpen]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const activePanelRef =
+      activePanel === "left"
+        ? leftPanelRef
+        : activePanel === "right"
+          ? rightPanelRef
+          : bottomPanelRef;
+    const panel = activePanelRef.current;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    panel?.querySelector<HTMLElement>("button, [href], input, textarea, select, [tabindex]:not([tabindex='-1'])")?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onPanelCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !panel) return;
+
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          "button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+        ),
+      );
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [activePanel, isOpen]);
+
   return (
     <div className="relative flex flex-col bg-background overflow-hidden" style={{ height: "100dvh", overscrollBehavior: "none" }}>
       {children}
@@ -63,6 +114,11 @@ export default function MobileSlideLayout({
       {/* Left panel */}
       {leftPanel && (
         <div
+          ref={leftPanelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
+          aria-hidden={activePanel !== "left"}
           className={`fixed inset-y-0 left-0 z-50 w-[80vw] max-w-xs bg-background border-r border-border flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
             activePanel === "left" ? "translate-x-0" : "-translate-x-full"
           }`}
@@ -72,6 +128,7 @@ export default function MobileSlideLayout({
             <button
               type="button"
               onClick={onPanelClose}
+              aria-label="Close menu"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
             >
               <X className="w-4 h-4" />
@@ -88,6 +145,11 @@ export default function MobileSlideLayout({
       {/* Right panel */}
       {rightPanel && (
         <div
+          ref={rightPanelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Live program"
+          aria-hidden={activePanel !== "right"}
           className={`fixed inset-y-0 right-0 z-50 w-[85vw] max-w-sm bg-background border-l border-border flex flex-col shadow-2xl transition-transform duration-300 ease-out ${
             activePanel === "right" ? "translate-x-0" : "translate-x-full"
           }`}
@@ -110,7 +172,9 @@ export default function MobileSlideLayout({
               <span className="text-[9px] text-muted-foreground/40 font-medium">swipe → to close</span>
             </div>
             <button
+              type="button"
               onClick={onPanelClose}
+              aria-label="Close live program"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
             >
               <X className="w-4 h-4" />
@@ -128,6 +192,11 @@ export default function MobileSlideLayout({
       {/* Bottom panel */}
       {bottomPanel && (
         <div
+          ref={bottomPanelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Coach panel"
+          aria-hidden={activePanel !== "bottom"}
           className={`fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border flex flex-col shadow-2xl transition-transform duration-300 ease-out rounded-t-2xl`}
           style={{
             height: bottomPanelHeight,
@@ -140,7 +209,9 @@ export default function MobileSlideLayout({
             </div>
             <span className="text-sm font-bold text-foreground absolute left-1/2 -translate-x-1/2">Agent</span>
             <button
+              type="button"
               onClick={onPanelClose}
+              aria-label="Close coach panel"
               className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all"
             >
               <X className="w-4 h-4" />
