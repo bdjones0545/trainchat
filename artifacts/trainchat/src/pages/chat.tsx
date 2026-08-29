@@ -3487,7 +3487,7 @@ export default function Chat() {
         <button
           onClick={() => setMobilePanel("left")}
           aria-label="Open menu"
-          className="flex items-center gap-2 active:opacity-70 transition-opacity"
+          className="flex min-h-11 items-center gap-2 active:opacity-70 transition-opacity"
         >
           <Menu className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />
           <span
@@ -3599,7 +3599,7 @@ export default function Chat() {
               </span>
               <button
                 onClick={() => setShowFocusInfo(true)}
-                className="text-muted-foreground/70 hover:text-foreground transition-colors"
+                className="flex min-h-6 min-w-6 items-center justify-center text-muted-foreground/70 hover:text-foreground transition-colors"
                 aria-label="What is Training Focus?"
                 title="What is Training Focus?"
               >
@@ -3616,7 +3616,7 @@ export default function Chat() {
                   <button
                     key={cfg.id}
                     onClick={() => handleFocusSwitch(cfg.id)}
-                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-semibold transition-all duration-200 select-none ${
+                    className={`flex min-h-11 md:min-h-0 items-center gap-1.5 px-3.5 py-2 rounded-full text-[11px] font-semibold transition-all duration-200 select-none ${
                       isActive
                         ? "text-white shadow-md"
                         : cfg.theme.inactiveClass + " bg-muted/30"
@@ -4469,7 +4469,7 @@ export default function Chat() {
                   animate={isPushToTalk ? { scale: [1, 1.08, 1] } : {}}
                   transition={isPushToTalk ? { repeat: Infinity, duration: 0.9, ease: "easeInOut" } : {}}
                   title={isPushToTalk ? "Release to send" : voice.isListening ? "Stop listening" : "Tap or hold for voice"}
-                  className={`ml-2 mb-2 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-150 select-none touch-none disabled:opacity-30 disabled:cursor-not-allowed ${
+                  className={`ml-2 mb-2 w-11 h-11 md:w-9 md:h-9 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-150 select-none touch-none disabled:opacity-30 disabled:cursor-not-allowed ${
                     isPushToTalk
                       ? "text-blue-200 bg-blue-500/25 shadow-[0_0_12px_rgba(96,165,250,0.35)] border border-blue-400/40"
                       : voice.isListening
@@ -4543,7 +4543,7 @@ export default function Chat() {
                   aria-label="Send message"
                   onClick={() => submitUserMessage({ message: inputText.trim(), source: "typed" })}
                   disabled={!inputText.trim() || stream.isActive}
-                  className="m-2 flex items-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-[0_0_14px_rgba(96,165,250,0.28)] touch-manipulation font-semibold text-[13px] tracking-wide"
+                  className="m-2 flex min-h-11 min-w-11 md:min-h-0 md:min-w-0 items-center justify-center gap-1.5 px-5 py-2.5 bg-primary text-primary-foreground rounded-full hover:bg-primary/90 disabled:opacity-35 disabled:cursor-not-allowed transition-all duration-150 active:scale-95 flex-shrink-0 shadow-[0_0_14px_rgba(96,165,250,0.28)] touch-manipulation font-semibold text-[13px] tracking-wide"
                 >
                   {stream.isActive ? (
                     <Loader2 className="w-4 h-4 animate-spin" />

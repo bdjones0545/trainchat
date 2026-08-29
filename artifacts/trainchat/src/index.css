@@ -708,6 +708,18 @@
   background: transparent;
 }
 
+@media (max-width: 767px) {
+  .system-access-btn,
+  .adaptive-pill {
+    width: 44px;
+    height: 44px;
+  }
+
+  .adaptive-pill {
+    min-width: 80px;
+  }
+}
+
 /* ─── Idle pill ─────────────────────────────────────────────────────────── */
 
 .adaptive-pill--idle {
