@@ -18,9 +18,9 @@ interface ModeConfig {
 const MODES: ModeConfig[] = [
   {
     id: "atlas",
-    label: "Atlas",
+    label: "Coach",
     icon: Bot,
-    description: "Adaptive coaching chat",
+    description: "Coach chat",
   },
   {
     id: "checkin",
