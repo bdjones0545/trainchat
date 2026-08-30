@@ -3243,6 +3243,7 @@ export default function Chat() {
           onClose={() => setMobilePanel(null)}
           isSaving={!!latestProgram && isSaving}
           isSaved={isInSystem}
+          isAnonymous={isAnonymousUser}
           isPremium={isPremium}
           hasActiveSystem={hasActiveSystem || !!latestProgram}
           trainingSystemId={activeSystem?.id ?? undefined}
@@ -4643,6 +4644,7 @@ export default function Chat() {
                   onClose={() => setRightPanelOpen(false)}
                   isSaving={!!latestProgram && isSaving}
                   isSaved={isInSystem}
+                  isAnonymous={isAnonymousUser}
                   isPremium={isPremium}
                   hasActiveSystem={hasActiveSystem || !!latestProgram}
                   trainingSystemId={activeSystem?.id ?? undefined}
