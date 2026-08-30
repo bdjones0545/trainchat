@@ -2950,17 +2950,26 @@ export default function Chat() {
           <div className="h-px bg-border/60 mx-3" />
         </div>
         <button
-          onClick={() => { setLocation("/system"); setMobilePanel(null); }}
+          onClick={() => {
+            if (hasActiveSystem || latestProgram) {
+              setLocation("/system");
+            } else {
+              setTimeout(() => inputRef.current?.focus(), 100);
+            }
+            setMobilePanel(null);
+          }}
           className="relative w-full flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-semibold text-foreground bg-primary/8 border border-primary/15 hover:bg-primary/12 active:scale-[0.98] transition-all text-left overflow-hidden"
         >
           <span className="absolute left-0 top-0 bottom-0 w-0.5 rounded-l-xl bg-primary/60" />
           <Dumbbell className="w-4 h-4 text-primary/70 flex-shrink-0" />
           <div className="flex-1 min-w-0">
-            <span className="text-foreground">Active Program</span>
+            <span className="text-foreground">
+              {hasActiveSystem || latestProgram ? "Active Program" : "Build Program"}
+            </span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasActiveSystem ? "bg-green-400" : "bg-muted-foreground/30"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${hasActiveSystem || latestProgram ? "bg-green-400" : "bg-muted-foreground/30"}`} />
               <span className="text-[10px] text-muted-foreground/60 font-normal">
-                {hasActiveSystem ? "Live system" : "Ready"}
+                {hasActiveSystem || latestProgram ? "Live system" : "Start with Atlas"}
               </span>
             </div>
           </div>
