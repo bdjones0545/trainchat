@@ -14,6 +14,7 @@ import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
 import { seedWhitepaperPublicationsIfMissing } from "./lib/whitepaper-publications-seeder";
 import { runExternalMaterializationReadinessCheck } from "./lib/external-materialization";
 import { runSubscriptionSelfHeal } from "./lib/subscriptionSelfHeal";
+import { ensureStripeAccountsTable } from "./lib/stripeSchemaRepair";
 import { getKevinConfig, assertKevinExportConfig } from "./lib/kevin-config";
 import { seedKevinCapabilities } from "./lib/kevin-capability-service";
 import { startKevinEventWorker, drainKevinEventWorker } from "./services/kevin-event-service";
@@ -74,6 +75,7 @@ async function initStripe() {
 
   try {
     logger.info("Initializing Stripe schema...");
+    await ensureStripeAccountsTable();
     await runMigrations({ databaseUrl });
     logger.info("Stripe schema ready");
 
@@ -91,12 +93,6 @@ async function initStripe() {
       logger.error({ err }, "Stripe backfill error");
     });
 
-    // ─── TASK 6: Start billing reconciliation job ─────────────────────────────
-    //
-    // Runs daily to find stale past_due users and sync their state from Stripe.
-    // This is a backstop against webhook drift — ensures premium access is never
-    // held indefinitely after a payment failure lifecycle concludes.
-    startBillingReconciliation();
   } catch (err: any) {
     // ── IMPORTANT: This catch covers the findOrCreateManagedWebhook failure ──
     //
@@ -125,6 +121,10 @@ async function initStripe() {
 }
 
 await initStripe();
+
+// Reconciliation uses the application's users table and the raw Stripe SDK;
+// it must remain available even if the optional StripeSync backfill is degraded.
+startBillingReconciliation();
 
 // ─── Subscription self-heal ───────────────────────────────────────────────────
 //

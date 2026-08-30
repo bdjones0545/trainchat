@@ -23,18 +23,24 @@ router.get("/readyz", async (_req, res) => {
   );
 
   let databaseReachable = false;
+  let billingSchemaReady = false;
   try {
-    await pool.query("select 1");
+    const result = await pool.query(
+      "select to_regclass('stripe.accounts') as stripe_accounts",
+    );
     databaseReachable = true;
+    billingSchemaReady = Boolean(result.rows[0]?.stripe_accounts);
   } catch {
     // Readiness fails closed; details belong in server logs, not the response.
   }
 
-  const ready = requiredConfig && providerConfigured && databaseReachable;
+  const ready =
+    requiredConfig && providerConfigured && databaseReachable && billingSchemaReady;
   res.status(ready ? 200 : 503).json({
     status: ready ? "ready" : "not_ready",
     checks: {
       databaseReachable,
+      billingSchemaReady,
       requiredConfig,
       providerConfigured,
     },

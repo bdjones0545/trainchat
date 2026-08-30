@@ -22,7 +22,9 @@ const requiredEnvironment = {
 
 describe("operational health", () => {
   beforeEach(() => {
-    query.mockReset().mockResolvedValue({ rows: [{ "?column?": 1 }] });
+    query.mockReset().mockResolvedValue({
+      rows: [{ stripe_accounts: "stripe.accounts" }],
+    });
     Object.assign(process.env, requiredEnvironment);
   });
 
@@ -43,9 +45,17 @@ describe("operational health", () => {
     expect(response.body.status).toBe("ready");
     expect(response.body.checks).toEqual({
       databaseReachable: true,
+      billingSchemaReady: true,
       requiredConfig: true,
       providerConfigured: true,
     });
+  });
+
+  it("fails readiness when the managed billing schema is incomplete", async () => {
+    query.mockResolvedValue({ rows: [{ stripe_accounts: null }] });
+    const response = await request(app).get("/api/readyz");
+    expect(response.status).toBe(503);
+    expect(response.body.checks.billingSchemaReady).toBe(false);
   });
 
   it("fails readiness closed without exposing configuration values", async () => {
