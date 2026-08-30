@@ -24,7 +24,7 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-vi.mock("@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png", () => ({
+vi.mock("@assets/trainchat-logo-256.png", () => ({
   default: "stub-image",
 }));
 

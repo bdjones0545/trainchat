@@ -4,7 +4,7 @@ import { useNoIndex } from "@/hooks/useNoIndex";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import trainChatLogo from "@assets/trainchat-logo-256.png";
 
 const schema = z.object({
   email: z.string().email("Please enter a valid email address"),

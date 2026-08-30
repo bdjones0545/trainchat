@@ -12,7 +12,7 @@
 
 import { useRef } from "react";
 import type { BuildStage } from "@/hooks/useStreamMessage";
-import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import trainChatLogo from "@assets/trainchat-logo-256.png";
 import { LaserScanLine, ArchitectPlanningDot } from "@/components/laser-skill";
 
 // ─── Modal Mode ───────────────────────────────────────────────────────────────

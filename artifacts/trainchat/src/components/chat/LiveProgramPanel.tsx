@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
-import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import trainChatLogo from "@assets/trainchat-logo-256.png";
 import { customFetch } from "@workspace/api-client-react";
 import type { ProgramStructure } from "./ChatOutput";
 import BlockStatusCard from "@/components/training/BlockStatusCard";
