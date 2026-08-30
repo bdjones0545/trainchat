@@ -1,28 +1,33 @@
-import posthog from "posthog-js";
-
 // ── Provider bootstrap (runs once) ────────────────────────────────────────────
-// PostHog is initialised lazily on first call so tree-shaking works cleanly.
+// Keep PostHog out of the route graph until a configured deployment records
+// its first event. Builds without a key can remove the provider entirely.
 let _booted = false;
+let _posthogPromise: Promise<typeof import("posthog-js").default> | null = null;
 
-function boot(): void {
-  if (_booted) return;
+function boot(): Promise<typeof import("posthog-js").default> | null {
+  if (_posthogPromise) return _posthogPromise;
+
+  const key = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
+  if (!key) return null;
+
   _booted = true;
-
-  const key = (import.meta as any).env?.VITE_POSTHOG_KEY as string | undefined;
-  if (!key) return;
-
-  posthog.init(key, {
-    api_host: (import.meta as any).env?.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com",
-    capture_pageview: false,
-    capture_pageleave: false,
-    autocapture: false,
-    disable_session_recording: true,
-    loaded: () => {
-      if ((import.meta as any).env?.DEV) {
-        console.log("[analytics] PostHog ready");
-      }
-    },
+  _posthogPromise = import("posthog-js").then(({ default: posthog }) => {
+    posthog.init(key, {
+      api_host: import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com",
+      capture_pageview: false,
+      capture_pageleave: false,
+      autocapture: false,
+      disable_session_recording: true,
+      loaded: () => {
+        if (import.meta.env.DEV) {
+          console.log("[analytics] PostHog ready");
+        }
+      },
+    });
+    return posthog;
   });
+
+  return _posthogPromise;
 }
 
 // ── Typed event catalogue ─────────────────────────────────────────────────────
@@ -70,13 +75,12 @@ interface EventProperties {
 
 function track(event: EventName, properties?: EventProperties): void {
   try {
-    boot();
-    if ((import.meta as any).env?.DEV) {
+    if (import.meta.env.DEV) {
       console.log(`[analytics] ${event}`, properties ?? {});
     }
-    if (_booted && (import.meta as any).env?.VITE_POSTHOG_KEY) {
-      posthog.capture(event, properties);
-    }
+    void boot()
+      ?.then((posthog) => posthog.capture(event, properties))
+      .catch(() => {});
   } catch {
     // analytics must never crash the app
   }
@@ -84,13 +88,12 @@ function track(event: EventName, properties?: EventProperties): void {
 
 function identify(userId: string | number, traits?: EventProperties): void {
   try {
-    boot();
-    if ((import.meta as any).env?.DEV) {
+    if (import.meta.env.DEV) {
       console.log("[analytics] identify", { userId, traits });
     }
-    if (_booted && (import.meta as any).env?.VITE_POSTHOG_KEY) {
-      posthog.identify(String(userId), traits);
-    }
+    void boot()
+      ?.then((posthog) => posthog.identify(String(userId), traits))
+      .catch(() => {});
   } catch {
     // analytics must never crash the app
   }
@@ -98,8 +101,8 @@ function identify(userId: string | number, traits?: EventProperties): void {
 
 function reset(): void {
   try {
-    if (_booted && (import.meta as any).env?.VITE_POSTHOG_KEY) {
-      posthog.reset();
+    if (_booted) {
+      void _posthogPromise?.then((posthog) => posthog.reset()).catch(() => {});
     }
   } catch {
     // analytics must never crash the app
@@ -108,13 +111,14 @@ function reset(): void {
 
 function page(name: string, properties?: EventProperties): void {
   try {
-    boot();
-    if ((import.meta as any).env?.DEV) {
+    if (import.meta.env.DEV) {
       console.log(`[analytics] page:${name}`, properties ?? {});
     }
-    if (_booted && (import.meta as any).env?.VITE_POSTHOG_KEY) {
-      posthog.capture("$pageview", { page: name, ...properties });
-    }
+    void boot()
+      ?.then((posthog) =>
+        posthog.capture("$pageview", { page: name, ...properties }),
+      )
+      .catch(() => {});
   } catch {
     // analytics must never crash the app
   }
@@ -123,12 +127,14 @@ function page(name: string, properties?: EventProperties): void {
 function captureException(err: unknown, context?: EventProperties): void {
   try {
     const message = err instanceof Error ? err.message : String(err);
-    if ((import.meta as any).env?.DEV) {
+    if (import.meta.env.DEV) {
       console.error("[analytics] exception", message, context);
     }
-    if (_booted && (import.meta as any).env?.VITE_POSTHOG_KEY) {
-      posthog.capture("$exception", { message, ...context });
-    }
+    void boot()
+      ?.then((posthog) =>
+        posthog.capture("$exception", { message, ...context }),
+      )
+      .catch(() => {});
   } catch {
     // analytics must never crash the app
   }
