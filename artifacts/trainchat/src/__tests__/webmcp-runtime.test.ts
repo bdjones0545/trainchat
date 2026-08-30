@@ -21,7 +21,24 @@ import {
   type WebMcpTool,
 } from "../webmcp/runtime";
 
-type RegisterCall = { tool: WebMcpTool; signal?: AbortSignal };
+type RegisterCall = { tool: WebMcpTool; signal: AbortSignal | undefined };
+
+/**
+ * Strict-safe accessors. The strictest repo in this series runs
+ * noUncheckedIndexedAccess, so indexing is done through helpers that fail
+ * loudly rather than through non-null assertions that hide a missing value.
+ */
+function onlyCall(calls: readonly RegisterCall[]): RegisterCall {
+  const [first] = calls;
+  if (!first) throw new Error("no tool registration was recorded");
+  return first;
+}
+
+function textOf(result: unknown): string {
+  const block = (result as { content?: { text?: string }[] }).content?.[0];
+  if (typeof block?.text !== "string") throw new Error("tool returned no text content");
+  return block.text;
+}
 
 /** Install a fake `document.modelContext` and report what it was asked to do. */
 function stubModelContext(
@@ -87,10 +104,7 @@ describe("defineReadOnlyTool", () => {
   });
 
   it("passes a string result through unquoted", async () => {
-    const result = (await tool("a", () => "plain").execute({})) as {
-      content: { text: string }[];
-    };
-    expect(result.content[0].text).toBe("plain");
+    expect(textOf(await tool("a", () => "plain").execute({}))).toBe("plain");
   });
 
   it("awaits an async read", async () => {
@@ -99,20 +113,16 @@ describe("defineReadOnlyTool", () => {
       description: "d",
       read: async () => "later",
     });
-    const result = (await built.execute({})) as { content: { text: string }[] };
-    expect(result.content[0].text).toBe("later");
+    expect(textOf(await built.execute({}))).toBe("later");
   });
 
   it("reports a throwing read as a tool error instead of rejecting", async () => {
     const built = tool("a", () => {
       throw new Error("boom");
     });
-    const result = (await built.execute({})) as {
-      isError?: boolean;
-      content: { text: string }[];
-    };
+    const result = (await built.execute({})) as { isError?: boolean };
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe('Tool "a" failed: boom');
+    expect(textOf(result)).toBe('Tool "a" failed: boom');
   });
 
   it("substitutes an empty object when invoked with no arguments", async () => {
@@ -125,8 +135,7 @@ describe("defineReadOnlyTool", () => {
 
   it("truncates an oversized result and says so", async () => {
     const built = tool("a", () => "x".repeat(20_000));
-    const result = (await built.execute({})) as { content: { text: string }[] };
-    const { text } = result.content[0];
+    const text = textOf(await built.execute({}));
     expect(text.length).toBeLessThan(20_000);
     expect(text).toContain("truncated");
     expect(text).toContain("Narrow the query");
@@ -178,9 +187,9 @@ describe("registerWebMcpTools", () => {
       polyfill: false,
     });
     await settle();
-    expect(calls[0]?.signal?.aborted).toBe(false);
+    expect(onlyCall(calls).signal?.aborted).toBe(false);
     dispose();
-    expect(calls[0]?.signal?.aborted).toBe(true);
+    expect(onlyCall(calls).signal?.aborted).toBe(true);
   });
 
   it("registers nothing if disposed before registration lands", async () => {
