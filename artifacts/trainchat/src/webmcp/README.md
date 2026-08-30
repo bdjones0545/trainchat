@@ -74,12 +74,20 @@ injuries will misread it.
 | `tools.ts` | This app's tool definitions. |
 | `WebMcpBridge.tsx` | Renders nothing; wires auth state into the hook. |
 
-## Verifying locally
+## Verifying
 
 This frontend cannot be built or dev-served on macOS: the workspace deliberately
 excludes darwin native binaries for `@tailwindcss/oxide`, `esbuild`,
 `lightningcss` and `rollup`, because Replit runs linux-x64 only. `pnpm typecheck`
-and `vitest` do run on macOS. On a Linux host, with both flags set:
+and `vitest` do run there, and the tool layer is covered by
+`src/__tests__/webmcp-*`.
+
+CI on Linux builds the SPA and runs the full suite, so the app is known to build
+with the bridge mounted. CI does **not** exercise the tools:
+`VITE_WEBMCP_ENABLED` is unset there, so nothing registers.
+
+To check the tools for real, set both flags on a Linux host and run this in the
+console:
 
 ```js
 await document.modelContext.getTools();
