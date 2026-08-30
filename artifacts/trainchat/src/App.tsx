@@ -22,12 +22,8 @@ import {
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-// ─── Core app pages (static — on the critical path for every visitor) ──────────
+// ─── Core app page (static — tiny fallback used by every route) ────────────────
 import NotFound from "@/pages/not-found";
-import Login from "@/pages/login";
-import Register from "@/pages/register";
-import ForgotPassword from "@/pages/forgot-password";
-import ResetPassword from "@/pages/reset-password";
 
 let chatModulePromise: ReturnType<typeof importChatModule> | undefined;
 function importChatModule() {
@@ -38,6 +34,13 @@ function loadChatModule() {
   return chatModulePromise;
 }
 const Chat = lazy(loadChatModule);
+
+// ─── Lazy-loaded: authentication pages ────────────────────────────────────────
+// Keep form state and validation libraries out of the primary /chat payload.
+const Login = lazy(() => import("@/pages/login"));
+const Register = lazy(() => import("@/pages/register"));
+const ForgotPassword = lazy(() => import("@/pages/forgot-password"));
+const ResetPassword = lazy(() => import("@/pages/reset-password"));
 
 // ─── Lazy-loaded: authenticated app pages ─────────────────────────────────────
 // Never needed on first load — only authenticated users reach these routes.
