@@ -59,11 +59,14 @@ describe("the tool surface", () => {
     }
   });
 
-  it("exposes no tool that could send a message or change a program", () => {
-    // Writing to TrainChat is program generation. If a name like this ever
-    // appears, it was not added through defineReadOnlyTool by accident.
-    const names = tools.map((candidate) => candidate.name).join(" ");
-    expect(names).not.toMatch(/send|create|update|delete|generate|edit/);
+  it("names every tool with a reading verb", () => {
+    // Writing to TrainChat is program generation. The naming convention carries
+    // that guarantee: a tool that sent a message or edited a program could not
+    // be named under this rule. A substring check would be the wrong invariant
+    // — a legitimate read can contain a write-sounding word.
+    for (const candidate of tools) {
+      expect(candidate.name).toMatch(/^trainchat_(get|list)_/);
+    }
   });
 });
 
