@@ -4159,10 +4159,10 @@ export default function Chat() {
                 {convShowFirstValue && !stream.isActive && (
                   <FirstValueOverlay
                     onAction={(text) => {
-                      setConvShowFirstValue(false);
-                      setTimeout(() => handleSend(text, {
+                      handleSend(text, {
                         buttonPayload: makeChatButtonPayload(text, activeSystem?.id ?? null),
-                      }), 100);
+                      });
+                      setConvShowFirstValue(false);
                     }}
                     onDismiss={() => setConvShowFirstValue(false)}
                   />
