@@ -161,7 +161,7 @@ overrides:
   vitest>picomatch: ">=4.0.4"      # CVE-2026-33671 — picomatch ReDoS in test runner (v4 branch)
   vite>picomatch: ">=4.0.4"        # CVE-2026-33671 — picomatch ReDoS in vite (v4 branch)
   vitest>vite: ">=7.3.5"           # CVE-2026-39364/39363/53571 — Vite dev-server bypasses
-  fast-uri: ">=4.1.1"              # GHSA-v39h-62p7-jpjc + host-confusion (>=4.0.0 <=4.1.0) — orval/ajv
+  fast-uri: ">=4.1.2"              # GHSA-v39h-62p7-jpjc + GHSA-7p8r-x3mc-p8w7 — orval/ajv
   protobufjs: ">=7.6.1"            # CVE-2026-48712 — DoS via posthog-js/opentelemetry chain
   linkify-it: ">=5.0.2"            # CVE-2026-48801 + quadratic-ReDoS (<=5.0.1) — orval/typedoc/markdown-it
   # ── Security overrides (added 2026-07-31) ─────────────────────────────────

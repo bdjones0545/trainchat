@@ -19,7 +19,12 @@ const REQUEST = "Build a strength program using only dumbbells. No barbell, cabl
 const EQUIPMENT_MODE = "dumbbells_only";
 const createdUserIds: number[] = [];
 
-describe.skipIf(!process.env.DATABASE_URL)("persisted restricted-equipment safety", () => {
+// CI provides a placeholder DATABASE_URL for import-time guards, but it does
+// not provision PostgreSQL. Keep this migration-backed check in the explicit
+// integration lane so the normal unit suite never attempts a live connection.
+describe.skipIf(process.env.RUN_DB_INTEGRATION_TESTS !== "true")(
+  "persisted restricted-equipment safety",
+  () => {
   afterAll(async () => {
     if (createdUserIds.length > 0) {
       await db.delete(usersTable).where(inArray(usersTable.id, createdUserIds));
@@ -132,4 +137,5 @@ describe.skipIf(!process.env.DATABASE_URL)("persisted restricted-equipment safet
     expect(uncatalogued).toEqual([]);
     expect(audits.every((audit) => audit.compatible)).toBe(true);
   });
-});
+  },
+);
