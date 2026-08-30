@@ -81,7 +81,7 @@ import ReadinessCheckIn from "@/components/training/ReadinessCheckIn";
 import SessionFeedback from "@/components/training/SessionFeedback";
 import InsightsPanel from "@/components/training/InsightsPanel";
 import TrainingProfileCard from "@/components/training/TrainingProfileCard";
-import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import trainChatLogo from "@assets/trainchat-logo-256.png";
 
 // ─── API helpers ─────────────────────────────────────────────────────────────
 

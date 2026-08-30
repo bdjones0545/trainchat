@@ -60,7 +60,7 @@ import type { PanelActionReceipt } from "@/components/chat/AgentTurnReport";
 import { clearAuthState, markOnboardingComplete, logRouteDecision, readDeviceId, readOnboardingComplete } from "@/lib/routing";
 import { resolveProgramState } from "@/lib/resolveProgramState";
 import { extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
-import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import trainChatLogo from "@assets/trainchat-logo-256.png";
 import ShareMomentPrompt from "@/components/share/ShareMomentPrompt";
 import ShareMomentModal from "@/components/share/ShareMomentModal";
 import { buildShareMoment, type ShareMoment } from "@/types/share-moments";

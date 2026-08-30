@@ -4,7 +4,7 @@ import { useGuestSession } from "@/hooks/useGuestSession";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
 import { STORAGE_KEYS, logRouteDecision, readOnboardingComplete, readDeviceId, type UserMode } from "@/lib/routing";
 import { GuestPaywallModal } from "@/components/GuestPaywallModal";
-import logoSrc from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import logoSrc from "@assets/trainchat-logo-256.png";
 import { stripProgramJson, extractProgramData, isProgramFragment } from "@/lib/extractProgramArtifact";
 import { PerformanceIntelligenceDirectory } from "@/components/directory/PerformanceIntelligenceDirectory";
 import { EquipmentAwareProgramming } from "@/components/directory/EquipmentAwareProgramming";

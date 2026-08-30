@@ -8,7 +8,7 @@ import { useRegister, getGetMeQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { GUEST_CONFIG } from "@/lib/guestConfig";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
-import trainChatLogo from "@assets/E6D6712F-F281-4EE9-BFBD-DB56B29C39DE_1775264037015.png";
+import trainChatLogo from "@assets/trainchat-logo-256.png";
 import { capi } from "@/lib/capi";
 
 const registerSchema = z.object({
