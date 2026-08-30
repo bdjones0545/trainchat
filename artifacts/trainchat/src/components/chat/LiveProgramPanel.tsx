@@ -82,6 +82,8 @@ interface Props {
   onUpgrade?: () => void;
   isSaving?: boolean;
   isSaved?: boolean;
+  /** Anonymous programs persist with the guest identity, not an account. */
+  isAnonymous?: boolean;
   isPremium?: boolean;
   hasActiveSystem?: boolean;
   /** Training system ID — used for program-scoped session isolation */
@@ -3808,6 +3810,7 @@ export default function LiveProgramPanel({
   onUpgrade,
   isSaving,
   isSaved,
+  isAnonymous = false,
   isPremium = false,
   hasActiveSystem = false,
   trainingSystemId,
@@ -3995,8 +3998,14 @@ export default function LiveProgramPanel({
           <div className="flex-1 min-w-0">
             {ownershipBannerType === "saved" ? (
               <>
-                <p className="text-[11px] font-semibold text-primary leading-snug">Saved to your account</p>
-                <p className="text-[10px] text-primary/60 leading-snug">Your system is ready anytime.</p>
+                <p className="text-[11px] font-semibold text-primary leading-snug">
+                  {isAnonymous ? "Saved for this guest session" : "Saved to your account"}
+                </p>
+                <p className="text-[10px] text-primary/60 leading-snug">
+                  {isAnonymous
+                    ? "Create an account to keep it across devices."
+                    : "Your system is ready anytime."}
+                </p>
               </>
             ) : (
               <>
