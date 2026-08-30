@@ -21,6 +21,7 @@ import {
 } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import WebMcpBridge from "@/webmcp/WebMcpBridge";
 
 // ─── Core app page (static — tiny fallback used by every route) ────────────────
 import NotFound from "@/pages/not-found";
@@ -649,6 +650,7 @@ function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <FocusModeProvider>
+          <WebMcpBridge />
           <TooltipProvider>
             <WouterRouter
               base={import.meta.env.BASE_URL.replace(/\/$/, "")}
