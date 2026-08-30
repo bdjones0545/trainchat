@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { lazy, Suspense, useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useNoIndex } from "@/hooks/useNoIndex";
 import {
@@ -33,21 +33,13 @@ import AgentStatusBar from "@/components/chat/AgentStatusBar";
 import AdaptiveControlBar, { type AdaptiveMode } from "@/components/chat/AdaptiveControlBar";
 import LiveProgramPanel from "@/components/chat/LiveProgramPanel";
 import { type ProgramStructure } from "@/components/chat/ChatOutput";
-import ReadinessModal from "@/components/chat/ReadinessModal";
-import FeedbackModal from "@/components/chat/FeedbackModal";
 import ReadinessSummary from "@/components/chat/ReadinessSummary";
 import StreakBadge from "@/components/chat/StreakBadge";
 import NeuralBadge from "@/components/gamification/NeuralBadge";
-import NeuralGrowthOverlay, { type NeuralAwardResult } from "@/components/gamification/NeuralGrowthOverlay";
-import SessionLogModal from "@/components/chat/SessionLogModal";
+import type { NeuralAwardResult } from "@/components/gamification/NeuralGrowthOverlay";
 import { IdleIntelligenceField } from "@/components/laser-skill/IdleIntelligenceField";
 import PaywallModal from "@/components/PaywallModal";
-import PricingModal from "@/components/PricingModal";
 import AnonymousConversionFloor from "@/components/AnonymousConversionFloor";
-import AnonymousUpgradeModal from "@/components/AnonymousUpgradeModal";
-import CalibrationModal from "@/components/chat/CalibrationModal";
-import AthleteIntelligenceProfile from "@/components/chat/AthleteIntelligenceProfile";
-import CoachMemoryPanel from "@/components/chat/CoachMemoryPanel";
 import { useStreamMessage, type CompleteEvent, type ButtonActionPayload } from "@/hooks/useStreamMessage";
 import {
   makeCtaRefinePayload,
@@ -73,6 +65,30 @@ import type { ProgramLibraryItem, AtlasCoachingMemory } from "@/lib/AtlasGlobalC
 import type { FocusMode } from "@/lib/focusMode";
 import { analytics } from "@/lib/analytics";
 import { FirstValueOverlay, EditReinforcementToast, SavePromptCard, UpgradeHint, ReturnSessionHook } from "@/components/conversion/ConversionEngine";
+
+// Secondary surfaces load only after an explicit user action. Keeping them out
+// of the initial chat graph avoids downloading modal logic before it is needed.
+const ReadinessModal = lazy(() => import("@/components/chat/ReadinessModal"));
+const FeedbackModal = lazy(() => import("@/components/chat/FeedbackModal"));
+const SessionLogModal = lazy(() => import("@/components/chat/SessionLogModal"));
+const PricingModal = lazy(() => import("@/components/PricingModal"));
+const AnonymousUpgradeModal = lazy(() => import("@/components/AnonymousUpgradeModal"));
+const CalibrationModal = lazy(() => import("@/components/chat/CalibrationModal"));
+const AthleteIntelligenceProfile = lazy(() => import("@/components/chat/AthleteIntelligenceProfile"));
+const CoachMemoryPanel = lazy(() => import("@/components/chat/CoachMemoryPanel"));
+const NeuralGrowthOverlay = lazy(() => import("@/components/gamification/NeuralGrowthOverlay"));
+
+function ModalLoadingFallback() {
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-background/70 backdrop-blur-sm"
+      role="status"
+      aria-label="Loading dialog"
+    >
+      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+    </div>
+  );
+}
 
 const TRY_SAYING_PROMPTS: Record<string, string[]> = {
   strength: [
@@ -3321,6 +3337,7 @@ export default function Chat() {
       )}
 
       {/* ─── Modals ─── */}
+      <Suspense fallback={<ModalLoadingFallback />}>
       {showReadiness && (
         <ReadinessModal
           onClose={() => setShowReadiness(false)}
@@ -3413,6 +3430,7 @@ export default function Chat() {
           </div>
         </div>
       )}
+      </Suspense>
 
       {/* ─── Focus Info modal ─── */}
       {showFocusInfo && (
@@ -4663,14 +4681,16 @@ export default function Chat() {
 
       {/* ─── Neural growth overlay ─── */}
       {neuralOverlay && (
-        <NeuralGrowthOverlay
-          result={neuralOverlay}
-          streakDays={currentStreak}
-          onDismiss={() => {
-            setNeuralOverlay(null);
-            queryClient.invalidateQueries({ queryKey: ["neural-profile"] });
-          }}
-        />
+        <Suspense fallback={<ModalLoadingFallback />}>
+          <NeuralGrowthOverlay
+            result={neuralOverlay}
+            streakDays={currentStreak}
+            onDismiss={() => {
+              setNeuralOverlay(null);
+              queryClient.invalidateQueries({ queryKey: ["neural-profile"] });
+            }}
+          />
+        </Suspense>
       )}
     </MobileSlideLayout>
     </div>
