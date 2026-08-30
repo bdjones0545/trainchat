@@ -64,6 +64,7 @@ import { resolveUserGlobalContext } from "@/lib/AtlasGlobalContextResolver";
 import type { ProgramLibraryItem, AtlasCoachingMemory } from "@/lib/AtlasGlobalContextResolver";
 import type { FocusMode } from "@/lib/focusMode";
 import { analytics } from "@/lib/analytics";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { FirstValueOverlay, EditReinforcementToast, SavePromptCard, UpgradeHint, ReturnSessionHook } from "@/components/conversion/ConversionEngine";
 
 // Secondary surfaces load only after an explicit user action. Keeping them out
@@ -275,6 +276,7 @@ const POST_BUILD_CHIPS: Record<string, Array<{ label: string; prompt: string }>>
 };
 
 export default function Chat() {
+  const isMobile = useIsMobile();
   useNoIndex();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
@@ -3283,8 +3285,8 @@ export default function Chat() {
     <MobileSlideLayout
       activePanel={mobilePanel}
       onPanelClose={() => setMobilePanel(null)}
-      leftPanel={chatLeftPanel}
-      rightPanel={liveProgramPanel}
+      leftPanel={isMobile ? chatLeftPanel : undefined}
+      rightPanel={isMobile ? liveProgramPanel : undefined}
     >
       {/* ─── Delete Confirmation Modal ─── */}
       {/* z-[60] keeps this above the sidebar/panel which sits at z-50 */}
@@ -3591,7 +3593,7 @@ export default function Chat() {
       {/* ─── Main layout ─── */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Desktop Sidebar */}
-        {sidebarOpen && (
+        {sidebarOpen && !isMobile && (
           <div className="hidden md:flex w-60 flex-shrink-0 border-r border-border h-full overflow-hidden flex-col">
             {chatLeftPanel}
           </div>
@@ -4618,9 +4620,10 @@ export default function Chat() {
         </div>
 
         {/* Desktop right panel — smooth width slide via CSS transition */}
-        <div
-          className={`hidden md:flex flex-col flex-shrink-0 border-l border-border/60 bg-background/98 overflow-hidden transition-[width] duration-250 ease-out ${rightPanelOpen ? "w-80" : "w-8"}`}
-        >
+        {!isMobile && (
+          <div
+            className={`hidden md:flex flex-col flex-shrink-0 border-l border-border/60 bg-background/98 overflow-hidden transition-[width] duration-250 ease-out ${rightPanelOpen ? "w-80" : "w-8"}`}
+          >
           {rightPanelOpen ? (
             <div className="w-80 flex flex-col h-full animate-in fade-in duration-200">
               <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 flex-shrink-0 bg-card/30 backdrop-blur-sm">
@@ -4687,7 +4690,8 @@ export default function Chat() {
               </span>
             </button>
           )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ─── Neural growth overlay ─── */}
