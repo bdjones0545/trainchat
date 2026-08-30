@@ -31,6 +31,12 @@ export async function ensureStripeAccountsTable(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS idx_accounts_business_name
       ON stripe.accounts (business_name);
+
+    ALTER TABLE stripe.accounts
+      ADD COLUMN IF NOT EXISTS api_key_hashes TEXT[] DEFAULT '{}';
+
+    CREATE INDEX IF NOT EXISTS idx_accounts_api_key_hashes
+      ON stripe.accounts USING GIN (api_key_hashes);
   `);
 
   logger.info("[StripeSchema] stripe.accounts relation verified");

@@ -18,6 +18,8 @@ describe("ensureStripeAccountsTable", () => {
     expect(sql).toContain("CREATE SCHEMA IF NOT EXISTS stripe");
     expect(sql).toContain("CREATE TABLE IF NOT EXISTS stripe.accounts");
     expect(sql).toContain("CREATE INDEX IF NOT EXISTS idx_accounts_business_name");
+    expect(sql).toContain("ADD COLUMN IF NOT EXISTS api_key_hashes");
+    expect(sql).toContain("CREATE INDEX IF NOT EXISTS idx_accounts_api_key_hashes");
     expect(sql).not.toMatch(/DROP|DELETE|TRUNCATE/i);
   });
 });
