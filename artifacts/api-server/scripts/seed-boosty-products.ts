@@ -15,7 +15,7 @@
 
 import "../src/lib/stripeClient";
 import { getUncachableStripeClient } from "../src/lib/stripeClient";
-import { BOOSTY_SKUS } from "../src/lib/boostyCatalog";
+import { BOOSTY_SKUS, stripeProductIdFor } from "../src/lib/boostyCatalog";
 
 async function main(): Promise<void> {
   // --dry-run shows exactly what would be created without touching Stripe.
@@ -38,48 +38,71 @@ async function main(): Promise<void> {
   let created = 0;
   let reused = 0;
 
+  const failures: string[] = [];
+
   for (const sku of BOOSTY_SKUS) {
-    // Find an existing product for this SKU.
-    const search = await stripe.products.search({
-      query: `metadata['boosty_sku']:'${sku.id}'`,
-      limit: 1,
-    });
+    const productId = stripeProductIdFor(sku.id);
+    try {
+      // Strongly-consistent lookup by a deterministic id. `products.search`
+      // would be eventually consistent, so a retried partial run could create
+      // duplicates inside its indexing window.
+      let product: any = null;
+      try {
+        product = await stripe.products.retrieve(productId);
+        if (product?.deleted) product = null;
+      } catch (err: any) {
+        if (err?.statusCode !== 404 && err?.code !== "resource_missing") throw err;
+      }
 
-    let product = search.data[0];
-    if (product) {
-      reused++;
-    } else {
-      product = await stripe.products.create({
-        name: `BOOSTY — ${sku.name}`,
-        description:
-          sku.kind === "sparks"
-            ? `${sku.sparks?.toLocaleString("en-US")} sparks, the in-game cosmetic currency.`
-            : sku.kind === "bundle"
-              ? "Every BOOSTY pilot and trail, now and in future."
-              : "A cosmetic item for BOOSTY. Grants no gameplay advantage.",
-        metadata: { boosty_sku: sku.id, boosty_kind: sku.kind, product: "boosty" },
-      });
-      created++;
+      if (product) {
+        reused++;
+      } else {
+        product = await stripe.products.create({
+          id: productId,
+          name: `BOOSTY — ${sku.name}`,
+          description:
+            sku.kind === "sparks"
+              ? `${sku.sparks?.toLocaleString("en-US")} sparks, the in-game cosmetic currency.`
+              : sku.kind === "bundle"
+                ? sku.blurb ?? "A bundle of BOOSTY cosmetics."
+                : "A cosmetic item for BOOSTY. Grants no gameplay advantage.",
+          metadata: { boosty_sku: sku.id, boosty_kind: sku.kind, product: "boosty" },
+        });
+        created++;
+      }
+
+      // prices.list is a direct lookup, not the search index, so this is safe
+      // to rely on immediately after a create.
+      const prices = await stripe.prices.list({ product: product.id, active: true, limit: 100 });
+      const matching = prices.data
+        .filter((p) => p.unit_amount === sku.cents && p.currency === "usd" && !p.recurring)
+        .sort((a, b) => (a.created ?? 0) - (b.created ?? 0));
+      let price = matching[0];
+
+      if (!price) {
+        price = await stripe.prices.create({
+          product: product.id,
+          unit_amount: sku.cents,
+          currency: "usd",
+          // No `recurring`: these are one-time payments, which is exactly why
+          // the webhook needed its own branch — the subscription path drops them.
+          metadata: { boosty_sku: sku.id },
+        });
+      }
+
+      env.push(`${sku.priceEnv}=${price.id}`);
+      console.log(`  ok    ${sku.id.padEnd(22)} $${(sku.cents / 100).toFixed(2).padStart(6)}  ${price.id}`);
+    } catch (err: any) {
+      // One bad SKU must not abort the run and strand the rest with no output.
+      failures.push(`${sku.id}: ${err?.message ?? err}`);
+      console.log(`  FAIL  ${sku.id.padEnd(22)} ${err?.message ?? err}`);
     }
+  }
 
-    // Reuse an active one-time price at the right amount if one exists.
-    const prices = await stripe.prices.list({ product: product.id, active: true, limit: 20 });
-    let price = prices.data.find(
-      (p) => p.unit_amount === sku.cents && p.currency === "usd" && !p.recurring
-    );
-    if (!price) {
-      price = await stripe.prices.create({
-        product: product.id,
-        unit_amount: sku.cents,
-        currency: "usd",
-        // No `recurring`: these are one-time payments, which is exactly why the
-        // webhook needed its own branch — the subscription path drops them.
-        metadata: { boosty_sku: sku.id },
-      });
-    }
-
-    env.push(`${sku.priceEnv}=${price.id}`);
-    console.log(`  ${sku.id.padEnd(22)} $${(sku.cents / 100).toFixed(2).padStart(6)}  ${price.id}`);
+  if (failures.length) {
+    console.log(`\n${failures.length} SKU(s) failed:`);
+    for (const f of failures) console.log(`  - ${f}`);
+    console.log("Re-running is safe — completed SKUs are reused, not duplicated.");
   }
 
   console.log(`\n${created} product(s) created, ${reused} reused.\n`);

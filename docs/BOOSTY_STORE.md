@@ -61,7 +61,12 @@ redirect on a payment flow is a phishing primitive.
    pnpm --filter @workspace/api-server run seed:boosty -- --dry-run
    ```
 
-2. Create products and one-time prices (idempotent, prints the env block).
+2. Create products and one-time prices. **Safely re-runnable**: products use a
+   deterministic id (`boosty_<sku>`) looked up with `products.retrieve`, which
+   is strongly consistent. `products.search` would not be — its index lags
+   creation by up to a minute, so a run that died halfway and was retried
+   inside that window would create duplicate products. A failed SKU is
+   reported and the rest still complete, so re-running recovers.
    **Run against test keys first** — this creates real products in whichever
    account `STRIPE_SECRET_KEY` points at:
 
