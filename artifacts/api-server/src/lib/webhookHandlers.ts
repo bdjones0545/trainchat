@@ -14,6 +14,8 @@
 // Reliability: business-logic exceptions are re-thrown so the webhook route
 // returns 5xx → Stripe retries the event. StripeSync upserts are idempotent,
 // so retries are safe.
+import { boostyStorage, isValidPlayerId } from "./boostyStorage";
+import { getSku, skuForPriceId, BOOSTY_PRODUCT_TAG } from "./boostyCatalog";
 
 import { getStripeSync, getUncachableStripeClient } from "./stripeClient";
 import { stripeStorage, type SubscriptionSyncPayload } from "./stripeStorage";
@@ -204,6 +206,90 @@ export async function buildSyncPayload(sub: any): Promise<SubscriptionSyncPayloa
 // link is established.
 //
 // User resolution order: metadata.userId → customer ID → email.
+
+
+/**
+ * BOOSTY cosmetics — one-time payments.
+ *
+ * This runs BEFORE the TrainChat subscription path, which requires a
+ * subscription id and would otherwise silently drop every one-time payment as
+ * "missing customer or subscription". Money would be taken and nothing granted.
+ *
+ * The grant is bound solely to server-created metadata. Customer id or email
+ * possession is not an account binding, exactly as the subscription path
+ * already insists.
+ */
+export async function handleBoostyCheckoutCompleted(
+  event: any,
+  context: EventContext
+): Promise<boolean> {
+  const session = event.data.object;
+  if (session?.metadata?.product !== BOOSTY_PRODUCT_TAG) return false;
+
+  const playerId: string = session.metadata?.boostyPlayerId ?? "";
+  const skuId: string = session.metadata?.boostySku ?? "";
+
+  if (!isValidPlayerId(playerId)) {
+    logger.error(
+      { sessionId: session.id },
+      "[WebhookHandlers] BOOSTY checkout without a valid player id — PAID BUT NOT GRANTABLE"
+    );
+    return true; // handled: it is ours, and it is broken. Do not fall through.
+  }
+
+  // Resolve the SKU from metadata, then cross-check it against the price that
+  // was actually charged. If they disagree, trust the money.
+  let sku = getSku(skuId);
+  const chargedPriceId: string =
+    session.line_items?.data?.[0]?.price?.id ?? "";
+  const skuFromPrice = chargedPriceId ? skuForPriceId(chargedPriceId) : null;
+  if (skuFromPrice && sku && skuFromPrice.id !== sku.id) {
+    logger.error(
+      { sessionId: session.id, metadataSku: sku.id, chargedSku: skuFromPrice.id },
+      "[WebhookHandlers] BOOSTY sku mismatch between metadata and charged price — granting the charged one"
+    );
+    sku = skuFromPrice;
+  }
+  if (!sku) sku = skuFromPrice;
+
+  if (!sku) {
+    logger.error({ sessionId: session.id, skuId }, "[WebhookHandlers] BOOSTY unknown sku — PAID BUT NOT GRANTED");
+    return true;
+  }
+
+  if (session.payment_status && session.payment_status !== "paid") {
+    logger.info(
+      { sessionId: session.id, paymentStatus: session.payment_status },
+      "[WebhookHandlers] BOOSTY checkout not paid — no grant"
+    );
+    return true;
+  }
+
+  const result = await boostyStorage.recordPurchase({
+    playerId,
+    sku,
+    stripeSessionId: session.id,
+    stripePaymentIntentId:
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? null,
+    stripeEventId: event.id,
+    amountCents: session.amount_total ?? sku.cents,
+    currency: session.currency ?? "usd",
+  });
+
+  // A BOOSTY purchase has no TrainChat user; the audit line records the player
+  // id in finalStatus instead of pretending there was an account.
+  context.customerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id ?? undefined;
+  context.finalStatus = result.applied ? "boosty_granted" : `boosty_${result.reason}`;
+
+  logger.info(
+    { sessionId: session.id, playerId, sku: sku.id, applied: result.applied, reason: result.reason },
+    "[WebhookHandlers] BOOSTY checkout processed"
+  );
+  return true;
+}
 
 async function handleCheckoutSessionCompleted(
   event: any,
@@ -607,9 +693,13 @@ async function dispatchWebhookEvent(event: any): Promise<void> {
   );
 
   switch (event.type) {
-    case "checkout.session.completed":
-      await handleCheckoutSessionCompleted(event, context);
+    case "checkout.session.completed": {
+      // BOOSTY one-time payments first: the TrainChat path below requires a
+      // subscription id and would drop them silently.
+      const wasBoosty = await handleBoostyCheckoutCompleted(event, context);
+      if (!wasBoosty) await handleCheckoutSessionCompleted(event, context);
       break;
+    }
     case "customer.subscription.created":
     case "customer.subscription.updated":
       await handleSubscriptionUpsert(event, context);
