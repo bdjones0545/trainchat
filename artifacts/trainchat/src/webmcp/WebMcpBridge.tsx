@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { useGetMe } from "@workspace/api-client-react";
+import { useWebMcpTools } from "@bdjones/webmcp-kit";
 
+import { webMcpConfig } from "./config";
 import { buildTrainChatTools } from "./tools";
-import { useWebMcpTools } from "./useWebMcp";
 
 /**
  * Publishes TrainChat's read-only tools to any AI agent driving the page.
@@ -15,6 +16,7 @@ export default function WebMcpBridge() {
   useWebMcpTools(
     buildTrainChatTools,
     useMemo(() => ({ isAuthenticated: Boolean(me) }), [me]),
+    webMcpConfig(),
   );
 
   return null;

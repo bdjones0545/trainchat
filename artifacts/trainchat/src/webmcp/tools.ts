@@ -20,7 +20,7 @@ import {
   listReadiness,
 } from "@workspace/api-client-react";
 
-import { defineReadOnlyTool, type WebMcpTool } from "./runtime";
+import { defineReadOnlyTool, type WebMcpTool } from "@bdjones/webmcp-kit";
 
 export interface TrainChatSnapshot {
   /** True once the app has an authenticated user. */
