@@ -84,6 +84,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@bdjones/webmcp-kit": "git+https://github.com/bdjones0545/webmcp-kit.git",
     "@mcp-b/global": "5.0.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
