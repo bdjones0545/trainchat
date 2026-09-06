@@ -18,11 +18,19 @@ export interface BoostySku {
   name: string;
   /** Expected price in cents. Display + sanity check only; Stripe is the truth. */
   cents: number;
-  /** Sparks credited on purchase. Cosmetics grant none. */
+  /** Sparks credited on purchase. Cosmetics grant none; some bundles do. */
   sparks?: number;
   /** Env var holding this SKU's Stripe price id. */
   priceEnv: string;
+  /** Bundles only: the individual SKUs this unlocks. */
+  grants?: string[];
+  /** bundle.all only: everything, including cosmetics added later. */
+  everything?: boolean;
+  blurb?: string;
 }
+
+const PREMIUM_PILOTS = ["wigsby", "vex", "beef", "blorp", "ozone", "pixel", "auditor"];
+const PREMIUM_TRAILS = ["trail.glitter", "trail.regret", "trail.void", "trail.cashmoney"];
 
 const SKUS: BoostySku[] = [
   // ── Pilots ────────────────────────────────────────────────────────────────
@@ -40,8 +48,47 @@ const SKUS: BoostySku[] = [
   { id: "trail.void", kind: "cosmetic", name: "Concerning Void", cents: 199, priceEnv: "BOOSTY_PRICE_TRAIL_VOID" },
   { id: "trail.cashmoney", kind: "cosmetic", name: "Burning Actual Money", cents: 249, priceEnv: "BOOSTY_PRICE_TRAIL_CASHMONEY" },
 
-  // ── Bundle ────────────────────────────────────────────────────────────────
-  { id: "bundle.all", kind: "bundle", name: "The Whole Locker", cents: 999, priceEnv: "BOOSTY_PRICE_BUNDLE" },
+  // ── Bundles ───────────────────────────────────────────────────────────────
+  // A ladder, not a single all-or-nothing offer. Every rung is checked against
+  // its own contents by auditBundles() so a bundle can never cost more than
+  // buying the same items separately.
+  {
+    id: "bundle.rookie",
+    kind: "bundle",
+    name: "Rookie Kit",
+    blurb: "One pilot, one trail, and a thousand sparks. The cheap way in.",
+    cents: 299,
+    sparks: 1000,
+    grants: ["blorp", "trail.glitter"],
+    priceEnv: "BOOSTY_PRICE_BUNDLE_ROOKIE",
+  },
+  {
+    id: "bundle.trails",
+    kind: "bundle",
+    name: "Full Exhaust",
+    blurb: "Every premium trail. Leave in a different way each run.",
+    cents: 399,
+    grants: PREMIUM_TRAILS,
+    priceEnv: "BOOSTY_PRICE_BUNDLE_TRAILS",
+  },
+  {
+    id: "bundle.pilots",
+    kind: "bundle",
+    name: "Flight Crew",
+    blurb: "All seven premium pilots. The whole ridiculous roster.",
+    cents: 699,
+    grants: PREMIUM_PILOTS,
+    priceEnv: "BOOSTY_PRICE_BUNDLE_PILOTS",
+  },
+  {
+    id: "bundle.all",
+    kind: "bundle",
+    name: "The Whole Locker",
+    blurb: "Every pilot and trail, now and in future. Nothing left to buy.",
+    cents: 999,
+    everything: true,
+    priceEnv: "BOOSTY_PRICE_BUNDLE",
+  },
 
   // ── Spark packs (consumable currency) ─────────────────────────────────────
   { id: "sparks.small", kind: "sparks", name: "Pocket Change", cents: 199, sparks: 1000, priceEnv: "BOOSTY_PRICE_SPARKS_SMALL" },
@@ -50,6 +97,53 @@ const SKUS: BoostySku[] = [
 ];
 
 const BY_ID = new Map(SKUS.map((s) => [s.id, s]));
+
+/** What a purchase of this SKU unlocks. Bundles expand; everything else is itself. */
+export function grantsFor(sku: BoostySku): string[] {
+  if (sku.kind !== "bundle") return sku.kind === "sparks" ? [] : [sku.id];
+  if (sku.everything) return [sku.id];
+  return [sku.id, ...(sku.grants ?? [])];
+}
+
+/** Sparks credited by a purchase. Packs carry them; some bundles do too. */
+export function sparksFor(sku: BoostySku): number {
+  return sku.sparks ?? 0;
+}
+
+/**
+ * A bundle that costs more than its contents is a broken offer, and a bundle
+ * granting a SKU that does not exist silently sells nothing. Both are checked
+ * rather than trusted, the same way the spark-pack badges are.
+ */
+export function auditBundles(): string[] {
+  const problems: string[] = [];
+  for (const sku of SKUS) {
+    if (sku.kind !== "bundle" || sku.everything) continue;
+    const grants = sku.grants ?? [];
+    if (!grants.length) {
+      problems.push(`${sku.id} is a bundle that grants nothing`);
+      continue;
+    }
+    let contents = 0;
+    for (const id of grants) {
+      const item = BY_ID.get(id);
+      if (!item) { problems.push(`${sku.id} grants "${id}", which is not a SKU`); continue; }
+      if (item.kind === "bundle") problems.push(`${sku.id} grants another bundle (${id}) — not supported`);
+      contents += item.cents;
+    }
+    if (sku.cents >= contents && contents > 0) {
+      problems.push(`${sku.id} costs ${sku.cents} but its contents total ${contents} — the bundle is not a saving`);
+    }
+  }
+  // The all-inclusive bundle must remain the best deal, or the ladder inverts.
+  const all = BY_ID.get("bundle.all");
+  const subsets = SKUS.filter((s) => s.kind === "bundle" && !s.everything && s.id !== "bundle.rookie");
+  const subsetTotal = subsets.reduce((n, s) => n + s.cents, 0);
+  if (all && subsetTotal > 0 && all.cents >= subsetTotal) {
+    problems.push(`bundle.all costs ${all.cents} but the subset bundles total ${subsetTotal} — buying the parts is cheaper than everything`);
+  }
+  return problems;
+}
 
 export function getSku(id: unknown): BoostySku | null {
   if (typeof id !== "string") return null;

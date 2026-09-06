@@ -12,13 +12,11 @@ vi.mock("../logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-const PRICE_ENVS = [
-  "BOOSTY_PRICE_WIGSBY", "BOOSTY_PRICE_VEX", "BOOSTY_PRICE_BEEF", "BOOSTY_PRICE_BLORP",
-  "BOOSTY_PRICE_OZONE", "BOOSTY_PRICE_PIXEL", "BOOSTY_PRICE_AUDITOR",
-  "BOOSTY_PRICE_TRAIL_GLITTER", "BOOSTY_PRICE_TRAIL_REGRET", "BOOSTY_PRICE_TRAIL_VOID",
-  "BOOSTY_PRICE_TRAIL_CASHMONEY", "BOOSTY_PRICE_BUNDLE",
-  "BOOSTY_PRICE_SPARKS_SMALL", "BOOSTY_PRICE_SPARKS_MEDIUM", "BOOSTY_PRICE_SPARKS_LARGE",
-];
+// Derived from the catalog, never hand-listed: a duplicated list silently
+// goes stale the moment a SKU is added, and then "everything is configured"
+// quietly stops meaning everything.
+import { BOOSTY_SKUS } from "../boostyCatalog";
+const PRICE_ENVS = BOOSTY_SKUS.map((s) => s.priceEnv);
 
 function clearAll(): void {
   for (const k of PRICE_ENVS) delete process.env[k];

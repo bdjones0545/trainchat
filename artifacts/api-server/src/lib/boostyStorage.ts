@@ -1,7 +1,7 @@
 import { db, boostyEntitlementsTable, boostyPurchasesTable } from "@workspace/db";
 import { eq, sql, inArray } from "drizzle-orm";
 import { logger } from "./logger";
-import { getSku, type BoostySku } from "./boostyCatalog";
+import { getSku, grantsFor, sparksFor, type BoostySku } from "./boostyCatalog";
 
 export interface BoostyEntitlementView {
   playerId: string;
@@ -84,9 +84,11 @@ export class BoostyStorage {
     // Permanent: no retry will make this id valid.
     if (!isValidPlayerId(playerId)) return { applied: false, reason: "invalid-player-id" };
 
-    const sparks = sku.kind === "sparks" ? sku.sparks ?? 0 : 0;
-    const isBundle = sku.kind === "bundle";
-    const addsSku = sku.kind === "cosmetic" || sku.kind === "bundle";
+    // A bundle expands into the SKUs it contains. Only bundle.all sets the
+    // everything-flag; a subset bundle must never imply future cosmetics.
+    const sparks = sparksFor(sku);
+    const isEverything = sku.kind === "bundle" && sku.everything === true;
+    const granted = grantsFor(sku);
 
     try {
       return await db.transaction(async (tx) => {
@@ -119,8 +121,8 @@ export class BoostyStorage {
           .insert(boostyEntitlementsTable)
           .values({
             playerId,
-            skus: addsSku ? [sku.id] : [],
-            bundle: isBundle,
+            skus: granted,
+            bundle: isEverything,
             sparksPurchased: sparks,
             userId: params.userId ?? null,
             updatedAt: new Date(),
@@ -130,15 +132,15 @@ export class BoostyStorage {
             set: {
               // Append without duplicating, entirely in SQL so two concurrent
               // webhooks cannot read-modify-write over each other.
-              skus: addsSku
+              skus: granted.length
                 ? sql`(
                     select coalesce(jsonb_agg(distinct value), '[]'::jsonb)
                     from jsonb_array_elements(
-                      ${boostyEntitlementsTable.skus} || ${JSON.stringify([sku.id])}::jsonb
+                      ${boostyEntitlementsTable.skus} || ${JSON.stringify(granted)}::jsonb
                     )
                   )`
                 : sql`${boostyEntitlementsTable.skus}`,
-              bundle: isBundle ? sql`true` : sql`${boostyEntitlementsTable.bundle}`,
+              bundle: isEverything ? sql`true` : sql`${boostyEntitlementsTable.bundle}`,
               sparksPurchased: sql`${boostyEntitlementsTable.sparksPurchased} + ${sparks}`,
               updatedAt: new Date(),
             },
@@ -220,8 +222,8 @@ export class BoostyStorage {
     for (const r of rows) {
       const sku = getSku(r.sku);
       if (!sku) continue;
-      if (sku.kind === "bundle") { bundle = true; owned.add(sku.id); }
-      else if (sku.kind === "cosmetic") owned.add(sku.id);
+      if (sku.kind === "bundle" && sku.everything) bundle = true;
+      for (const id of grantsFor(sku)) owned.add(id);
       sparks += r.sparksGranted ?? 0;
     }
 
