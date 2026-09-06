@@ -30,3 +30,4 @@ export * from "./performance-profiles";
 export * from "./billing";
 export * from "./rate-limits";
 export * from "./kevin";
+export * from "./boosty";
