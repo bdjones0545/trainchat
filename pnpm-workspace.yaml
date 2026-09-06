@@ -171,5 +171,16 @@ overrides:
   # unified onto one patched version. These are build/codegen-chain utilities with
   # stable APIs across the bump; verified by typecheck + full test suite + build.
   brace-expansion: ">=2.1.2"       # GHSA-mh99-v99m-4gvg — DoS via exponential expansion; orval>typedoc>minimatch
-  js-yaml: ">=4.3.0"               # quadratic blow-up via YAML merge-key chains (<4.3.0)
+  # Upper bound is load-bearing: the unbounded ">=" drifted this to js-yaml 5,
+  # whose ESM build dropped the default export, and `orval` does
+  # `import yaml from "js-yaml"` — which breaks `pnpm codegen` with a
+  # SyntaxError. The advisory is fixed in 4.3.0, so v4 satisfies it; the
+  # major bump was never the intent of this entry.
+  js-yaml: ">=4.3.0 <5"            # quadratic blow-up via YAML merge-key chains (<4.3.0)
   postcss: ">=8.5.18"              # GHSA-r28c-9q8g-f849 + arbitrary file read (<=8.5.17) — via vite (mockup-sandbox)
+  # ── Security overrides (added 2026-09-06) ─────────────────────────────────
+  # browserslist is reached only through the dev/build chain
+  # (mockup-sandbox > @vitejs/plugin-react > @babel/core >
+  # @babel/helper-compilation-targets). Unbounded ">=" per repo convention so
+  # every requester unifies on one patched version.
+  browserslist: ">=4.28.7"         # GHSA-c83g-rgw3-j3cx + GHSA-73wf-gq98-2v4g — crash/prototype write via untrusted browserslist-stats.json
