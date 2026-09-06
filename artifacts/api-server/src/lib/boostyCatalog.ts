@@ -183,4 +183,17 @@ export function unconfiguredSkus(): string[] {
 }
 
 export const BOOSTY_PRODUCT_TAG = "boosty";
+
+/**
+ * Deterministic Stripe product id for a SKU.
+ *
+ * Stripe lets the caller choose a product id, and `products.retrieve` is
+ * strongly consistent — unlike `products.search`, whose index lags creation by
+ * up to about a minute. Seeding by search means a run that dies halfway and is
+ * retried inside that window creates DUPLICATE products, and the next run then
+ * picks an arbitrary one of them. A deterministic id removes the window.
+ */
+export function stripeProductIdFor(skuId: string): string {
+  return "boosty_" + skuId.replace(/[^a-zA-Z0-9]+/g, "_").toLowerCase();
+}
 export { SKUS as BOOSTY_SKUS };
