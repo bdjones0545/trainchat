@@ -8,6 +8,7 @@ import { logger } from "./lib/logger";
 import { runMigrations } from "stripe-replit-sync";
 import { getStripeSync } from "./lib/stripeClient";
 import { validateBillingConfig } from "./lib/billingUtils";
+import { logBoostyConfigStatus } from "./lib/boostyConfigCheck";
 import { startBillingReconciliation } from "./lib/billingReconciliation";
 import { seedExerciseLibraryIfEmpty } from "./lib/exercise-seeder";
 import { seedCoachingKnowledgeIfEmpty } from "./lib/coaching-knowledge-seeder";
@@ -65,6 +66,11 @@ try {
   logger.error({ err }, "[Startup] Billing configuration is invalid — STRIPE_SECRET_KEY is required");
   process.exit(1);
 }
+
+// BOOSTY store: a misconfigured store does not crash, it silently refuses every
+// purchase. Non-fatal by design — an optional store must never stop TrainChat
+// from booting — but it says so loudly instead of going quiet.
+logBoostyConfigStatus();
 
 async function initStripe() {
   const databaseUrl = process.env.DATABASE_URL;

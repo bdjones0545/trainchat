@@ -55,22 +55,42 @@ redirect on a payment flow is a phishing primitive.
 
 ## Setup
 
-1. Create products and prices (idempotent, prints the env block):
+1. Preview what will be created — contacts Stripe not at all:
+
+   ```bash
+   pnpm --filter @workspace/api-server run seed:boosty -- --dry-run
+   ```
+
+2. Create products and one-time prices (idempotent, prints the env block).
+   **Run against test keys first** — this creates real products in whichever
+   account `STRIPE_SECRET_KEY` points at:
 
    ```bash
    pnpm --filter @workspace/api-server run seed:boosty
    ```
 
-2. Set the printed `BOOSTY_PRICE_*` vars, plus:
+3. Set the printed `BOOSTY_PRICE_*` vars in Replit Secrets, plus:
 
    ```
    BOOSTY_PUBLIC_URL=https://<where the game is served>
    ```
 
-3. Add `checkout.session.completed` to the Stripe webhook endpoint if it is not
-   already subscribed (it is — TrainChat uses it for subscriptions).
+4. Verify the configuration against the live account. This is read-only and
+   catches what does not announce itself — a price id from the wrong Stripe
+   mode, an archived price, a **recurring** price where a one-time one is
+   required, or an amount that disagrees with what the shop displays:
 
-4. Turn the game on. In `boosty/src/payments.js`:
+   ```bash
+   pnpm --filter @workspace/api-server run boosty:check
+   ```
+
+   The same offline checks run at server startup and log a line either way, so
+   a half-configured store cannot sit quiet in production.
+
+5. `checkout.session.completed` is already subscribed on the Stripe webhook
+   endpoint (TrainChat uses it for subscriptions) — nothing to add.
+
+6. Turn the game on. In `boosty/src/payments.js`:
 
    ```js
    CONFIG.mode = MODES.API;

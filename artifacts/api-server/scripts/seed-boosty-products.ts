@@ -18,6 +18,21 @@ import { getUncachableStripeClient } from "../src/lib/stripeClient";
 import { BOOSTY_SKUS } from "../src/lib/boostyCatalog";
 
 async function main(): Promise<void> {
+  // --dry-run shows exactly what would be created without touching Stripe.
+  const dryRun = process.argv.includes("--dry-run");
+  if (dryRun) {
+    console.log("DRY RUN — nothing will be created in Stripe.\n");
+    for (const sku of BOOSTY_SKUS) {
+      console.log(
+        `  would create  ${sku.id.padEnd(22)} $${(sku.cents / 100).toFixed(2).padStart(6)}  ` +
+        `one-time  -> ${sku.priceEnv}`
+      );
+    }
+    console.log(`\n${BOOSTY_SKUS.length} product(s) and one-time price(s).`);
+    console.log("Re-run without --dry-run to create them.");
+    return;
+  }
+
   const stripe = await getUncachableStripeClient();
   const env: string[] = [];
   let created = 0;

@@ -14,7 +14,8 @@
     "test:coverage": "vitest run --coverage",
     "scenario-replay": "pnpm exec tsx scenario-replay.ts",
     "seed:boosty": "tsx scripts/seed-boosty-products.ts",
-    "boosty:reconcile": "tsx scripts/boosty-reconcile.ts"
+    "boosty:reconcile": "tsx scripts/boosty-reconcile.ts",
+    "boosty:check": "tsx scripts/boosty-check.ts"
   },
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
